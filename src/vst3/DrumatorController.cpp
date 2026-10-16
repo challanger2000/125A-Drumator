@@ -30,6 +30,7 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
    for(std::size_t step=0;step<kSteps;step+=4)
      grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
  for(auto& name:labels_)name="LEER - WAV LADEN";
+ gain_.fill(100);pan_.fill(100);
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream* state) {
@@ -38,7 +39,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -56,6 +57,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        for(std::size_t row=0;row<kRows;++row) {
           muted_[row]=(candidate.muted&(1u<<row))!=0;
           solo_[row]=(candidate.solo&(1u<<row))!=0;
+          gain_[row]=candidate.gain[row];pan_[row]=candidate.pan[row];
        }
        for(std::size_t row=0;row<kRows;++row)
           labels_[row]=candidate.names[row].empty()
@@ -78,6 +80,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  }else if(magic!=kOldState)return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
  muted_.fill(false);solo_.fill(false);
+ gain_.fill(100);pan_.fill(100);
  for(auto& name:labels_)name="LEER - WAV LADEN";
  return setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
 }
@@ -173,6 +176,20 @@ bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  msg->release();
  if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
  return ok;
+}
+bool Controller::adjustRowMix(std::size_t row,bool adjustPan,int delta) {
+ if(row>=kRows)return false;
+ auto& values=adjustPan?pan_:gain_;
+ const auto proposed=std::clamp(static_cast<int>(values[row])+delta,0,200);
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.RowMix");
+ auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
+ attrs->setInt("Row",static_cast<Steinberg::int64>(row));
+ attrs->setInt("Gain",adjustPan?gain_[row]:proposed);
+ attrs->setInt("Pan",adjustPan?proposed-100:static_cast<int>(pan_[row])-100);
+ const bool accepted=sendMessage(msg)==Steinberg::kResultOk;
+ msg->release();if(accepted)values[row]=static_cast<std::uint8_t>(proposed);
+ return accepted;
 }
 bool Controller::toggleRowGate(std::size_t row,bool solo) {
  if(row>=kRows)return false;
