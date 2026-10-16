@@ -1,6 +1,6 @@
 # M10 — portable embedded drum kit state (candidate)
 
-**STATUS: M10 SOURCE CANDIDATE; Windows build, VST3 host end-to-end song recall and Steinberg Validator required before marking this verified.**
+**STATUS: M10 Windows build/CI/VST3 state recall VERIFIED; manual Studio Pro end-to-end reopening not performed.**
 
 ## Purpose
 
@@ -33,3 +33,8 @@ Previously M09 saved 4/16 visible rows and step velocities, but it **lost the ac
 - Real Studio One project save/reopen remains a distinct host-specific acceptance gate. Audio/WAV loading, modern drag/drop, dynamic GUI resize, sample file limits, project save size and final branding remain unfinished or pending as applicable.
 - Not FINAL, no release changes on `main`.
 
+
+## Windows M10 verification (2026-10-16)
+**M10 VERIFIED Windows host state recall**: source commit `eb11d3f4fdacf557aa48940395616fbeda79caaa`, [Actions #38960037594](https://github.com/challanger2000/125A-Drumator/actions/runs/38960037594) SUCCESS. CTests **8/8 PASS**; official Steinberg Validator **47/47 PASS**; packaged editor 1100x300 PASS; packaged audio-host smoke full DMR4 save → **new VST3 processor/controller instance** → state restore **before** setupProcessing → same FLOAT32 WAV at measured **−0.5 per channel** PASS. PCM16/24/FLOAT32 amplitude, corrupt input, silent unloaded row also PASS. Artifact ID `12072750795` (125A-Drumator-M10-Embedded-Kit-Recall-QA), ZIP `125A_Drumator_M10_Windows_x64.zip` independently inspected; three correct bundle files, no corrupt ZIP members, x64 PE machine 0x8664, strict JSON resources, DLL SHA256 `87d7254382901ccf2d8053e7440bbfdb801618cfd71bda3ca8faf9dbde5b4dd8`. **Studio Pro 8.1.2 project reopen/GUI/drag-drop, all 16 rows loaded concurrently, kit limit handling under 64 MiB, and long-term realtime still need independent QA. Not FINAL.**
+
+Sample portability is verified at the Steinberg VST3 binary protocol level (embedded WAV payload), rather than inferred from disk path persistence. A 64 MiB kit limit is explicitly enforced; adding a WAV that would exceed it is rejected. The archive is a development snapshot, not a FINAL product.
