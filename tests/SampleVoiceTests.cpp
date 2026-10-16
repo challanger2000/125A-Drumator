@@ -105,8 +105,8 @@ static void testChokeAndStereo() {
  require(engine.setRow(2,row),"center row");
  engine.reset();
  require(engine.render(&stereo,1,l.data(),r.data(),256).accepted==1,"stereo center");
- near(l[50],.5*std::sqrt(.5),.001,"center L");
- near(r[50],-.25*std::sqrt(.5),.001,"center R");
+ near(l[50],.5,.001,"center L WAV unity amplitude");
+ near(r[50],-.25,.001,"center R WAV unity amplitude");
 }
 static void testCapacityValidationAndAutomation() {
  std::array<float,1000> source{};
