@@ -50,6 +50,23 @@ int main() {
     std::vector<std::uint8_t> again;
     check(KitCodec::encode(copy,again)&&encoded==again,
           "Roundtrip must produce deterministic DMR4");
+    // Old DMR4 projects have no row masks and must reopen with both off.
+    auto legacy=encoded;
+    legacy.erase(legacy.begin()+10,legacy.begin()+14);
+    for(int i=0;i<4;++i)
+      legacy[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV4>>(8*i));
+    const auto legacyLength=static_cast<std::uint32_t>(legacy.size()-8);
+    for(int i=0;i<4;++i)
+      legacy[4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(legacyLength>>(8*i));
+    const auto legacyCrc=KitCodec::hash(legacy.data()+8,legacy.size()-12);
+    for(int i=0;i<4;++i)
+      legacy[legacy.size()-4+static_cast<std::size_t>(i)]=
+          static_cast<std::uint8_t>(legacyCrc>>(8*i));
+    KitState prior{};
+    check(KitCodec::decode(legacy.data(),legacy.size(),prior),
+          "Legacy DMR4 project cannot reopen");
+    check(prior.muted==0&&prior.solo==0&&prior.wav==original.wav&&
+          prior.grid==original.grid,"Legacy migration damaged kit");
     auto damaged=encoded;
     damaged[20]^=1;
     check(!KitCodec::decode(damaged.data(),damaged.size(),copy),
