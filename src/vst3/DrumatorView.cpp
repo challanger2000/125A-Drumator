@@ -5,6 +5,10 @@
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/ccolor.h"
+#include "vstgui/lib/idatapackage.h"
+#include "vstgui/lib/vstguibase.h"
+#include <cctype>
+#include <cstring>
 #include <algorithm>
 #include <cstdio>
 #include <string>
@@ -24,10 +28,51 @@ const VSTGUI::CColor off{67,81,96,255};
 const VSTGUI::CColor letters{228,236,243,255};
 const VSTGUI::CColor accent{104,175,203,255};
 }
+// VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
+// Internal Studio One browser objects not exposed as file paths are
+// intentionally not treated as successfully loaded samples.
+class DrumatorDropTarget final : public VSTGUI::IDropTarget,
+                                 public VSTGUI::AtomicReferenceCounted {
+public:
+ explicit DrumatorDropTarget(DrumatorView& view) : view_(view) {}
+ VSTGUI::DragOperation onDragEnter(VSTGUI::DragEventData data) override {
+    return allowed(data)?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
+ }
+ VSTGUI::DragOperation onDragMove(VSTGUI::DragEventData data) override {
+    return allowed(data)?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
+ }
+ void onDragLeave(VSTGUI::DragEventData) override {}
+ bool onDrop(VSTGUI::DragEventData data) override {
+    return allowed(data)&&view_.acceptFileDrop(data);
+ }
+private:
+ bool allowed(VSTGUI::DragEventData data) const {
+    if(!data.drag||data.drag->getCount()!=1||
+       data.drag->getDataType(0)!=VSTGUI::IDataPackage::kFilePath)
+       return false;
+    auto local=data.pos;
+    view_.frameToLocal(local);
+    if(local.y<kGridY||local.y>=kGridBottom||
+       local.x<kLabelX||local.x>kGridRight)return false;
+    const void* bytes=nullptr;
+    VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
+    const auto size=data.drag->getData(0,bytes,type);
+    if(!bytes||type!=VSTGUI::IDataPackage::kFilePath||size<5||
+       size>32768||static_cast<const char*>(bytes)[size-1]!='\0')
+       return false;
+    std::string filename(static_cast<const char*>(bytes),size-1);
+    if(filename.size()<4)return false;
+    auto ext=filename.substr(filename.size()-4);
+    for(auto& c:ext)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return ext==".wav";
+ }
+ DrumatorView& view_;
+};
 DrumatorView::DrumatorView(const VSTGUI::CRect& size,
                            Controller& controller,VSTGUI::VST3Editor& editor)
  : CView(size),controller_(controller),editor_(editor) {
  setMouseEnabled(true);
+ setDropTarget(VSTGUI::makeOwned<DrumatorDropTarget>(*this));
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
@@ -83,21 +128,56 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  }
  setDirty(false);
 }
+void DrumatorView::loadPath(std::size_t row,const std::string& path) {
+ const auto outcome=controller_.loadWav(row,path);
+ switch(outcome) {
+ case Controller::LoadStatus::Accepted:
+     status_="SAMPLE ANGENOMMEN - WIEDERGABE AB NAECHSTEM AUDIOBLOCK";break;
+ case Controller::LoadStatus::InvalidRow:
+     status_="FEHLER: UNGUELTIGE INSTRUMENTENZEILE";break;
+ case Controller::LoadStatus::NotFound:
+     status_="DATEI NICHT GEFUNDEN";break;
+ case Controller::LoadStatus::TooLarge:
+     status_="WAV GROESSER ALS 16 MiB - PROTOTYP-LIMIT";break;
+ case Controller::LoadStatus::ReadError:
+     status_="WAV KONNTE NICHT GELESEN WERDEN";break;
+ case Controller::LoadStatus::Unsupported:
+     status_="UNTERSTUETZT: PCM 8/16/24/32 UND FLOAT32, MONO/STEREO";break;
+ case Controller::LoadStatus::NoProcessorConnection:
+     status_="HOST HAT CONTROLLER UND AUDIOPROZESSOR NICHT VERBUNDEN";break;
+ case Controller::LoadStatus::Rejected:
+     status_="PROZESSOR HAT SAMPLE ABGELEHNT - RATE/LAST PRUEFEN";break;
+ }
+ invalid();
+}
+bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
+ if(!data.drag||data.drag->getCount()!=1)return false;
+ auto position=data.pos;
+ frameToLocal(position);
+ if(position.y<kGridY||position.y>=kGridBottom)return false;
+ const auto row=static_cast<std::size_t>((position.y-kGridY)/kRowHeight);
+ if(row>=kRows)return false;
+ const void* bytes=nullptr;
+ VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
+ const auto size=data.drag->getData(0,bytes,type);
+ if(!bytes||type!=VSTGUI::IDataPackage::kFilePath||
+    size==0||size>32768||
+    static_cast<const char*>(bytes)[size-1]!='\0')return false;
+ loadPath(row,std::string(static_cast<const char*>(bytes),size-1));
+ return true; // drop handled; status displays actual acceptance/rejection
+}
 void DrumatorView::load(std::size_t row) {
  auto* frame=getFrame();
  if(!frame)return;
  auto* picker=VSTGUI::CNewFileSelector::create(frame,
                                             VSTGUI::CNewFileSelector::kSelectFile);
  if(!picker) {status_="DATEIDIALOG NICHT VERFUEGBAR";invalid();return;}
- picker->addFileExtension(VSTGUI::CFileExtension("PCM16 WAVE","wav","audio/wav"));
- picker->setTitle("Drumator WAV-Sample auswaehlen");
+ picker->addFileExtension(VSTGUI::CFileExtension("WAV PCM/FLOAT","wav","audio/wav"));
+ picker->setTitle("125A Drumator - WAV-Sample auswaehlen");
  const bool selected=picker->runModal();
  if(selected&&picker->getNumSelectedFiles()>0) {
    const auto* file=picker->getSelectedFile(0);
-   if(file&&controller_.loadWav(row,file))
-       status_="WAV AN PROZESSOR UEBERGEBEN";
-   else
-       status_="WAV NICHT GELADEN: PCM16, <=16 MiB, VERBINDUNG PRUEFEN";
+   if(file)loadPath(row,file);
  }
  picker->forget();
  invalid();

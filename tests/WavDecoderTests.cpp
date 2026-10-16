@@ -83,7 +83,44 @@ int main(){
           "failed decode changed prior valid sound");
   require(WavPcm16Decoder::decode(nullptr,stereo.size(),result)!=WavError::Ok,
           "null bytes accepted");
-  std::cout<<"WAV PCM16 decoder regressions PASS\n";
+  // WAV 8, 24, 32-bit PCM, float32 and WAVE_FORMAT_EXTENSIBLE.
+  auto mk=[](std::uint16_t format,std::uint16_t bits,
+             std::vector<std::uint8_t> payload,bool ext=false) {
+     std::vector<std::uint8_t> f;
+     id(f,"RIFF");u32(f,0);id(f,"WAVE");id(f,"fmt ");u32(f,ext?40:16);
+     u16(f,ext?0xfffe:format);u16(f,1);u32(f,48000);
+     u32(f,48000*(bits/8));u16(f,bits/8);u16(f,bits);
+     if(ext) {
+       u16(f,22);u16(f,bits);u32(f,0);u32(f,format);
+       for(auto c:std::array<std::uint8_t,12>{0,0,16,0,128,0,0,170,0,56,155,113})
+         f.push_back(c);
+     }
+     id(f,"data");u32(f,static_cast<std::uint32_t>(payload.size()));
+     f.insert(f.end(),payload.begin(),payload.end());
+     if(payload.size()%2)f.push_back(0);
+     fix32(f,4,static_cast<std::uint32_t>(f.size()-8));
+     return f;
+  };
+  auto verify=[&](std::uint16_t format,std::uint16_t bits,
+                   std::vector<std::uint8_t> data,bool ext,
+                   float expected,const char* problem) {
+     auto f=mk(format,bits,std::move(data),ext);
+     require(WavPcm16Decoder::decode(f.data(),f.size(),result)==WavError::Ok,problem);
+     require(result.channels==1 && result.left.size()==1,problem);
+     require(std::abs(result.left.front()-expected)<0.000001,problem);
+  };
+  verify(1,8,{0},false,-1.f,"PCM8");
+  verify(1,24,{0,0,128},false,-1.f,"PCM24");
+  verify(1,24,{0,0,64},true,.5f,"EXTENSIBLE PCM24");
+  verify(1,32,{0,0,0,128},false,-1.f,"PCM32");
+  verify(3,32,{0,0,0,63},false,.5f,"FLOAT32");
+  verify(3,32,{0,0,0,63},true,.5f,"EXTENSIBLE FLOAT32");
+  const auto good=result.left;
+  auto nan=mk(3,32,{0,0,192,127});
+  require(WavPcm16Decoder::decode(nan.data(),nan.size(),result)!=WavError::Ok,
+          "float NaN accepted");
+  require(result.left==good,"bad float overwrote valid sample");
+  std::cout<<"WAV PCM/FLOAT decoder regressions PASS\n";
   return 0;
  } catch(const std::exception& e){
   std::cerr<<"WAV PCM16 decoder FAIL: "<<e.what()<<'\n';

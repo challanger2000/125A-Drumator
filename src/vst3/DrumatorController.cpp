@@ -1,6 +1,7 @@
 #include "DrumatorController.h"
 #include "DrumatorView.h"
 #include "PluginIDs.h"
+#include "core/WavPcm16Decoder.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstattributes.h"
@@ -26,7 +27,7 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
  for(std::size_t p=0;p<kPatterns;++p)
    for(std::size_t step=0;step<kSteps;step+=4)
      grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
- for(auto& name:labels_)name="WAV LADEN";
+ for(auto& name:labels_)name="LEER - WAV LADEN";
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream* state) {
@@ -84,7 +85,7 @@ bool Controller::changePattern(std::size_t pattern) {
 }
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
- const auto next=velocity(p,r,s)>0?0:100;
+ const auto next=velocity(p,r,s)>0?0:127;
  auto* msg=allocateMessage();
  if(!msg)return false;
  msg->setMessageID("Drumator.StepEdit");
@@ -99,36 +100,47 @@ bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(ok)grid_[(p*kRows+r)*kSteps+s]=static_cast<std::uint8_t>(next);
  return ok;
 }
-bool Controller::loadWav(std::size_t row,const std::string& path) {
- if(row>=kRows||path.empty())return false;
+Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& path) {
+ if(row>=kRows)return LoadStatus::InvalidRow;
+ if(path.empty())return LoadStatus::NotFound;
  constexpr std::uintmax_t kMessageMax=16u*1024u*1024u;
  std::vector<std::uint8_t> data;
  try {
-   const auto name=std::filesystem::u8path(path);
-   const auto length=std::filesystem::file_size(name);
-   if(length<44||length>kMessageMax)return false;
-   std::ifstream f(name,std::ios::binary);
-   if(!f)return false;
+   const auto file=std::filesystem::u8path(path);
+   if(!std::filesystem::is_regular_file(file))return LoadStatus::NotFound;
+   const auto length=std::filesystem::file_size(file);
+   if(length>kMessageMax)return LoadStatus::TooLarge;
+   if(length<44)return LoadStatus::Unsupported;
+   std::ifstream f(file,std::ios::binary);
+   if(!f)return LoadStatus::ReadError;
    data.resize(static_cast<std::size_t>(length));
    if(!f.read(reinterpret_cast<char*>(data.data()),
-              static_cast<std::streamsize>(data.size())))return false;
- }catch(const std::exception&) {return false;}
+              static_cast<std::streamsize>(data.size())))return LoadStatus::ReadError;
+ }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
+  catch(const std::exception&) {return LoadStatus::ReadError;}
+ DecodedWav preflight;
+ if(WavPcm16Decoder::decode(data.data(),data.size(),preflight)!=WavError::Ok)
+    return LoadStatus::Unsupported;
+ // VST3 hosts are allowed to expose a controller without a connected
+ // processor. Do not display "loaded" in that case.
+ if(!getPeer())return LoadStatus::NoProcessorConnection;
  auto* msg=allocateMessage();
- if(!msg)return false;
+ if(!msg)return LoadStatus::NoProcessorConnection;
  msg->setMessageID("Drumator.LoadPcm16Wav");
  auto* attr=msg->getAttributes();
- if(!attr){msg->release();return false;}
+ if(!attr){msg->release();return LoadStatus::Rejected;}
  attr->setInt("Row",static_cast<Steinberg::int64>(row));
  if(attr->setBinary("WavBytes",data.data(),
                     static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk) {
-     msg->release();return false;
+     msg->release();return LoadStatus::Rejected;
  }
  const bool accepted=sendMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(accepted) {
-   const auto last=path.find_last_of("/\\");
-   labels_[row]=last==std::string::npos?path:path.substr(last+1);
- }
- return accepted;
+ if(!accepted)return LoadStatus::Rejected;
+ // Success means the processor accepted the immutable asset for the
+ // next audio block; no claim is made that the buffer has already rendered.
+ const auto last=path.find_last_of("/\\");
+ labels_[row]=last==std::string::npos?path:path.substr(last+1);
+ return LoadStatus::Accepted;
 }
 }

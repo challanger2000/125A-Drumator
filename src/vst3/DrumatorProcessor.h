@@ -30,8 +30,7 @@ public:
 private:
  AtomicPatternBank patterns_;
  SampleVoiceEngine voices_;
- SincKernel kernel_;
- std::vector<float> testSound_; // populated ONLY in setupProcessing, never in process()
+
  SampleExchange exchange_{};
  TriggerBatch triggers_{};
  std::atomic<double> outputRate_{0.0};

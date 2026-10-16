@@ -2,6 +2,8 @@
 
 Vintage-inspired multi-format drum sampler with a 32-step running-light sequencer. Focus: **drop a sample onto a drum row, program steps, play.**
 
+**M08 source candidate (2026-10-16):** removes the misleading internal kick (empty sample rows are silent), supports mono/stereo WAV PCM 8/16/24/32-bit, IEEE float32 and common WAVE_FORMAT_EXTENSIBLE variants, and keeps recorded level at center pan (unity per channel, no normalization). GUI distinguishes load failure causes, and VSTGUI file-path drag/drop targets individual rows. **CI, real Studio Pro acceptance and dragged-file confirmation remain unverified until tested.** No release or FINAL label.
+
 **Status:** development; **first VSTGUI prototype built in Windows CI, not yet DAW-tested**. 16x32 clickable step grid, pattern buttons and PCM16 WAV picker exist in source, but independent DAW GUI/audio behavior and restored sample references are NOT verified. **NOT a Drumator release.**
 
 **GUI resource fix / verified source:** commit `7097bc5a9a6fa6178ffde7fa706aa9be94de280c`, Windows Actions [#38944959865](https://github.com/challanger2000/125A-Drumator/actions/runs/38944959865), 6/6 CTests PASS, Steinberg Validator 47/47 PASS, and new **editor geometry smoke 1100 × 600 PASS** on the packaged VST3. Downloaded artifact `125A-Drumator-M07-Windows-x64-GUI-PROTOTYPE` (ID 12064249354) has been independently ZIP-verified. Studio Pro GUI rendering and click/WAV playback are NOT yet confirmed.

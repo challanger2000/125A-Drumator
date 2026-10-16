@@ -101,15 +101,9 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
 Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::ProcessSetup& setup) {
  // The VST3 host may request unusual but valid sample rates. Reject only
  // invalid values or a provably unbounded temporary fixture allocation.
- constexpr double kTestSoundSeconds=0.35;
- constexpr std::size_t kMaxPreparedTestFrames=1048576; // 4 MiB of mono float PCM
  if(setup.symbolicSampleSize!=Steinberg::Vst::kSample32||
     !std::isfinite(setup.sampleRate)||setup.sampleRate<=0.0||
     setup.maxSamplesPerBlock<0)
-   return Steinberg::kInvalidArgument;
- const double requestedFrames=std::ceil(setup.sampleRate*kTestSoundSeconds);
- if(!std::isfinite(requestedFrames)||requestedFrames<1.0||
-    requestedFrames>static_cast<double>(kMaxPreparedTestFrames))
    return Steinberg::kInvalidArgument;
  // This runs outside process() and while processing is inactive.
  const auto parent=AudioEffect::setupProcessing(setup);
@@ -121,33 +115,15 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  // A rate change invalidates any prior per-voice interpolation kernel.
  // Preserve retired asset ownership; mute existing rows until reloaded.
  for(std::size_t row=0;row<kRows;++row)voices_.setRow(row,RowSound{});
- const std::size_t length=static_cast<std::size_t>(requestedFrames);
- try {
-   testSound_.assign(length,0.f); // setupProcessing only, never realtime
- } catch(const std::bad_alloc&) {
-   testSound_.clear();
-   return Steinberg::kResultFalse;
- }
- for(std::size_t i=0;i<length;++i) {
-   const double time=static_cast<double>(i)/setup.sampleRate;
-   const double f=60.0*std::exp(-time*12.0)+55.0;
-   // Temporary synthesized kick for integration checks ONLY.
-   testSound_[i]=static_cast<float>(
-     0.35*std::sin(2.0*kPi*f*time)*std::exp(-time*25.0));
- }
- if(!kernel_.prepare(1.0)||!voices_.setOutputRate(setup.sampleRate))
-   return Steinberg::kResultFalse;
- RowSound row;
- row.sample={testSound_.data(),nullptr,testSound_.size()};
- row.kernel=&kernel_;
- row.gain=0.8f;
- if(!voices_.setRow(0,row))return Steinberg::kResultFalse;
+ // Deliberately silent until a real user sample was actually accepted.
+ // No hidden synthesized kick to confuse failed import with working audio.
+ if(!voices_.setOutputRate(setup.sampleRate))return Steinberg::kResultFalse;
  prepared_=true;
  outputRate_.store(setup.sampleRate,std::memory_order_release);
  return Steinberg::kResultOk;
 }
 Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
- return static_cast<Steinberg::uint32>(testSound_.size());
+ return 0; // no internal test-sound fixture; sample voice tails vary by file
 }
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
  // A single discrete pattern parameter is implemented at buffer granularity

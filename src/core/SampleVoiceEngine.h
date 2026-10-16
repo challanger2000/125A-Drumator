@@ -230,10 +230,14 @@ private:
             v.sample=row.sample;
             v.kernel=row.kernel;
             v.position=0;
+            // Center pan=0: unity WAV sample amplitude on each channel.
+            // This is a transparent stereo BALANCE law, not a +dB booster:
+            // left falls smoothly to 0 when panned right, and vice versa.
+            // No normalization, no limiter, no hidden gain makeup.
             v.gainL=static_cast<double>(row.gain)*velocity*
-                    std::cos((pan+1.0)*pi/4.0);
+                    (pan<=0.0?1.0:std::cos(pan*pi/2.0));
             v.gainR=static_cast<double>(row.gain)*velocity*
-                    std::sin((pan+1.0)*pi/4.0);
+                    (pan>=0.0?1.0:std::cos(-pan*pi/2.0));
             v.group=row.chokeGroup;
             v.ownerToken=row.ownerToken;
             v.releaseTotal=0;

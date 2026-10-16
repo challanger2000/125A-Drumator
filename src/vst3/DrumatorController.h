@@ -23,7 +23,11 @@ public:
 
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
- bool loadWav(std::size_t row,const std::string& path);
+ enum class LoadStatus {
+  Accepted, InvalidRow, NotFound, TooLarge, ReadError, Unsupported,
+  NoProcessorConnection, Rejected
+ };
+ LoadStatus loadWav(std::size_t row,const std::string& path);
  std::uint8_t velocity(std::size_t pattern,std::size_t row,std::size_t step) const noexcept;
  std::size_t currentPattern() noexcept;
  const std::string& label(std::size_t row) const noexcept;

@@ -165,6 +165,20 @@ static void testBandlimiting() {
 }
 int main() {
  try {
+  {
+    // Regression: an empty instrument must remain silent, even if the
+    // sequencer continues emitting the old factory step pattern.
+    SampleVoiceEngine empty;
+    require(empty.setOutputRate(44100),"empty voice setup");
+    std::array<float,128> left{},right{};
+    left.fill(1.f);right.fill(1.f);
+    const Trigger hit{0,0,0,127,0};
+    const auto result=empty.render(&hit,1,left.data(),right.data(),128);
+    require(result.accepted==0&&result.activeVoices==0,
+            "factory test kick still triggered in empty instrument");
+    for(std::size_t i=0;i<left.size();++i)
+      require(left[i]==0.f&&right[i]==0.f,"empty sampler produced sound");
+  }
   testKernel();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testCapacityValidationAndAutomation();testBandlimiting();
   std::cout<<"Drumator sample-voice regression: 6 groups PASS\n";
