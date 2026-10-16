@@ -3,6 +3,10 @@
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/vst/ivstevents.h"
+#include "pluginterfaces/vst/ivstmessage.h"
+#include "pluginterfaces/vst/ivstattributes.h"
+#include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -40,8 +44,43 @@ Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 s
  return size==Steinberg::Vst::kSample32?Steinberg::kResultTrue:Steinberg::kResultFalse;
 }
 Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
- if(!state)voices_.reset();
+ if(!state) {voices_.reset();wasPlaying_=false;}
  return AudioEffect::setActive(state);
+}
+// Messages are delivered on the UI thread by the VST3 IConnectionPoint
+// contract, never by process(). The controller will eventually send the
+// bounded PCM16 WAV payload after a user picks a sample.
+Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
+ if(!msg||!msg->getMessageID()||
+    std::strcmp(msg->getMessageID(),"Drumator.LoadPcm16Wav")!=0)
+    return AudioEffect::notify(msg);
+ auto* attrs=msg->getAttributes();
+ if(!attrs)return Steinberg::kInvalidArgument;
+ Steinberg::int64 row=-1;
+ const void* bytes=nullptr;
+ Steinberg::uint32 size=0;
+ constexpr Steinberg::uint32 kMaxMessageBytes=16u*1024u*1024u;
+ if(attrs->getInt("Row",row)!=Steinberg::kResultOk||
+    row<0||row>=static_cast<Steinberg::int64>(kRows)||
+    attrs->getBinary("WavBytes",bytes,size)!=Steinberg::kResultOk||
+    !bytes||size<44||size>kMaxMessageBytes)
+    return Steinberg::kInvalidArgument;
+ // The SPSC return queue's control-side consumer runs on the same
+ // connection/UI thread that publishes the next sound.
+ for(;;) {
+   auto unused=exchange_.pollReclaim();
+   if(!unused)break;
+ }
+ const auto rate=outputRate_.load(std::memory_order_acquire);
+ if(!(rate>0.0)||!std::isfinite(rate))return Steinberg::kResultFalse;
+ std::unique_ptr<PreparedSample> candidate;
+ const auto prepared=PreparedSample::fromWav(
+     static_cast<const std::uint8_t*>(bytes),
+     static_cast<std::size_t>(size),rate,0.0,1.f,0.f,0,false,candidate);
+ if(prepared!=PrepareStatus::Ok)return Steinberg::kResultFalse;
+ if(!exchange_.publish(static_cast<std::size_t>(row),candidate))
+    return Steinberg::kResultFalse; // previous pending sound is preserved
+ return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::ProcessSetup& setup) {
  // The VST3 host may request unusual but valid sample rates. Reject only
@@ -60,7 +99,12 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  const auto parent=AudioEffect::setupProcessing(setup);
  if(parent!=Steinberg::kResultTrue)return parent;
  prepared_=false;
+ outputRate_.store(0.0,std::memory_order_release);
  voices_.reset(); // old voice buffers are not retained across sample-rate changes
+ wasPlaying_=false;
+ // A rate change invalidates any prior per-voice interpolation kernel.
+ // Preserve retired asset ownership; mute existing rows until reloaded.
+ for(std::size_t row=0;row<kRows;++row)voices_.setRow(row,RowSound{});
  const std::size_t length=static_cast<std::size_t>(requestedFrames);
  try {
    testSound_.assign(length,0.f); // setupProcessing only, never realtime
@@ -83,6 +127,7 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  row.gain=0.8f;
  if(!voices_.setRow(0,row))return Steinberg::kResultFalse;
  prepared_=true;
+ outputRate_.store(setup.sampleRate,std::memory_order_release);
  return Steinberg::kResultOk;
 }
 Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
@@ -117,30 +162,43 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  auto* left=output.channelBuffers32[0];
  auto* right=output.channelBuffers32[1];
  const auto* context=data.processContext;
- const bool playing=context&&((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);
- if(!playing) {
-   voices_.reset();
-   std::fill_n(left,data.numSamples,0.f);
-   std::fill_n(right,data.numSamples,0.f);
-   output.silenceFlags=3;
-   return Steinberg::kResultOk;
+ const bool playing=context&&
+     ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);
+ if(wasPlaying_&&!playing)voices_.reset(); // stop old sequencer tails once
+ wasPlaying_=playing;
+ // Adopt only complete prepared assets, without deleting on audio.
+ exchange_.audioAdopt(voices_,processSetup.sampleRate);
+ triggers_.clear();
+ if(playing&&context) {
+   patterns_.select(selected_.load(std::memory_order_relaxed));
+   // Missing/invalid clock: no new steps, no invented fallback.
+   if((context->state & (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                        Steinberg::Vst::ProcessContext::kTempoValid))==
+                       (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                        Steinberg::Vst::ProcessContext::kTempoValid)) {
+     const Clock clock{context->projectTimeMusic,context->tempo,
+                       processSetup.sampleRate,data.numSamples,true};
+     const auto scheduled=StepScheduler::run(patterns_,clock,[&](Trigger t){
+         triggers_.appendStep(t);
+     });
+     if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
+   }
  }
- patterns_.select(selected_.load(std::memory_order_relaxed));
- std::size_t count=0;
- // Missing/invalid clock: no new steps, do not invent a timing fallback.
- if((context->state & (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                      Steinberg::Vst::ProcessContext::kTempoValid))==
-                     (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                      Steinberg::Vst::ProcessContext::kTempoValid)) {
-   const Clock clock{context->projectTimeMusic,context->tempo,
-                     processSetup.sampleRate,data.numSamples,true};
-   const auto scheduled=StepScheduler::run(patterns_,clock,[&](Trigger t){
-       if(count<events_.size())events_[count++]=t;
-   });
-   if(scheduled.status!=ScheduleStatus::Ok)count=0;
+ // MIDI one-shot audition also works with stopped DAW transport.
+ if(data.inputEvents) {
+   for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+     Steinberg::Vst::Event event{};
+     if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
+        event.type!=Steinberg::Vst::Event::kNoteOnEvent)continue;
+     triggers_.appendNoteOn(event.noteOn.pitch,event.noteOn.velocity,
+                            event.sampleOffset,
+                            static_cast<std::uint32_t>(data.numSamples));
+   }
  }
- const auto rendered=voices_.render(events_.data(),count,left,right,
+ triggers_.sort();
+ const auto rendered=voices_.render(triggers_.data(),triggers_.size(),left,right,
                                    static_cast<std::uint32_t>(data.numSamples));
+ exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
  // Conservative: do not claim silence just because a short sound ended within
  // the current block. The host can determine silence independently.

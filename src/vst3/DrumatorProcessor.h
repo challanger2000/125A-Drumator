@@ -1,6 +1,8 @@
 #pragma once
 #include "core/SequencerCore.h"
 #include "core/SampleVoiceEngine.h"
+#include "core/SampleExchange.h"
+#include "core/TriggerBatch.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include <array>
 #include <atomic>
@@ -15,6 +17,7 @@ public:
  }
  Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setActive(Steinberg::TBool) SMTG_OVERRIDE;
+ Steinberg::tresult PLUGIN_API notify(Steinberg::Vst::IMessage*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setupProcessing(Steinberg::Vst::ProcessSetup&) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setBusArrangements(Steinberg::Vst::SpeakerArrangement*,
      Steinberg::int32,Steinberg::Vst::SpeakerArrangement*,Steinberg::int32) SMTG_OVERRIDE;
@@ -28,7 +31,10 @@ private:
  SampleVoiceEngine voices_;
  SincKernel kernel_;
  std::vector<float> testSound_; // populated ONLY in setupProcessing, never in process()
- std::array<Trigger,kRows*StepScheduler::maxBoundariesPerBlock> events_{};
+ SampleExchange exchange_{};
+ TriggerBatch triggers_{};
+ std::atomic<double> outputRate_{0.0};
+ bool wasPlaying_{false};
  std::atomic<std::uint32_t> selected_{0};
  bool prepared_{false};
 };

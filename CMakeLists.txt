@@ -38,6 +38,14 @@ if(BUILD_TESTING)
     target_compile_options(drumator_exchange_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
   endif()
   add_test(NAME drumator_exchange_tests COMMAND drumator_exchange_tests)
+  add_executable(drumator_trigger_tests tests/TriggerBatchTests.cpp)
+  target_link_libraries(drumator_trigger_tests PRIVATE drumator_core)
+  if(MSVC)
+    target_compile_options(drumator_trigger_tests PRIVATE /W4 /WX)
+  else()
+    target_compile_options(drumator_trigger_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME drumator_trigger_tests COMMAND drumator_trigger_tests)
 
   # Build ALL local CTest executables before invoking ctest. A stale
   # explicit GitHub Actions target list previously omitted the WAV test.
@@ -78,6 +86,9 @@ if(DRUMATOR_BUILD_VST3)
     src/vst3/Factory.cpp
     src/core/SequencerCore.h
     src/core/SampleVoiceEngine.h
+    src/core/TriggerBatch.h
+    src/core/SampleExchange.h
+    src/core/WavPcm16Decoder.h
   )
   target_link_libraries(Drumator PRIVATE sdk drumator_core)
   target_compile_features(Drumator PRIVATE cxx_std_17)

@@ -62,6 +62,6 @@ jobs:
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - uses: actions/upload-artifact@v4
         with:
-          name: Drumator-M03-VST3-UNTESTED
+          name: Drumator-M06-INTERIM-VST3-UNTESTED
           path: artifact/Drumator.vst3
           if-no-files-found: error
