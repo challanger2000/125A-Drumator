@@ -45,6 +45,8 @@ private:
  bool wasPlaying_{false};
  std::atomic<std::uint32_t> selected_{0};
  std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
+ std::atomic<std::uint32_t> muteMask_{0};
+ std::atomic<std::uint32_t> soloMask_{0};
  bool prepared_{false};
 };
 }
