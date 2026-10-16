@@ -17,6 +17,7 @@ Development: `develop/v1.0.0`.
 - [Milestone 04](docs/MILESTONE-04.md) — strict WAV PCM16 decoder (test coverage under verification)
 - [Milestone 05](docs/MILESTONE-05.md) — prepared-sample ownership handoff and deferred reclamation
 - [Milestone 06](docs/MILESTONE-06.md) — candidate VST3 sample-message receiver and 16-row MIDI audition; no GUI yet
+- [Milestone 07](docs/MILESTONE-07.md) — VSTGUI 16-row/32-step prototype, initial WAV file chooser and atomic step state (CI/host verification pending)
 - [V1 concept/scope](docs/V1-SCOPE.md) — user workflow and technical requirements
 - [Contributor/agent rules](AGENTS.md) — mandatory 125A Engineering entry and Windows-only policy
 

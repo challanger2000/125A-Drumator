@@ -1,6 +1,8 @@
 # 125A Drumator — development instructions
 
 ## Status
+Milestone 07 GUI source candidate: 16x32 grid, WAV chooser and versioned atomic step state **not yet Windows-built/DAW verified**. Prior Milestone 06 test results remain separately documented below. Sample file contents and references are not yet restored from host state.
+
 **Verified M06 technical build:** source `9f223c0f6c4d8e65a8ce368afd08a0387643af57`, [GitHub Actions #38919501529](https://github.com/challanger2000/125A-Drumator/actions/runs/38919501529) **SUCCESS**: Windows MSVC x64 VST3 build PASS; five CTests **5/5 PASS**; moduleinfotool PASS; official Steinberg Validator **47/47 PASS** on assembled bundle. Engineering-only artifact `Drumator-M06-INTERIM-VST3-UNTESTED` (ID `12053822596`). No DAW WAV-import/GUI/audio test or final release.
 
 DEVELOPMENT / Verified at source commit `8b2b41eb1feb8dca09a325e7d649841a34ce58af`, [Windows Actions #38917602904](https://github.com/challanger2000/125A-Drumator/actions/runs/38917602904): MSVC x64 Release build PASS; CTest **4/4 PASS** (`drumator_core_tests`, `drumator_voice_tests`, `drumator_wav_tests`, `drumator_exchange_tests`); official moduleinfotool creation and validation PASS; assembled Windows VST3 bundle official Steinberg Validator **47/47 PASS**. Engineering-only artifact `Drumator-M03-VST3-UNTESTED`, id `12052789021` (still temporary synthesized kick and no editor). The PCM16 WAV decoder and sample exchange are host-independent tested modules. A **new processor message receiver and MIDI audition adapter are currently under CI validation**, and there is still no user file picker/drag-drop GUI or end-to-end DAW sample-import evidence. No 125A Plugin Tester, real DAW audio/UI QA, owner approval, or FINAL release exists.

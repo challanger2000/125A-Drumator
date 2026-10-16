@@ -46,6 +46,7 @@ jobs:
           $resourceDirectory = Join-Path $bundle 'Contents/Resources'
           New-Item -ItemType Directory -Path $binaryDirectory,$resourceDirectory -Force | Out-Null
           Copy-Item $found[0].FullName -Destination (Join-Path $binaryDirectory 'Drumator.vst3')
+          Copy-Item 'resource/Drumator.uidesc' -Destination (Join-Path $resourceDirectory 'Drumator.uidesc')
           $moduleInfo = Join-Path $resourceDirectory 'moduleinfo.json'
           & './build/bin/Release/moduleinfotool.exe' -create -version 0.1.0 -path $bundle -output $moduleInfo
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $moduleInfo)) {
@@ -62,6 +63,6 @@ jobs:
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - uses: actions/upload-artifact@v4
         with:
-          name: Drumator-M06-INTERIM-VST3-UNTESTED
+          name: Drumator-M07-GUI-PROTOTYPE-UNTESTED
           path: artifact/Drumator.vst3
           if-no-files-found: error

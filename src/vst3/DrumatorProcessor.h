@@ -1,5 +1,6 @@
 #pragma once
 #include "core/SequencerCore.h"
+#include "core/AtomicPatternBank.h"
 #include "core/SampleVoiceEngine.h"
 #include "core/SampleExchange.h"
 #include "core/TriggerBatch.h"
@@ -27,7 +28,7 @@ public:
  Steinberg::tresult PLUGIN_API setState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::uint32 PLUGIN_API getTailSamples() SMTG_OVERRIDE;
 private:
- PatternBank patterns_;
+ AtomicPatternBank patterns_;
  SampleVoiceEngine voices_;
  SincKernel kernel_;
  std::vector<float> testSound_; // populated ONLY in setupProcessing, never in process()

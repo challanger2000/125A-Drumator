@@ -46,6 +46,14 @@ if(BUILD_TESTING)
     target_compile_options(drumator_trigger_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
   endif()
   add_test(NAME drumator_trigger_tests COMMAND drumator_trigger_tests)
+  add_executable(drumator_atomic_tests tests/AtomicPatternTests.cpp)
+  target_link_libraries(drumator_atomic_tests PRIVATE drumator_core)
+  if(MSVC)
+    target_compile_options(drumator_atomic_tests PRIVATE /W4 /WX)
+  else()
+    target_compile_options(drumator_atomic_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME drumator_atomic_tests COMMAND drumator_atomic_tests)
 
   # Build ALL local CTest executables before invoking ctest. A stale
   # explicit GitHub Actions target list previously omitted the WAV test.
@@ -65,7 +73,7 @@ if(DRUMATOR_BUILD_VST3)
   endif()
   set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
+  set(SMTG_ENABLE_VSTGUI_SUPPORT ON CACHE BOOL "" FORCE)
   # Official SDK option: CI runner has no Administrator symlink rights.
   # Plugin bundle is built in-tree and published as a workflow artifact.
   set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
@@ -83,6 +91,10 @@ if(DRUMATOR_BUILD_VST3)
     src/vst3/DrumatorProcessor.cpp
     src/vst3/DrumatorController.h
     src/vst3/DrumatorController.cpp
+    src/vst3/DrumatorView.h
+    src/vst3/DrumatorView.cpp
+    src/core/AtomicPatternBank.h
+    resource/Drumator.uidesc
     src/vst3/Factory.cpp
     src/core/SequencerCore.h
     src/core/SampleVoiceEngine.h
@@ -90,7 +102,9 @@ if(DRUMATOR_BUILD_VST3)
     src/core/SampleExchange.h
     src/core/WavPcm16Decoder.h
   )
-  target_link_libraries(Drumator PRIVATE sdk drumator_core)
+  target_link_libraries(Drumator PRIVATE sdk drumator_core vstgui_support)
+  smtg_target_add_plugin_resources(Drumator
+      RESOURCES resource/Drumator.uidesc)
   target_compile_features(Drumator PRIVATE cxx_std_17)
   if(MSVC)
     target_compile_options(Drumator PRIVATE /W4)

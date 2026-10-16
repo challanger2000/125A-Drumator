@@ -1,0 +1,34 @@
+{
+  "vstgui-ui-description": {
+    "version": "1",
+    "variables": {},
+    "bitmaps": {},
+    "fonts": {},
+    "colors": {},
+    "control-tags": {},
+    "templates": {
+      "DrumatorView": {
+        "attributes": {
+          "class": "CViewContainer",
+          "origin": "0, 0",
+          "size": "1100, 600",
+          "transparent": "false",
+          "mouse-enabled": "true",
+          "background-color": "~ BlackCColor"
+        },
+        "children": {
+          "CView": {
+            "attributes": {
+              "class": "CView",
+              "custom-view-name": "DrumatorStepGrid",
+              "origin": "0, 0",
+              "size": "1100, 600",
+              "mouse-enabled": "true",
+              "transparent": "false"
+            }
+          }
+        }
+      }
+    }
+  }
+}

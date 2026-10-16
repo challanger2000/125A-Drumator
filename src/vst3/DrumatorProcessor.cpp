@@ -16,14 +16,12 @@ namespace drumator {
 namespace {
 constexpr double kPi=3.141592653589793238462643383279502884;
 // Distinct, bounded processor state format (not the future pattern bank format).
-constexpr Steinberg::uint32 kStateMagic=0x31524D44u; // "DMR1", little endian
+constexpr Steinberg::uint32 kStateMagic=0x31524D44u; // legacy "DMR1"
+constexpr Steinberg::uint32 kStateMagicV2=0x32524D44u; // "DMR2", 4096 step bytes
 }
 Processor::Processor() {
  setControllerClass(kControllerCID);
- // Temporary deterministic test pattern, not factory Drumator content.
- for(std::size_t p=0;p<kPatterns;++p)
-   for(std::size_t step=0;step<kSteps;step+=4)
-     patterns_.set(p,0,step,step%8==0?127:90);
+ // The initial test pattern is supplied by AtomicPatternBank.
 }
 Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context) {
  const auto result=AudioEffect::initialize(context);
@@ -51,12 +49,30 @@ Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
 // contract, never by process(). The controller will eventually send the
 // bounded PCM16 WAV payload after a user picks a sample.
 Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
- if(!msg||!msg->getMessageID()||
-    std::strcmp(msg->getMessageID(),"Drumator.LoadPcm16Wav")!=0)
+ if(!msg||!msg->getMessageID())return AudioEffect::notify(msg);
+ const auto* id=msg->getMessageID();
+ if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
+    std::strcmp(id,"Drumator.StepEdit")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(msg->getMessageID(),"Drumator.StepEdit")==0) {
+   Steinberg::int64 pattern=-1,step=-1,velocity=-1;
+   if(attrs->getInt("Pattern",pattern)!=Steinberg::kResultOk||
+      attrs->getInt("Row",row)!=Steinberg::kResultOk||
+      attrs->getInt("Step",step)!=Steinberg::kResultOk||
+      attrs->getInt("Velocity",velocity)!=Steinberg::kResultOk||
+      pattern<0||pattern>=static_cast<Steinberg::int64>(kPatterns)||
+      row<0||row>=static_cast<Steinberg::int64>(kRows)||
+      step<0||step>=static_cast<Steinberg::int64>(kSteps)||
+      velocity<0||velocity>127)return Steinberg::kInvalidArgument;
+   return patterns_.set(static_cast<std::size_t>(pattern),
+                        static_cast<std::size_t>(row),
+                        static_cast<std::size_t>(step),
+                        static_cast<unsigned>(velocity))
+          ? Steinberg::kResultOk : Steinberg::kResultFalse;
+ }
  const void* bytes=nullptr;
  Steinberg::uint32 size=0;
  constexpr Steinberg::uint32 kMaxMessageBytes=16u*1024u*1024u;
@@ -208,18 +224,39 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
 Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
- return stream.writeInt32u(kStateMagic)&&
-        stream.writeInt32u(selected_.load(std::memory_order_relaxed))
-        ? Steinberg::kResultOk : Steinberg::kResultFalse;
+ // UI edits use atomic cells. Snapshot is safe against data races.
+ const auto stored=patterns_.snapshot();
+ if(!stream.writeInt32u(kStateMagicV2)||
+    !stream.writeInt32u(selected_.load(std::memory_order_relaxed)))
+     return Steinberg::kResultFalse;
+ for(std::size_t i=6;i<stored.size();++i)
+     if(!stream.writeInt8u(stored[i]))return Steinberg::kResultFalse;
+ return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
  Steinberg::uint32 magic=0,pattern=0;
- if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||
-    magic!=kStateMagic||pattern>=kPatterns)
-   return Steinberg::kResultFalse;
+ if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||pattern>=kPatterns)
+     return Steinberg::kResultFalse;
+ if(magic==kStateMagic) {
+     // Previously saved prototype projects only contained the pattern ID.
+     selected_.store(pattern,std::memory_order_relaxed);
+     patterns_.select(pattern);
+     return Steinberg::kResultOk;
+ }
+ if(magic!=kStateMagicV2)return Steinberg::kResultFalse;
+ std::array<std::uint8_t,kCells> cells{};
+ for(auto& cell:cells) {
+     if(!stream.readInt8u(cell)||cell>127)return Steinberg::kResultFalse;
+ }
+ // Validate the complete state BEFORE changing live atomic cells.
+ for(std::size_t p=0;p<kPatterns;++p)
+   for(std::size_t r=0;r<kRows;++r)
+     for(std::size_t s=0;s<kSteps;++s)
+       patterns_.set(p,r,s,cells[AtomicPatternBank::index(p,r,s)]);
  selected_.store(pattern,std::memory_order_relaxed);
+ patterns_.select(pattern);
  return Steinberg::kResultOk;
 }
 }

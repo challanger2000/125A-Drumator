@@ -60,8 +60,8 @@ public:
  static constexpr std::uint32_t maxBoundariesPerBlock=128;
  // 1/16-note steps at host absolute PPQ; block half-open [0, frames).
  // Calling thread owns an immutable PatternBank for entire call.
- template<class Callback>
- static ScheduleResult run(const PatternBank& b,const Clock& c,Callback&& emit) noexcept {
+ template<class Bank,class Callback>
+ static ScheduleResult run(const Bank& b,const Clock& c,Callback&& emit) noexcept {
    if(!std::isfinite(c.ppq)||!std::isfinite(c.bpm)||!std::isfinite(c.rate)||
       c.bpm<=0||c.rate<=0||c.frames<0)return {ScheduleStatus::InvalidClock,0};
    if(!c.playing||!c.frames)return {};
