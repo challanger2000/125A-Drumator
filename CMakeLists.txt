@@ -54,6 +54,14 @@ if(BUILD_TESTING)
     target_compile_options(drumator_atomic_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
   endif()
   add_test(NAME drumator_atomic_tests COMMAND drumator_atomic_tests)
+  add_executable(drumator_visible_rows_tests tests/VisibleRowsTests.cpp)
+  target_link_libraries(drumator_visible_rows_tests PRIVATE drumator_core)
+  if(MSVC)
+    target_compile_options(drumator_visible_rows_tests PRIVATE /W4 /WX)
+  else()
+    target_compile_options(drumator_visible_rows_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME drumator_visible_rows_tests COMMAND drumator_visible_rows_tests)
 
   # Build ALL local CTest executables before invoking ctest. A stale
   # explicit GitHub Actions target list previously omitted the WAV test.
@@ -99,6 +107,7 @@ if(DRUMATOR_BUILD_VST3)
     src/vst3/DrumatorView.h
     src/vst3/DrumatorView.cpp
     src/core/AtomicPatternBank.h
+    src/core/VisibleRows.h
     resource/Drumator.uidesc
     src/vst3/Factory.cpp
     src/core/SequencerCore.h
@@ -123,6 +132,20 @@ if(DRUMATOR_BUILD_VST3)
   # and VST3Editor::init() leaves the requested GUI rectangle at 0x0.
   target_compile_definitions(vstgui_support PRIVATE SMTG_MODULE_IS_BUNDLE=1)
   target_compile_features(Drumator PRIVATE cxx_std_17)
+  # Build the official Steinberg hosting helpers for a full in-process
+  # test of the packaged plugin and actual output buffers.
+  add_library(drumator_host_fixture STATIC
+    ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/hostclasses.cpp
+    ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
+    ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/eventlist.cpp)
+  target_link_libraries(drumator_host_fixture PRIVATE sdk)
+  add_executable(drumator_audio_host_smoke tests/PackagedAudioHostSmoke.cpp)
+  target_link_libraries(drumator_audio_host_smoke PRIVATE
+      sdk drumator_core drumator_host_fixture)
+  target_compile_features(drumator_audio_host_smoke PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(drumator_audio_host_smoke PRIVATE /W4 /WX)
+  endif()
   add_executable(drumator_editor_smoke tests/EditorGeometrySmoke.cpp)
   target_link_libraries(drumator_editor_smoke PRIVATE sdk drumator_core)
   target_compile_features(drumator_editor_smoke PRIVATE cxx_std_17)

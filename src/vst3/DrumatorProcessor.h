@@ -1,6 +1,7 @@
 #pragma once
 #include "core/SequencerCore.h"
 #include "core/AtomicPatternBank.h"
+#include "core/VisibleRows.h"
 #include "core/SampleVoiceEngine.h"
 #include "core/SampleExchange.h"
 #include "core/TriggerBatch.h"
@@ -36,6 +37,7 @@ private:
  std::atomic<double> outputRate_{0.0};
  bool wasPlaying_{false};
  std::atomic<std::uint32_t> selected_{0};
+ std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
  bool prepared_{false};
 };
 }

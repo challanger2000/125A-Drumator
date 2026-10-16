@@ -17,6 +17,7 @@ namespace drumator {
 namespace {
 constexpr Steinberg::uint32 kOldState=0x31524D44u;
 constexpr Steinberg::uint32 kNewState=0x32524D44u;
+constexpr auto kRowsState=kStateMagicV3;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
  const auto result=EditController::initialize(context);
@@ -36,7 +37,12 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,pattern=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||pattern>=kPatterns)
     return Steinberg::kResultFalse;
- if(magic==kNewState) {
+ std::uint8_t candidateRows=static_cast<std::uint8_t>(kRows);
+ if(magic==kRowsState) {
+   if(!stream.readInt8u(candidateRows)||!RowVisibility::valid(candidateRows))
+      return Steinberg::kResultFalse;
+ }
+ if(magic==kNewState||magic==kRowsState) {
    std::array<std::uint8_t,kCells> candidate{};
    for(auto& step:candidate)
        if(!stream.readInt8u(step)||step>127)return Steinberg::kResultFalse;
@@ -44,6 +50,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  } else if(magic!=kOldState) {
    return Steinberg::kResultFalse;
  }
+ visibleRows_=candidateRows;
  return setParamNormalized(kPatternParam,static_cast<double>(pattern)/7.0);
 }
 Steinberg::IPlugView* PLUGIN_API Controller::createView(Steinberg::FIDString name) {
@@ -58,7 +65,7 @@ VSTGUI::CView* Controller::createCustomView(VSTGUI::UTF8StringPtr name,
           const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
           VSTGUI::VST3Editor* editor) {
  if(!name||std::strcmp(name,"DrumatorStepGrid")!=0)return nullptr;
- return new DrumatorView(VSTGUI::CRect(0,0,1100,600),*this,*editor);
+ return new DrumatorView(VSTGUI::CRect(0,0,1100,300),*this,*editor);
 }
 std::uint8_t Controller::velocity(std::size_t p,std::size_t r,std::size_t s) const noexcept {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return 0;
@@ -82,6 +89,44 @@ bool Controller::changePattern(std::size_t pattern) {
  if(done!=Steinberg::kResultOk)return false;
  setParamNormalized(kPatternParam,value);
  return true;
+}
+bool Controller::canHideLast() const noexcept {
+ if(visibleRows_<=1||visibleRows_>kRows)return false;
+ const auto row=static_cast<std::size_t>(visibleRows_-1);
+ if(labels_[row]!="LEER - WAV LADEN")return false;
+ struct GridView {
+  const Controller& ctrl;
+  std::uint8_t get(std::size_t p,std::size_t r,std::size_t s) const noexcept {
+   return ctrl.velocity(p,r,s);
+  }
+ };
+ return RowVisibility::canHideLast(visibleRows_,GridView{*this},false);
+}
+bool Controller::addRow() {
+ if(visibleRows_>=kRows)return false;
+ auto* message=allocateMessage();
+ if(!message)return false;
+ message->setMessageID("Drumator.VisibleRows");
+ auto* attrs=message->getAttributes();
+ if(!attrs){message->release();return false;}
+ attrs->setInt("Count",static_cast<Steinberg::int64>(visibleRows_+1));
+ const auto good=sendMessage(message)==Steinberg::kResultOk;
+ message->release();
+ if(good)++visibleRows_;
+ return good;
+}
+bool Controller::hideLastEmptyRow() {
+ if(!canHideLast())return false;
+ auto* message=allocateMessage();
+ if(!message)return false;
+ message->setMessageID("Drumator.VisibleRows");
+ auto* attrs=message->getAttributes();
+ if(!attrs){message->release();return false;}
+ attrs->setInt("Count",static_cast<Steinberg::int64>(visibleRows_-1));
+ const auto good=sendMessage(message)==Steinberg::kResultOk;
+ message->release();
+ if(good)--visibleRows_;
+ return good;
 }
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;

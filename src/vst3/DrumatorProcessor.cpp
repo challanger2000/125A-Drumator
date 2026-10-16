@@ -18,6 +18,7 @@ constexpr double kPi=3.141592653589793238462643383279502884;
 // Distinct, bounded processor state format (not the future pattern bank format).
 constexpr Steinberg::uint32 kStateMagic=0x31524D44u; // legacy "DMR1"
 constexpr Steinberg::uint32 kStateMagicV2=0x32524D44u; // "DMR2", 4096 step bytes
+constexpr auto kStateMagicV3Local=kStateMagicV3; // plus visible row count
 }
 Processor::Processor() {
  setControllerClass(kControllerCID);
@@ -52,11 +53,23 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  if(!msg||!msg->getMessageID())return AudioEffect::notify(msg);
  const auto* id=msg->getMessageID();
  if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
-    std::strcmp(id,"Drumator.StepEdit")!=0)
+    std::strcmp(id,"Drumator.StepEdit")!=0&&
+    std::strcmp(id,"Drumator.VisibleRows")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.VisibleRows")==0) {
+   Steinberg::int64 count=0;
+   if(attrs->getInt("Count",count)!=Steinberg::kResultOk||
+      !RowVisibility::valid(static_cast<std::size_t>(count)))
+      return Steinberg::kInvalidArgument;
+   // Only the controller hides an empty row. The processor stores the
+   // visible count but intentionally retains all 16 DSP slots/steps.
+   visibleRows_.store(static_cast<std::uint8_t>(count),
+                      std::memory_order_relaxed);
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(msg->getMessageID(),"Drumator.StepEdit")==0) {
    Steinberg::int64 pattern=-1,step=-1,velocity=-1;
    if(attrs->getInt("Pattern",pattern)!=Steinberg::kResultOk||
@@ -202,8 +215,9 @@ Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
  Steinberg::IBStreamer stream(state,kLittleEndian);
  // UI edits use atomic cells. Snapshot is safe against data races.
  const auto stored=patterns_.snapshot();
- if(!stream.writeInt32u(kStateMagicV2)||
-    !stream.writeInt32u(selected_.load(std::memory_order_relaxed)))
+ if(!stream.writeInt32u(kStateMagicV3Local)||
+    !stream.writeInt32u(selected_.load(std::memory_order_relaxed))||
+    !stream.writeInt8u(visibleRows_.load(std::memory_order_relaxed)))
      return Steinberg::kResultFalse;
  for(std::size_t i=6;i<stored.size();++i)
      if(!stream.writeInt8u(stored[i]))return Steinberg::kResultFalse;
@@ -216,12 +230,18 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||pattern>=kPatterns)
      return Steinberg::kResultFalse;
  if(magic==kStateMagic) {
-     // Previously saved prototype projects only contained the pattern ID.
+     // Legacy projects were created with all 16 rows visible.
      selected_.store(pattern,std::memory_order_relaxed);
      patterns_.select(pattern);
+     visibleRows_.store(static_cast<std::uint8_t>(kRows),std::memory_order_relaxed);
      return Steinberg::kResultOk;
  }
- if(magic!=kStateMagicV2)return Steinberg::kResultFalse;
+ if(magic!=kStateMagicV2&&magic!=kStateMagicV3Local)
+    return Steinberg::kResultFalse;
+ std::uint8_t rows=static_cast<std::uint8_t>(kRows);
+ if(magic==kStateMagicV3Local&&
+    (!stream.readInt8u(rows)||!RowVisibility::valid(rows)))
+     return Steinberg::kResultFalse;
  std::array<std::uint8_t,kCells> cells{};
  for(auto& cell:cells) {
      if(!stream.readInt8u(cell)||cell>127)return Steinberg::kResultFalse;
@@ -233,6 +253,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
        patterns_.set(p,r,s,cells[AtomicPatternBank::index(p,r,s)]);
  selected_.store(pattern,std::memory_order_relaxed);
  patterns_.select(pattern);
+ visibleRows_.store(rows,std::memory_order_relaxed);
  return Steinberg::kResultOk;
 }
 }

@@ -10,14 +10,17 @@ public:
  DrumatorView(const VSTGUI::CRect& size,Controller& controller,
               VSTGUI::VST3Editor& editor);
  void draw(VSTGUI::CDrawContext* context) override;
+ bool attached(VSTGUI::CView* parent) override;
  VSTGUI::CMouseEventResult onMouseDown(
      VSTGUI::CPoint& point,const VSTGUI::CButtonState& buttons) override;
  bool acceptFileDrop(VSTGUI::DragEventData data);
+ std::size_t visibleRowsForHit() const noexcept;
 private:
  Controller& controller_;
  VSTGUI::VST3Editor& editor_;
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
  void load(std::size_t row);
+ void adjustEditorHeight();
  void loadPath(std::size_t row,const std::string& path);
 };
 }

@@ -18,7 +18,10 @@ namespace {
 constexpr double kLabelX=16.0,kGridX=266.0,kGridY=108.0;
 constexpr double kCellWidth=24.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
-constexpr double kGridBottom=kGridY+16*kRowHeight;
+constexpr double kMinHeight=300.0;
+double contentHeight(std::size_t rows) {
+ return std::max(kMinHeight,kGridY+rows*kRowHeight+64.0);
+}
 constexpr double kHeaderY=38.0,kPatternX=252.0,kPatternWidth=70.0;
 const VSTGUI::CColor background{26,35,45,255};
 const VSTGUI::CColor panel{41,53,67,255};
@@ -52,7 +55,7 @@ private:
        return false;
     auto local=data.pos;
     view_.frameToLocal(local);
-    if(local.y<kGridY||local.y>=kGridBottom||
+    if(local.y<kGridY||local.y>=kGridY+view_.visibleRowsForHit()*kRowHeight||
        local.x<kLabelX||local.x>kGridRight)return false;
     const void* bytes=nullptr;
     VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
@@ -68,6 +71,25 @@ private:
  }
  DrumatorView& view_;
 };
+std::size_t DrumatorView::visibleRowsForHit() const noexcept {
+ return controller_.visibleRows();
+}
+bool DrumatorView::attached(VSTGUI::CView* parent) {
+ const auto result=CView::attached(parent);
+ if(result)adjustEditorHeight();
+ return result;
+}
+void DrumatorView::adjustEditorHeight() {
+ const double height=contentHeight(controller_.visibleRows());
+ const auto zoom=editor_.getZoomFactor();
+ // The host owns its window; reject an unsupported host resize explicitly.
+ editor_.requestResize({1100.0*zoom,height*zoom});
+ if(auto* container=getParentView()) {
+   container->setViewSize({0,0,1100,height});
+ }
+ setViewSize({0,0,1100,height});
+ invalid();
+}
 DrumatorView::DrumatorView(const VSTGUI::CRect& size,
                            Controller& controller,VSTGUI::VST3Editor& editor)
  : CView(size),controller_(controller),editor_(editor) {
@@ -76,7 +98,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
- c->drawRect({0,0,1100,600},VSTGUI::kDrawFilled);
+ c->drawRect({0,0,1100,contentHeight(controller_.visibleRows())},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,18);
  c->setFontColor(letters);
  c->drawString("DRUMATOR   /   FUNKTIONSPROTOTYP",VSTGUI::CRect(16,8,790,32),
@@ -85,7 +107,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);
  c->drawString("PATTERN A-H",VSTGUI::CRect(16,47,190,67),
                VSTGUI::kLeftText);
- c->drawString(status_.c_str(),VSTGUI::CRect(16,577,1050,595),
+ const double footerY=kGridY+controller_.visibleRows()*kRowHeight+39.0;
+ c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1050,footerY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
  for(std::size_t pattern=0;pattern<8;++pattern) {
@@ -103,7 +126,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString("100%",VSTGUI::CRect(880,39,937,69));
  c->drawString("150%",VSTGUI::CRect(946,39,1027,69));
  c->setFont(VSTGUI::kNormalFont,12);
- for(std::size_t row=0;row<kRows;++row) {
+ for(std::size_t row=0;row<controller_.visibleRows();++row) {
    const double y=kGridY+row*kRowHeight;
    c->setFillColor(row%2==0?panel:background);
    c->drawRect({10,y,1070,y+kRowHeight-1},VSTGUI::kDrawFilled);
@@ -126,6 +149,21 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }
    }
  }
+ const double buttonsY=kGridY+controller_.visibleRows()*kRowHeight+5.0;
+ c->setFillColor(controller_.visibleRows()<kRows?accent:panel);
+ c->drawRect({16,buttonsY,213,buttonsY+29},VSTGUI::kDrawFilled);
+ c->setFontColor(background);
+ c->drawString(controller_.visibleRows()<kRows?"+ INSTRUMENT HINZUFUEGEN":"MAX. 16 INSTRUMENTE",
+               VSTGUI::CRect(16,buttonsY,213,buttonsY+29));
+ c->setFillColor(controller_.canHideLast()?panel:background);
+ c->drawRect({226,buttonsY,266,buttonsY+29},VSTGUI::kDrawFilled);
+ c->setFontColor(letters);
+ c->drawString("-",VSTGUI::CRect(226,buttonsY,266,buttonsY+29));
+ char rowsLabel[40]{};
+ std::snprintf(rowsLabel,sizeof(rowsLabel),"%u / 16 ZEILEN",
+               static_cast<unsigned>(controller_.visibleRows()));
+ c->drawString(rowsLabel,VSTGUI::CRect(277,buttonsY,455,buttonsY+29),
+               VSTGUI::kLeftText);
  setDirty(false);
 }
 void DrumatorView::loadPath(std::size_t row,const std::string& path) {
@@ -154,7 +192,7 @@ bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
  if(!data.drag||data.drag->getCount()!=1)return false;
  auto position=data.pos;
  frameToLocal(position);
- if(position.y<kGridY||position.y>=kGridBottom)return false;
+ if(position.y<kGridY||position.y>=kGridY+controller_.visibleRows()*kRowHeight)return false;
  const auto row=static_cast<std::size_t>((position.y-kGridY)/kRowHeight);
  if(row>=kRows)return false;
  const void* bytes=nullptr;
@@ -195,7 +233,24 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=880&&x<=937) {editor_.setZoomFactor(1.0);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
    if(x>=946&&x<=1027) {editor_.setZoomFactor(1.5);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
  }
- if(y>=kGridY&&y<kGridBottom) {
+ const double actionsY=kGridY+controller_.visibleRows()*kRowHeight+5.0;
+ if(y>=actionsY&&y<actionsY+29) {
+   if(x>=16&&x<=213) {
+     if(controller_.visibleRows()>=kRows)
+       status_="MAXIMAL 16 ZEILEN";
+     else if(controller_.addRow())adjustEditorHeight();
+     else status_="INSTRUMENT KONNTE NICHT HINZUGEFUEGT WERDEN";
+     invalid();
+     return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=226&&x<=266) {
+     if(controller_.hideLastEmptyRow())adjustEditorHeight();
+     else status_="ZEILE ENTHAELT STEPS/SAMPLE - NICHT ENTFERNBAR";
+     invalid();
+     return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+ }
+ if(y>=kGridY&&y<kGridY+controller_.visibleRows()*kRowHeight) {
    const auto row=static_cast<std::size_t>((y-kGridY)/kRowHeight);
    if(x>=kLabelX&&x<kGridX-12) {
       load(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;

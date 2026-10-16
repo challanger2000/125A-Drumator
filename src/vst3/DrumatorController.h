@@ -2,6 +2,7 @@
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "core/SequencerCore.h"
+#include "core/VisibleRows.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,10 @@ public:
 
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
+ bool addRow();
+ bool hideLastEmptyRow();
+ std::size_t visibleRows() const noexcept {return visibleRows_;}
+ bool canHideLast() const noexcept;
  enum class LoadStatus {
   Accepted, InvalidRow, NotFound, TooLarge, ReadError, Unsupported,
   NoProcessorConnection, Rejected
@@ -34,5 +39,6 @@ public:
 private:
  std::array<std::uint8_t,kCells> grid_{};
  std::array<std::string,kRows> labels_{};
+ std::uint8_t visibleRows_{kDefaultVisibleRows};
 };
 }

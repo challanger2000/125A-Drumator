@@ -30,7 +30,7 @@ jobs:
       - name: Configure Windows x64 VST3 and standalone QA
         run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON -DDRUMATOR_BUILD_VST3=ON -DVST3_SDK_ROOT="$env:GITHUB_WORKSPACE/sdk"
       - name: Build tests and Drumator VST3
-        run: cmake --build build --config Release --target drumator_test_suite drumator_editor_smoke Drumator validator moduleinfotool --parallel 2
+        run: cmake --build build --config Release --target drumator_test_suite drumator_editor_smoke drumator_audio_host_smoke Drumator validator moduleinfotool --parallel 2
       - name: Run deterministic regressions
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Assemble standard Windows VST3 bundle and validate
@@ -96,10 +96,19 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'Actual packaged VST3 editor geometry smoke test FAILED'
           }
+          # Full VST3 host simulation: actual MIDI, WAV message and audio.
+          $audioSmoke = @(Get-ChildItem -Path build -Filter 'drumator_audio_host_smoke.exe' -File -Recurse)
+          if ($audioSmoke.Count -ne 1) {
+            throw 'Packaged audio smoke executable missing or ambiguous'
+          }
+          & $audioSmoke[0].FullName (Join-Path $binaryDirectory '125A Drumator.vst3')
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Packaged VST3 WAV/MIDI/audio host simulation FAILED'
+          }
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - uses: actions/upload-artifact@v4
         with:
-          name: 125A-Drumator-M08-Windows-x64-WAV-Drop-Audition
+          name: 125A-Drumator-M09-4-Rows-Host-Audio-QA
           # Upload the artifact ROOT, not the .vst3 directory itself: 
           # upload-artifact strips the supplied root from stored paths.
           path: artifact/
