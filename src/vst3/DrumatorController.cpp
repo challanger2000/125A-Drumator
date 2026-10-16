@@ -38,7 +38,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic) {
+ if(magic==kKitMagic||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -53,6 +53,10 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
           return Steinberg::kResultFalse;
        grid_=candidate.grid;
        visibleRows_=candidate.visible;
+       for(std::size_t row=0;row<kRows;++row) {
+          muted_[row]=(candidate.muted&(1u<<row))!=0;
+          solo_[row]=(candidate.solo&(1u<<row))!=0;
+       }
        for(std::size_t row=0;row<kRows;++row)
           labels_[row]=candidate.names[row].empty()
                         ?"LEER - WAV LADEN":candidate.names[row];
@@ -73,6 +77,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
    grid_=candidate;
  }else if(magic!=kOldState)return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
+ muted_.fill(false);solo_.fill(false);
  for(auto& name:labels_)name="LEER - WAV LADEN";
  return setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
 }
