@@ -175,6 +175,7 @@ int main(int argc,char** argv) {
    return processorPoint->notify(&msg);
  };
  require(rowMix(50,-100)==kResultOk,"Mix half-gain left");
+ for(int tail=0;tail<7;++tail)run(-1);
  run(36);
  double mixedL=0,mixedR=0;
  for(int i=50;i<190;++i){mixedL+=left[i];mixedR+=right[i];}
