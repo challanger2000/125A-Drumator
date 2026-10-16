@@ -49,7 +49,6 @@ class WavPcm16Decoder {
    const auto valid=u16(p+18);
    if(valid!=bits)return false; // do not misinterpret packed-depth padding
    // WAVE GUID last bytes: 80 00 00 AA 00 38 9B 71
-   (void)tail;
    const auto* guid=p+24;
    if(guid[0]!=1&&guid[0]!=3)return false;
    if(guid[1]!=0||guid[2]!=0||guid[3]!=0)return false;
