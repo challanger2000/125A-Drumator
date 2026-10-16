@@ -11,6 +11,10 @@
 #include <cmath>
 #include <limits>
 #include <new>
+#include <mutex>
+#include <vector>
+#include <string>
+#include <memory>
 
 namespace drumator {
 namespace {
@@ -100,12 +104,24 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     attrs->getBinary("WavBytes",bytes,size)!=Steinberg::kResultOk||
     !bytes||size<44||size>kMaxMessageBytes)
     return Steinberg::kInvalidArgument;
- // The SPSC return queue's control-side consumer runs on the same
- // connection/UI thread that publishes the next sound.
- for(;;) {
-   auto unused=exchange_.pollReclaim();
-   if(!unused)break;
+ std::string fileName="SAMPLE";
+ {
+   const void* nameBytes=nullptr;
+   Steinberg::uint32 nameLen=0;
+   if(attrs->getBinary("SampleName",nameBytes,nameLen)==Steinberg::kResultOk) {
+       if(!nameBytes||nameLen==0||nameLen>kMaxKitName)
+           return Steinberg::kInvalidArgument;
+       fileName.assign(static_cast<const char*>(nameBytes),nameLen);
+   }
+   if(fileName.empty()||fileName.find('/')!=std::string::npos||
+      fileName.find('\\')!=std::string::npos||
+      fileName.find('\0')!=std::string::npos)
+       return Steinberg::kInvalidArgument;
  }
+ std::vector<std::uint8_t> retained;
+ try {retained.assign(static_cast<const std::uint8_t*>(bytes),
+                      static_cast<const std::uint8_t*>(bytes)+size);}
+ catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
  const auto rate=outputRate_.load(std::memory_order_acquire);
  if(!(rate>0.0)||!std::isfinite(rate))return Steinberg::kResultFalse;
  std::unique_ptr<PreparedSample> candidate;
@@ -113,8 +129,25 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
      static_cast<const std::uint8_t*>(bytes),
      static_cast<std::size_t>(size),rate,0.0,1.f,0.f,0,false,candidate);
  if(prepared!=PrepareStatus::Ok)return Steinberg::kResultFalse;
- if(!exchange_.publish(static_cast<std::size_t>(row),candidate))
-    return Steinberg::kResultFalse; // previous pending sound is preserved
+ {
+    std::lock_guard<std::mutex> guard(kitMutex_);
+    std::size_t total=size;
+    for(std::size_t r=0;r<kRows;++r)
+      if(r!=static_cast<std::size_t>(row)) {
+         if(kit_.wav[r].size()>kMaxKitWavs-total)return Steinberg::kResultFalse;
+         total+=kit_.wav[r].size();
+      }
+    for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
+    // A host may open a project or request a sample before the first audio
+    // callback has adopted the default empty-row marker. Replace that
+    // pending marker on the CONTROL side without touching the audio thread.
+    auto previousPending=exchange_.withdraw(static_cast<std::size_t>(row));
+    (void)previousPending;
+    if(!exchange_.publish(static_cast<std::size_t>(row),candidate))
+       return Steinberg::kResultFalse;
+    kit_.wav[static_cast<std::size_t>(row)].swap(retained);
+    kit_.names[static_cast<std::size_t>(row)].swap(fileName);
+ }
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::ProcessSetup& setup) {
@@ -139,6 +172,13 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  if(!voices_.setOutputRate(setup.sampleRate))return Steinberg::kResultFalse;
  prepared_=true;
  outputRate_.store(setup.sampleRate,std::memory_order_release);
+ {
+    std::lock_guard<std::mutex> guard(kitMutex_);
+    if(!publishRestoredKit(kit_,setup.sampleRate)) {
+       outputRate_.store(0.0,std::memory_order_release);
+       prepared_=false;return Steinberg::kResultFalse;
+    }
+ }
  return Steinberg::kResultOk;
 }
 Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
@@ -216,50 +256,102 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  output.silenceFlags=0;
  return Steinberg::kResultOk;
 }
+// The host/control actor owns serialized sound. The audio thread never reads
+// kit_ or its mutex; it only adopts immutable prepared assets at block boundaries.
+bool Processor::publishRestoredKit(const KitState& kit,double rate) {
+ if(!std::isfinite(rate)||rate<=0.0)return false;
+ std::array<std::unique_ptr<PreparedSample>,kRows> fresh{};
+ for(std::size_t row=0;row<kRows;++row) {
+    if(kit.wav[row].empty()) {
+       try {fresh[row]=PreparedSample::silence(rate);}
+       catch(const std::bad_alloc&) {return false;}
+       if(!fresh[row])return false;
+    }else if(PreparedSample::fromWav(
+         kit.wav[row].data(),kit.wav[row].size(),rate,0.0,1.f,0.f,0,false,
+         fresh[row])!=PrepareStatus::Ok)return false;
+ }
+ for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
+ for(std::size_t row=0;row<kRows;++row) {
+    auto stale=exchange_.withdraw(row);
+    (void)stale;
+ }
+ for(std::size_t row=0;row<kRows;++row)
+    if(!exchange_.publish(row,fresh[row]))return false;
+ return true;
+}
 Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
- // UI edits use atomic cells. Snapshot is safe against data races.
- const auto stored=patterns_.snapshot();
- if(!stream.writeInt32u(kStateMagicV3Local)||
-    !stream.writeInt32u(selected_.load(std::memory_order_relaxed))||
-    !stream.writeInt8u(visibleRows_.load(std::memory_order_relaxed)))
-     return Steinberg::kResultFalse;
- for(std::size_t i=6;i<stored.size();++i)
-     if(!stream.writeInt8u(stored[i]))return Steinberg::kResultFalse;
- return Steinberg::kResultOk;
+ std::vector<std::uint8_t> serialized;
+ {
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   kit_.selected=static_cast<std::uint8_t>(selected_.load(std::memory_order_relaxed));
+   kit_.visible=visibleRows_.load(std::memory_order_relaxed);
+   for(std::size_t p=0;p<kPatterns;++p)
+    for(std::size_t r=0;r<kRows;++r)
+     for(std::size_t s=0;s<kSteps;++s)
+       kit_.grid[AtomicPatternBank::index(p,r,s)]=patterns_.get(p,r,s);
+   if(!KitCodec::encode(kit_,serialized))return Steinberg::kResultFalse;
+ }
+ const auto length=static_cast<Steinberg::TSize>(serialized.size());
+ return stream.writeRaw(serialized.data(),length)==length
+        ? Steinberg::kResultOk : Steinberg::kResultFalse;
 }
 Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
- Steinberg::uint32 magic=0,pattern=0;
- if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||pattern>=kPatterns)
-     return Steinberg::kResultFalse;
- if(magic==kStateMagic) {
-     // Legacy projects were created with all 16 rows visible.
-     selected_.store(pattern,std::memory_order_relaxed);
-     patterns_.select(pattern);
-     visibleRows_.store(static_cast<std::uint8_t>(kRows),std::memory_order_relaxed);
-     return Steinberg::kResultOk;
- }
- if(magic!=kStateMagicV2&&magic!=kStateMagicV3Local)
+ Steinberg::uint32 magic=0,next=0;
+ if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- std::uint8_t rows=static_cast<std::uint8_t>(kRows);
- if(magic==kStateMagicV3Local&&
-    (!stream.readInt8u(rows)||!RowVisibility::valid(rows)))
-     return Steinberg::kResultFalse;
- std::array<std::uint8_t,kCells> cells{};
- for(auto& cell:cells) {
-     if(!stream.readInt8u(cell)||cell>127)return Steinberg::kResultFalse;
+ KitState candidate;
+ if(magic==kKitMagic) {
+    if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
+       return Steinberg::kResultFalse;
+    try {
+       std::vector<std::uint8_t> encoded(8+static_cast<std::size_t>(next));
+       for(int i=0;i<4;++i) {
+           encoded[i]=static_cast<std::uint8_t>(magic>>(8*i));
+           encoded[4+i]=static_cast<std::uint8_t>(next>>(8*i));
+       }
+       if(stream.readRaw(encoded.data()+8,next)!=static_cast<Steinberg::TSize>(next)||
+          !KitCodec::decode(encoded.data(),encoded.size(),candidate))
+          return Steinberg::kResultFalse;
+    }catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
+ }else {
+    if(next>=kPatterns)return Steinberg::kResultFalse;
+    candidate.selected=static_cast<std::uint8_t>(next);
+    candidate.visible=static_cast<std::uint8_t>(kRows);
+    if(magic==kStateMagic) {
+       AtomicPatternBank defaults;
+       for(std::size_t p=0;p<kPatterns;++p)
+        for(std::size_t r=0;r<kRows;++r)
+         for(std::size_t s=0;s<kSteps;++s)
+          candidate.grid[AtomicPatternBank::index(p,r,s)]=defaults.get(p,r,s);
+    }else if(magic==kStateMagicV2||magic==kStateMagicV3Local) {
+       if(magic==kStateMagicV3Local &&
+          (!stream.readInt8u(candidate.visible)||
+            !RowVisibility::valid(candidate.visible)))
+          return Steinberg::kResultFalse;
+       for(auto& cell:candidate.grid)
+          if(!stream.readInt8u(cell)||cell>127)
+             return Steinberg::kResultFalse;
+    }else return Steinberg::kResultFalse;
  }
- // Validate the complete state BEFORE changing live atomic cells.
- for(std::size_t p=0;p<kPatterns;++p)
-   for(std::size_t r=0;r<kRows;++r)
-     for(std::size_t s=0;s<kSteps;++s)
-       patterns_.set(p,r,s,cells[AtomicPatternBank::index(p,r,s)]);
- selected_.store(pattern,std::memory_order_relaxed);
- patterns_.select(pattern);
- visibleRows_.store(rows,std::memory_order_relaxed);
+ const auto rate=outputRate_.load(std::memory_order_acquire);
+ {
+    std::lock_guard<std::mutex> guard(kitMutex_);
+    if(rate>0.0&&!publishRestoredKit(candidate,rate))
+       return Steinberg::kResultFalse;
+    kit_=std::move(candidate);
+    for(std::size_t p=0;p<kPatterns;++p)
+     for(std::size_t r=0;r<kRows;++r)
+      for(std::size_t s=0;s<kSteps;++s)
+       patterns_.set(p,r,s,
+          kit_.grid[AtomicPatternBank::index(p,r,s)]);
+    selected_.store(kit_.selected,std::memory_order_relaxed);
+    patterns_.select(kit_.selected);
+    visibleRows_.store(kit_.visible,std::memory_order_relaxed);
+ }
  return Steinberg::kResultOk;
 }
 }

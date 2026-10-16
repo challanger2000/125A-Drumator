@@ -62,6 +62,14 @@ if(BUILD_TESTING)
     target_compile_options(drumator_visible_rows_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
   endif()
   add_test(NAME drumator_visible_rows_tests COMMAND drumator_visible_rows_tests)
+  add_executable(drumator_kit_tests tests/KitStateTests.cpp)
+  target_link_libraries(drumator_kit_tests PRIVATE drumator_core)
+  if(MSVC)
+    target_compile_options(drumator_kit_tests PRIVATE /W4 /WX)
+  else()
+    target_compile_options(drumator_kit_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
+  add_test(NAME drumator_kit_tests COMMAND drumator_kit_tests)
 
   # Build ALL local CTest executables before invoking ctest. A stale
   # explicit GitHub Actions target list previously omitted the WAV test.
@@ -108,6 +116,7 @@ if(DRUMATOR_BUILD_VST3)
     src/vst3/DrumatorView.cpp
     src/core/AtomicPatternBank.h
     src/core/VisibleRows.h
+    src/core/KitState.h
     resource/Drumator.uidesc
     src/vst3/Factory.cpp
     src/core/SequencerCore.h

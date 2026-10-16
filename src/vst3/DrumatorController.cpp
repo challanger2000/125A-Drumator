@@ -34,9 +34,32 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
 Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
- Steinberg::uint32 magic=0,pattern=0;
- if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||pattern>=kPatterns)
+ Steinberg::uint32 magic=0,next=0;
+ if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
+ if(magic==kKitMagic) {
+    if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
+       return Steinberg::kResultFalse;
+    try {
+       std::vector<std::uint8_t> encoded(8+static_cast<std::size_t>(next));
+       for(int i=0;i<4;++i) {
+           encoded[i]=static_cast<std::uint8_t>(magic>>(8*i));
+           encoded[4+i]=static_cast<std::uint8_t>(next>>(8*i));
+       }
+       KitState candidate;
+       if(stream.readRaw(encoded.data()+8,next)!=static_cast<Steinberg::TSize>(next)||
+          !KitCodec::decode(encoded.data(),encoded.size(),candidate))
+          return Steinberg::kResultFalse;
+       grid_=candidate.grid;
+       visibleRows_=candidate.visible;
+       for(std::size_t row=0;row<kRows;++row)
+          labels_[row]=candidate.names[row].empty()
+                        ?"LEER - WAV LADEN":candidate.names[row];
+       return setParamNormalized(kPatternParam,
+                  static_cast<double>(candidate.selected)/7.0);
+    }catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
+ }
+ if(next>=kPatterns)return Steinberg::kResultFalse;
  std::uint8_t candidateRows=static_cast<std::uint8_t>(kRows);
  if(magic==kRowsState) {
    if(!stream.readInt8u(candidateRows)||!RowVisibility::valid(candidateRows))
@@ -47,11 +70,10 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
    for(auto& step:candidate)
        if(!stream.readInt8u(step)||step>127)return Steinberg::kResultFalse;
    grid_=candidate;
- } else if(magic!=kOldState) {
-   return Steinberg::kResultFalse;
- }
+ }else if(magic!=kOldState)return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
- return setParamNormalized(kPatternParam,static_cast<double>(pattern)/7.0);
+ for(auto& name:labels_)name="LEER - WAV LADEN";
+ return setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
 }
 Steinberg::IPlugView* PLUGIN_API Controller::createView(Steinberg::FIDString name) {
  if(name&&std::strcmp(name,Steinberg::Vst::ViewType::kEditor)==0) {
@@ -169,12 +191,20 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  // VST3 hosts are allowed to expose a controller without a connected
  // processor. Do not display "loaded" in that case.
  if(!getPeer())return LoadStatus::NoProcessorConnection;
+ const auto last=path.find_last_of("/\\");
+ const auto name=last==std::string::npos?path:path.substr(last+1);
+ if(name.empty()||name.size()>kMaxKitName||name.find('\0')!=std::string::npos)
+    return LoadStatus::Rejected;
  auto* msg=allocateMessage();
  if(!msg)return LoadStatus::NoProcessorConnection;
  msg->setMessageID("Drumator.LoadPcm16Wav");
  auto* attr=msg->getAttributes();
  if(!attr){msg->release();return LoadStatus::Rejected;}
  attr->setInt("Row",static_cast<Steinberg::int64>(row));
+ if(attr->setBinary("SampleName",name.data(),
+                    static_cast<Steinberg::uint32>(name.size()))!=Steinberg::kResultOk) {
+    msg->release();return LoadStatus::Rejected;
+ }
  if(attr->setBinary("WavBytes",data.data(),
                     static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk) {
      msg->release();return LoadStatus::Rejected;
@@ -184,8 +214,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  if(!accepted)return LoadStatus::Rejected;
  // Success means the processor accepted the immutable asset for the
  // next audio block; no claim is made that the buffer has already rendered.
- const auto last=path.find_last_of("/\\");
- labels_[row]=last==std::string::npos?path:path.substr(last+1);
+ labels_[row]=name;
  return LoadStatus::Accepted;
 }
 }

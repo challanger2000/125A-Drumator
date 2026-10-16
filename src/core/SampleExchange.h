@@ -60,6 +60,15 @@ public:
         }
     }
 
+    // Non-audio factory marker for a sample slot intentionally empty on recall.
+    // Published like an ordinary asset to clear a previously loaded row.
+    static std::unique_ptr<PreparedSample> silence(double outputRate) {
+        if(!std::isfinite(outputRate)||outputRate<=0.0)return {};
+        auto value=std::unique_ptr<PreparedSample>(new PreparedSample);
+        value->outputRate_=outputRate;
+        return value;
+    }
+
     RowSound rowSound() const noexcept {
         RowSound r;
         r.sample={decoded_.left.data(),

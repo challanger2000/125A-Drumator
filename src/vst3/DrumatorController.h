@@ -3,6 +3,7 @@
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "core/SequencerCore.h"
 #include "core/VisibleRows.h"
+#include "core/KitState.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>

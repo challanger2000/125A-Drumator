@@ -10,6 +10,8 @@
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "vst3/PluginIDs.h"
+#include "core/KitState.h"
+#include "public.sdk/source/vst/utility/memoryibstream.h"
 #include <windows.h>
 #include <array>
 #include <cmath>
@@ -134,6 +136,9 @@ int main(int argc,char** argv) {
    auto* attr=message.getAttributes();
    require(attr!=nullptr,"HostMessage attributes absent");
    require(attr->setInt("Row",row)==kResultOk,"Row attribute");
+   constexpr const char* filename="StudioDrum.wav";
+   require(attr->setBinary("SampleName",filename,14)==kResultOk,
+           "Name attribute");
    require(attr->setBinary("WavBytes",bytes.data(),
                  static_cast<uint32>(bytes.size()))==kResultOk,"Binary attribute");
    return processorPoint->notify(&message);
@@ -172,6 +177,64 @@ int main(int argc,char** argv) {
  for(int i=0;i<256;++i)
    require(left[i]==0.f&&right[i]==0.f,"Unloaded row 2 produced audio");
  std::cout<<"Invalid WAV preserved audio, unloaded row 2 silent PASS\n";
+ // Save an actual initialized component via its public VST3 IBStream
+ // interface. Decode the recorded bytes to prove assets are truly embedded.
+ Steinberg::ResizableMemoryIBStream saved;
+ require(component->getState(&saved)==kResultOk,"VST3 getState failed");
+ const auto* raw=static_cast<const std::uint8_t*>(saved.getData());
+ drumator::KitState savedKit;
+ require(drumator::KitCodec::decode(raw,saved.getCursor(),savedKit),
+         "Complete DMR4 kit not saved");
+ require(savedKit.wav[0]==makeWav(32,true,-.5f),
+         "Original FLOAT32 WAV was not embedded in song state");
+ require(savedKit.names[0]=="StudioDrum.wav","WAV filename missing from song");
+ require(savedKit.visible==4,"Default four visible rows lost");
+ // Create a SECOND fresh plugin instance: restore state BEFORE setupProcessing,
+ // as real hosts commonly do when reloading a project.
+ IComponent* restored=nullptr;
+ require(factory->createInstance(drumator::kProcessorCID.toTUID(),IComponent::iid,
+              reinterpret_cast<void**>(&restored))==kResultOk&&restored,
+         "Second VST3 processor instance");
+ IAudioProcessor* restoredAudio=nullptr;
+ require(restored->queryInterface(IAudioProcessor::iid,
+              reinterpret_cast<void**>(&restoredAudio))==kResultOk&&restoredAudio,
+         "Second VST3 audio interface");
+ IEditController* restoredController=nullptr;
+ require(factory->createInstance(drumator::kControllerCID.toTUID(),
+              IEditController::iid,reinterpret_cast<void**>(&restoredController))
+             ==kResultOk&&restoredController,"Second controller");
+ require(restored->initialize(&host)==kResultOk,"Second processor initialize");
+ require(restoredController->initialize(&host)==kResultOk,
+         "Second controller initialize");
+ saved.rewind();
+ require(restored->setState(&saved)==kResultOk,"Second processor setState");
+ saved.rewind();
+ require(restoredController->setComponentState(&saved)==kResultOk,
+         "Second controller setComponentState with embedded kit");
+ require(restoredAudio->setBusArrangements(nullptr,0,&stereo,1)==kResultOk,
+         "Second stereo bus");
+ require(restoredAudio->setupProcessing(setup)==kResultOk,
+         "Second setupProcessing must reprepare embedded WAV");
+ require(restored->setActive(true)==kResultOk,"Second activate");
+ require(restoredAudio->setProcessing(true)==kResultOk,"Second setProcessing true");
+ events.clear();
+ Event restoredNote{};restoredNote.type=Event::kNoteOnEvent;
+ restoredNote.noteOn.pitch=36;restoredNote.noteOn.velocity=1.f;
+ restoredNote.noteOn.noteId=-1;
+ require(events.addEvent(restoredNote)==kResultOk,"Second MIDI note event");
+ left.fill(-99.f);right.fill(-99.f);
+ require(restoredAudio->process(data)==kResultOk,"Second audio render");
+ double restoredMean=0;
+ for(int i=50;i<190;++i)restoredMean+=left[i];
+ require(std::abs(restoredMean/140.+.5)<0.015,
+         "Project reload did not reproduce FLOAT32 WAV audio level");
+ require(restoredAudio->setProcessing(false)==kResultOk,"Second stop processing");
+ require(restored->setActive(false)==kResultOk,"Second deactivate");
+ require(restoredController->terminate()==kResultOk,"Second controller terminate");
+ require(restored->terminate()==kResultOk,"Second component terminate");
+ restoredAudio->release();restoredController->release();restored->release();
+ std::cout<<"DMR4 actual fresh-instance audio recall -0.5 PASS\n";
+
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");

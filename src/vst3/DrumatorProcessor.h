@@ -2,6 +2,7 @@
 #include "core/SequencerCore.h"
 #include "core/AtomicPatternBank.h"
 #include "core/VisibleRows.h"
+#include "core/KitState.h"
 #include "core/SampleVoiceEngine.h"
 #include "core/SampleExchange.h"
 #include "core/TriggerBatch.h"
@@ -10,6 +11,8 @@
 #include <atomic>
 #include <cstdint>
 #include <vector>
+#include <mutex>
+#include <memory>
 namespace drumator {
 class Processor final:public Steinberg::Vst::AudioEffect {
 public:
@@ -30,6 +33,9 @@ public:
  Steinberg::tresult PLUGIN_API setState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::uint32 PLUGIN_API getTailSamples() SMTG_OVERRIDE;
 private:
+ bool publishRestoredKit(const KitState& state,double rate); // control only
+ std::mutex kitMutex_{};
+ KitState kit_{};
  AtomicPatternBank patterns_;
  SampleVoiceEngine voices_;
 

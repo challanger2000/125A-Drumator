@@ -1,6 +1,8 @@
 # 125A Drumator — development instructions
 
 ## Status
+M10 embedded kit recall source candidate: DMR4 stores WAV bytes, filenames, visible rows and all patterns in the VST3 project state; host/Windows QA pending. **No M10 PASS until real packaged host state/reload test succeeds.**
+
 **M09 verified Windows QA:** source `c7e8a08eac6ab8fd2392d23151d44d18c2b81586`, [Actions #38956743559](https://github.com/challanger2000/125A-Drumator/actions/runs/38956743559) SUCCESS. Seven CTests **7/7 PASS**, official Steinberg Validator **47/47 PASS**, packaged editor geometry **1100x300 PASS**, actual packaged VST3 host simulation PASS for silence before load, PCM16 +0.50/+0.50, PCM24 +0.25/+0.25 and FLOAT32 -0.50/-0.50 L/R amplitude; corrupt WAV rejection preserves prior sound; unloaded row 2 silent. Artifact `125A-Drumator-M09-4-Rows-Host-Audio-QA` id `12070159256`, downloaded as ZIP, verified exact `125A Drumator.vst3` tree (3 nonempty files), valid JSON resources, PE x64 signature and ZIP integrity. NO claim of real Studio Pro browser drag/drop, GUI plus/minus interaction, recalled sample assets, prolonged paced realtime load or V1 final.
 
 M09 under development: 4 visible rows by default, + expand / guarded minus, DMR3 row-count project state, packaged VST3 host audio smoke. **No Windows M09 PASS claimed until a matching run succeeds.** Prior verified M08 results remain below.

@@ -10,6 +10,8 @@ M08 **verified Windows QA** at source commit `73b0430c673ea86d7133ca6ebd75a56c75
 
 **M09 candidate:** compact 4-row GUI expanding up to 16; stored row visibility; real packaged Windows VST3 MIDI/WAV/audio host smoke to reduce repeated manual DAW tests. Source Windows CI and packaged VST3 host simulation verified; proprietary DAW interaction unverified.
 
+**M10 source candidate:** portable embedded-kit project recall (WAV bytes + basename + 8 patterns + visible rows); total kit WAV limit 64 MiB; Windows CI and actual fresh-instance host recall test pending.
+
 **Status:** development; **first VSTGUI prototype built in Windows CI, not yet DAW-tested**. 16x32 clickable step grid, pattern buttons and PCM16 WAV picker exist in source, but independent DAW GUI/audio behavior and restored sample references are NOT verified. **NOT a Drumator release.**
 
 **GUI resource fix / verified source:** commit `7097bc5a9a6fa6178ffde7fa706aa9be94de280c`, Windows Actions [#38944959865](https://github.com/challanger2000/125A-Drumator/actions/runs/38944959865), 6/6 CTests PASS, Steinberg Validator 47/47 PASS, and new **editor geometry smoke 1100 × 600 PASS** on the packaged VST3. Downloaded artifact `125A-Drumator-M07-Windows-x64-GUI-PROTOTYPE` (ID 12064249354) has been independently ZIP-verified. Studio Pro GUI rendering and click/WAV playback are NOT yet confirmed.

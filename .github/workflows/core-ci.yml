@@ -108,7 +108,7 @@ jobs:
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - uses: actions/upload-artifact@v4
         with:
-          name: 125A-Drumator-M09-4-Rows-Host-Audio-QA
+          name: 125A-Drumator-M10-Embedded-Kit-Recall-QA
           # Upload the artifact ROOT, not the .vst3 directory itself: 
           # upload-artifact strips the supplied root from stored paths.
           path: artifact/
