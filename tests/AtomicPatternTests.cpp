@@ -1,4 +1,5 @@
 #include "core/AtomicPatternBank.h"
+#include "core/StepVelocity.h"
 #include <array>
 #include <atomic>
 #include <iostream>
@@ -10,6 +11,11 @@ static void check(bool okay,const char* msg){if(!okay)throw std::runtime_error(m
 int main(){
  try {
   AtomicPatternBank bank;
+  check(nextStepVelocity(0)==32&&nextStepVelocity(32)==64&&
+        nextStepVelocity(64)==96&&nextStepVelocity(96)==127&&
+        nextStepVelocity(127)==0,"velocity cycle sequence");
+  check(nextStepVelocity(20)==32&&nextStepVelocity(80)==96&&
+        nextStepVelocity(115)==127,"velocity cycle from loaded projects");
   check(bank.get(0,0,0)==127&&bank.get(7,0,4)==90,
         "old factory fixture default changed");
   check(bank.get(7,15,31)==0,"last step not silent");
