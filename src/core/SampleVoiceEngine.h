@@ -122,6 +122,11 @@ public:
         rows_[row].pan=pan;
         return true;
     }
+    bool setRowChoke(std::size_t row,std::uint8_t group) noexcept {
+        if(row>=kRows||group>4)return false;
+        rows_[row].chokeGroup=group;
+        return true;
+    }
     // reset() only at a host lifecycle discontinuity; not for ordinary
     // sample replacement (existing one-shots continue).
     void reset() noexcept {
