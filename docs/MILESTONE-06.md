@@ -1,6 +1,6 @@
 # Milestone 06 — VST3 WAV-message bridge and live MIDI audition
 
-Status: **implementation candidate**. This document does NOT claim any new Windows build, Steinberg Validator PASS, DAW playback test, editor, or finished sample browser until matching Actions evidence exists.
+Status: **Windows x64 compilation, five standalone CTests and official VST3 Validator verified** for this source commit. The VST3 message receiver has NOT been exercised end-to-end with a GUI/DAW WAV import, so this is not a user-facing sample-loader milestone.
 
 ## New processor-side capability
 - Steinberg **IConnectionPoint::notify** (SDK 3.8.1 UI-thread contract) accepts message ID `Drumator.LoadPcm16Wav` with binary attribute `WavBytes` and integer attribute `Row` (0–15).
@@ -29,3 +29,8 @@ Status: **implementation candidate**. This document does NOT claim any new Windo
 - Official moduleinfotool and Steinberg Validator on assembled VST3 bundle.
 - Subsequent step: a host exercise that creates a controller connection, passes real WAV messages and checks actual audio rendering with MIDI and transport. Later: VSTGUI file picker/drop with state persistence and release QA.
 - Do not label any file-import UX as functional before verified message-sending GUI and real host tests.
+
+## Verified Windows evidence (2026-10-16)
+**Verified M06 technical build:** source `9f223c0f6c4d8e65a8ce368afd08a0387643af57`, [GitHub Actions #38919501529](https://github.com/challanger2000/125A-Drumator/actions/runs/38919501529) **SUCCESS**: Windows MSVC x64 VST3 build PASS; five CTests **5/5 PASS**; moduleinfotool PASS; official Steinberg Validator **47/47 PASS** on assembled bundle. Engineering-only artifact `Drumator-M06-INTERIM-VST3-UNTESTED` (ID `12053822596`). No DAW WAV-import/GUI/audio test or final release.
+
+This Windows run validates the provisional binary's compile/link and Steinberg host-contract checks. CTest does not yet inject a WAV message into the actual processor instance; claim only a source-level integration, not real in-host sample-file playback.
