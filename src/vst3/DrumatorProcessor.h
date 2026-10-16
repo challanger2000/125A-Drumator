@@ -49,6 +49,7 @@ private:
  std::atomic<std::uint32_t> soloMask_{0};
  std::array<std::atomic<float>,kRows> rowGain_{};
  std::array<std::atomic<float>,kRows> rowPan_{};
+ std::array<std::atomic<std::uint8_t>,kRows> rowChoke_{};
  bool prepared_{false};
 };
 }
