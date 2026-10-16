@@ -137,8 +137,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(number,VSTGUI::CRect(kLabelX,y,kLabelX+31,y+26),
                  VSTGUI::kLeftText);
    const auto& name=controller_.label(row);
-   c->drawString(name.c_str(),VSTGUI::CRect(kLabelX+36,y,kGridX-11,y+26),
+   c->drawString(name.c_str(),VSTGUI::CRect(kLabelX+36,y,192,y+26),
                  VSTGUI::kLeftText);
+   c->setFillColor(controller_.isRowMuted(row)?on:off);
+   c->drawRect({195,y+3,218,y+24},VSTGUI::kDrawFilled);
+   c->setFontColor(letters);
+   c->drawString("M",VSTGUI::CRect(195,y+3,218,y+24));
+   c->setFillColor(controller_.isRowSolo(row)?accent:off);
+   c->drawRect({226,y+3,249,y+24},VSTGUI::kDrawFilled);
+   c->drawString("S",VSTGUI::CRect(226,y+3,249,y+24));
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
@@ -261,6 +268,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  if(y>=kGridY&&y<kGridY+controller_.visibleRows()*kRowHeight) {
    const auto row=static_cast<std::size_t>((y-kGridY)/kRowHeight);
+   if(x>=195&&x<218) {
+      if(!controller_.toggleRowGate(row,false))status_="MUTE NICHT UEBERNOMMEN";
+      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=226&&x<249) {
+      if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
+      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
    if(x>=kLabelX&&x<kGridX-12) {
       load(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
