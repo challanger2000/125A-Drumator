@@ -35,6 +35,15 @@ public:
                          static_cast<std::uint8_t>(mapped),0};
         return true;
     }
+    void applyMuteSolo(std::uint32_t muted,std::uint32_t solo) noexcept {
+        std::size_t kept=0;
+        for(std::size_t i=0;i<size_;++i) {
+            const auto bit=std::uint32_t{1}<<events_[i].row;
+            if((muted&bit)!=0||(solo!=0&&(solo&bit)==0))continue;
+            events_[kept++]=events_[i];
+        }
+        size_=kept;
+    }
     void sort() noexcept {
         std::sort(events_.begin(),events_.begin()+size_,
             [](const Trigger& a,const Trigger& b){
