@@ -45,6 +45,19 @@ int main(){
   for(std::size_t i=0;i<e.size();++i)
       check(e[i].row==i&&e[i].pattern==7&&e[i].velocity==i+1,
             "velocity and row/pattern identity");
+  // Swing delays odd 16th boundaries by 25% without moving even steps.
+  PatternBank swung;
+  check(swung.set(0,0,0,127)&&swung.set(0,0,1,127)&&
+        swung.set(0,0,2,127),"swing fixture");
+  auto delayed=get(swung,Clock{0,120,48000,15001,true,0.25});
+  check(delayed.size()==3&&delayed[0].sampleOffset==0&&
+        delayed[1].sampleOffset==7500&&delayed[2].sampleOffset==12000,
+        "swing positions incorrect");
+  delayed=get(swung,Clock{0.25,120,48000,6501,true,0.25});
+  check(delayed.size()==1&&delayed[0].sampleOffset==1500,
+        "swing boundary lost in split host block");
+  check(get(swung,Clock{0,120,48000,100,true,0.75},
+        ScheduleStatus::InvalidClock).empty(),"invalid swing accepted");
   const auto snapshot=b.save();
   PatternBank restored;
   check(restored.load(snapshot.data(),snapshot.size()),"valid restore");
