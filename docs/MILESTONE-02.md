@@ -32,3 +32,12 @@ Scope: host-independent, realtime-bounded PCM voice renderer. **Not an audio fil
 - GUI, Steinberg VST3 SDK 3.8.1 integration, full 125A QA, Fender Studio Pro testing.
 
 **No Windows/QA PASS is claimed by source code or documentation alone.** Read GitHub Actions job evidence.
+
+## Verified evidence (2026-10-16)
+- Source commit: `35c6436d88ea885d85d92864b97c8eabdfbfd106`.
+- Official Windows Actions run: https://github.com/challanger2000/125A-Drumator/actions/runs/38906773944
+- MSVC x64 Release build with `/W4 /WX`: PASS.
+- CTest `drumator_core_tests`: PASS.
+- CTest `drumator_voice_tests`: PASS.
+- Total: **2/2 PASS**, zero failures.
+- This only verifies host-independent C++ code with synthetic fixtures, **not** plugin host compliance, realtime pacing under DAW load, GUI, sample decoding, or final audio quality.

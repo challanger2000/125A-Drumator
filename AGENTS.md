@@ -1,7 +1,7 @@
 # 125A Drumator — development instructions
 
 ## Status
-DEVELOPMENT / host-independent sequencer core verified by Windows CI; sample-voice milestone under test. No VST3 binary, SDK-integrated Windows plugin build, Steinberg Validator result, 125A QA result, user host-test approval, or FINAL release exists.
+DEVELOPMENT / host-independent sequencer AND sample-voice core both verified in Windows CI (2/2 standalone test executables PASS, run #38906773944, commit 35c6436). No VST3 binary, SDK-integrated Windows plugin build, Steinberg Validator result, 125A QA result, user host-test approval, or FINAL release exists.
 
 ## Mandatory first read
 Before *any* implementation, audit, DSP, GUI, build or release work:
