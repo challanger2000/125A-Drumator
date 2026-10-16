@@ -178,6 +178,17 @@ bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
  return ok;
 }
+bool Controller::adjustSwing(int delta) {
+ const auto next=std::clamp(static_cast<int>(swingPercent_)+delta,0,50);
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.Swing");
+ auto* attr=msg->getAttributes();if(!attr){msg->release();return false;}
+ attr->setInt("Percent",next);
+ const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok)swingPercent_=static_cast<std::uint8_t>(next);
+ return ok;
+}
 bool Controller::cycleRowChoke(std::size_t row) {
  if(row>=kRows)return false;
  const auto next=static_cast<std::uint8_t>((choke_[row]+1)%5);
