@@ -32,6 +32,9 @@ if(DRUMATOR_BUILD_VST3)
   set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
+  # Official SDK option: CI runner has no Administrator symlink rights.
+  # Plugin bundle is built in-tree and published as a workflow artifact.
+  set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
   add_subdirectory("${VST3_SDK_ROOT}" "${CMAKE_BINARY_DIR}/steinberg_sdk")
   smtg_add_vst3plugin(Drumator
     src/vst3/PluginIDs.h
