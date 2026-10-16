@@ -54,7 +54,9 @@ int main(){
         delayed[1].sampleOffset==7500&&delayed[2].sampleOffset==12000,
         "swing positions incorrect");
   delayed=get(swung,Clock{0.25,120,48000,6501,true,0.25});
-  check(delayed.size()==1&&delayed[0].sampleOffset==1500,
+  check(delayed.size()==2&&delayed[0].step==1&&
+        delayed[0].sampleOffset==1500&&delayed[1].step==2&&
+        delayed[1].sampleOffset==6000,
         "swing boundary lost in split host block");
   check(get(swung,Clock{0,120,48000,100,true,0.75},
         ScheduleStatus::InvalidClock).empty(),"invalid swing accepted");
