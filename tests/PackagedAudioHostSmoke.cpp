@@ -264,6 +264,51 @@ int main(int argc,char** argv) {
    require(fullKit.wav[static_cast<std::size_t>(row)]==
             makeWav(32,true,0.10f+static_cast<float>(row)*0.025f),
            "Full 16-row kit lost embedded WAV bytes");
+ // M12: restore a FULL kit into a separate processor, before setupProcessing,
+ // and verify that every original WAV actually plays (not just serialized).
+ IComponent* kitCopy=nullptr;
+ require(factory->createInstance(drumator::kProcessorCID.toTUID(),
+             IComponent::iid,reinterpret_cast<void**>(&kitCopy))==kResultOk&&kitCopy,
+         "Full-kit fresh processor");
+ IAudioProcessor* kitAudio=nullptr;
+ require(kitCopy->queryInterface(IAudioProcessor::iid,
+             reinterpret_cast<void**>(&kitAudio))==kResultOk&&kitAudio,
+         "Full-kit audio interface");
+ require(kitCopy->initialize(&host)==kResultOk,"Full-kit initialize");
+ fullState.rewind();
+ require(kitCopy->setState(&fullState)==kResultOk,"Full-kit restore state");
+ require(kitAudio->setBusArrangements(nullptr,0,&stereo,1)==kResultOk,
+         "Full-kit stereo arrangement");
+ require(kitAudio->setupProcessing(setup)==kResultOk,
+         "Full-kit setupProcessing");
+ require(kitCopy->setActive(true)==kResultOk,"Full-kit activate");
+ require(kitAudio->setProcessing(true)==kResultOk,"Full-kit start processing");
+ for(int row=0;row<16;++row) {
+   events.clear();
+   Event note{};note.type=Event::kNoteOnEvent;note.noteOn.pitch=
+       static_cast<int16>(36+row);
+   note.noteOn.velocity=1.f;note.noteOn.noteId=-1;
+   require(events.addEvent(note)==kResultOk,"Full-kit add note");
+   left.fill(0.f);right.fill(0.f);
+   require(kitAudio->process(data)==kResultOk,"Full-kit render");
+   const double expected=0.10+static_cast<double>(row)*0.025;
+   double avgL=0,avgR=0;
+   for(int n=50;n<190;++n){avgL+=left[n];avgR+=right[n];}
+   require(std::abs(avgL/140.-expected)<0.02&&
+           std::abs(avgR/140.-expected)<0.02,
+           "Fresh instance failed to play a restored drum row");
+   events.clear();
+   for(int tail=0;tail<5;++tail) {
+     left.fill(0.f);right.fill(0.f);
+     require(kitAudio->process(data)==kResultOk,
+             "Full-kit tail rendering");
+   }
+ }
+ require(kitAudio->setProcessing(false)==kResultOk,"Full-kit stop");
+ require(kitCopy->setActive(false)==kResultOk,"Full-kit deactivate");
+ require(kitCopy->terminate()==kResultOk,"Full-kit terminate");
+ kitAudio->release();kitCopy->release();
+ std::cout<<"M12 fresh-instance all-16-sample audio recall PASS\\n";
  // A deterministic extended callback workload; this is NOT a paced,
  // real-time deadline or Studio One endurance test.
  for(int block=0;block<8192;++block) {
