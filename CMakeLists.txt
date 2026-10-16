@@ -116,7 +116,19 @@ if(DRUMATOR_BUILD_VST3)
   # Explicitly supply its official public.sdk root as in Steinberg examples.
   set(public_sdk_SOURCE_DIR "${_DrumatorSdkRoot}/public.sdk")
   smtg_target_prepare_bundle(Drumator)
+  # With the SDK's legacy single-file compilation plus manual assembly,
+  # SMTG_MODULE_IS_BUNDLE must ALSO be defined for the separately compiled
+  # vstgui_support static library. Otherwise vstguieditor.cpp never calls
+  # setupVSTGUIBundleSupport, the .uidesc cannot be found on Win32,
+  # and VST3Editor::init() leaves the requested GUI rectangle at 0x0.
+  target_compile_definitions(vstgui_support PRIVATE SMTG_MODULE_IS_BUNDLE=1)
   target_compile_features(Drumator PRIVATE cxx_std_17)
+  add_executable(drumator_editor_smoke tests/EditorGeometrySmoke.cpp)
+  target_link_libraries(drumator_editor_smoke PRIVATE sdk drumator_core)
+  target_compile_features(drumator_editor_smoke PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(drumator_editor_smoke PRIVATE /W4 /WX)
+  endif()
   if(MSVC)
     target_compile_options(Drumator PRIVATE /W4)
   endif()

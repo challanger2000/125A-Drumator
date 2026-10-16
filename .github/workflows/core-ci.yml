@@ -30,7 +30,7 @@ jobs:
       - name: Configure Windows x64 VST3 and standalone QA
         run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON -DDRUMATOR_BUILD_VST3=ON -DVST3_SDK_ROOT="$env:GITHUB_WORKSPACE/sdk"
       - name: Build tests and Drumator VST3
-        run: cmake --build build --config Release --target drumator_test_suite Drumator validator moduleinfotool --parallel 2
+        run: cmake --build build --config Release --target drumator_test_suite drumator_editor_smoke Drumator validator moduleinfotool --parallel 2
       - name: Run deterministic regressions
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Assemble standard Windows VST3 bundle and validate
@@ -85,6 +85,16 @@ jobs:
           }) | Sort-Object
           if (@(Compare-Object $expected $actual).Count -ne 0) {
             throw "Wrong VST3 packaging: actual=$($actual -join ', ')"
+          }
+          # An installable VST3 can pass Validator with an editor of 0x0.
+          # Load the actual packaged DLL, create its editor and require 1100x600.
+          $smoke = @(Get-ChildItem -Path build -Filter 'drumator_editor_smoke.exe' -File -Recurse)
+          if ($smoke.Count -ne 1) {
+            throw "Expected one editor smoke test executable; found $($smoke.Count)"
+          }
+          & $smoke[0].FullName (Join-Path $binaryDirectory '125A Drumator.vst3')
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Actual packaged VST3 editor geometry smoke test FAILED'
           }
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - uses: actions/upload-artifact@v4
