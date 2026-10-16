@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <new>
 
 namespace drumator {
 namespace {
@@ -43,18 +44,30 @@ Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
  return AudioEffect::setActive(state);
 }
 Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::ProcessSetup& setup) {
+ // The VST3 host may request unusual but valid sample rates. Reject only
+ // invalid values or a provably unbounded temporary fixture allocation.
+ constexpr double kTestSoundSeconds=0.35;
+ constexpr std::size_t kMaxPreparedTestFrames=1048576; // 4 MiB of mono float PCM
  if(setup.symbolicSampleSize!=Steinberg::Vst::kSample32||
-    !std::isfinite(setup.sampleRate)||setup.sampleRate<8000.0||
-    setup.sampleRate>192000.0||setup.maxSamplesPerBlock<0)
+    !std::isfinite(setup.sampleRate)||setup.sampleRate<=0.0||
+    setup.maxSamplesPerBlock<0)
+   return Steinberg::kInvalidArgument;
+ const double requestedFrames=std::ceil(setup.sampleRate*kTestSoundSeconds);
+ if(!std::isfinite(requestedFrames)||requestedFrames<1.0||
+    requestedFrames>static_cast<double>(kMaxPreparedTestFrames))
    return Steinberg::kInvalidArgument;
  // This runs outside process() and while processing is inactive.
  const auto parent=AudioEffect::setupProcessing(setup);
  if(parent!=Steinberg::kResultTrue)return parent;
  prepared_=false;
  voices_.reset(); // old voice buffers are not retained across sample-rate changes
- const std::size_t length=static_cast<std::size_t>(
-    std::ceil(setup.sampleRate*0.35));
- testSound_.assign(length,0.f);
+ const std::size_t length=static_cast<std::size_t>(requestedFrames);
+ try {
+   testSound_.assign(length,0.f); // setupProcessing only, never realtime
+ } catch(const std::bad_alloc&) {
+   testSound_.clear();
+   return Steinberg::kResultFalse;
+ }
  for(std::size_t i=0;i<length;++i) {
    const double time=static_cast<double>(i)/setup.sampleRate;
    const double f=60.0*std::exp(-time*12.0)+55.0;
