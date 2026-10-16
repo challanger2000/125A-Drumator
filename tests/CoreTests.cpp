@@ -86,6 +86,25 @@ int main(){
   check(ref==partition,"block size affects musical timing");
   check(ref.size()==33&&ref.front()==0&&ref.back()==192000,
         "reference oracle positions");
+
+  // Block-partition invariance at noninteger samples/step across rates.
+  for(const auto setting:std::array<std::array<double,2>,3>{{
+      {{44100.0,85.5}},{{96000.0,137.5}},{{192000.0,250.0}}}}){
+    const auto rate=setting[0],bpm=setting[1];
+    constexpr std::uint32_t length=160000;
+    std::vector<std::uint32_t> unsplit,split;
+    for(auto x:get(dense,Clock{0,bpm,rate,static_cast<int>(length),true}))
+        unsplit.push_back(x.sampleOffset);
+    std::uint32_t position=0;std::size_t chunk=0;
+    while(position<length){
+      const auto count=std::min(chunks[chunk++%chunks.size()],length-position);
+      const auto ppq=static_cast<double>(position)*bpm/(60.0*rate);
+      for(auto x:get(dense,Clock{ppq,bpm,rate,static_cast<int>(count),true}))
+          split.push_back(position+x.sampleOffset);
+      position+=count;
+    }
+    check(unsplit==split,"partition mismatch at alternate rate/tempo");
+  }
   std::cout<<"Drumator step core: all test groups PASS\n";
   return 0;
  } catch(const std::exception& ex){

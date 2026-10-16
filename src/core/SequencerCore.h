@@ -80,13 +80,20 @@ public:
    if(endFloat<=beginFloat)return {};
    if(endFloat-beginFloat>maxBoundariesPerBlock)
        return {ScheduleStatus::TooManyBoundaries,0};
+   // IEEE754 double host-PPQ quantization propagates through the
+   // multiplication into sample positions. Bound that error explicitly.
+   const auto ppqErrorInSamples=16.0L*std::numeric_limits<double>::epsilon()*
+       std::max(1.0L,std::max(std::fabs(start),std::fabs(end)))*stepSamples;
+   // Unresolvable sub-sample time coordinates must fail before callbacks.
+   if(ppqErrorInSamples>=0.5L)return {ScheduleStatus::InvalidClock,0};
    ScheduleResult result{};
    const auto first=static_cast<std::int64_t>(beginFloat);
    const auto last=static_cast<std::int64_t>(endFloat);
    for(auto absolute=first;absolute<last;++absolute){
      const auto position=(static_cast<long double>(absolute)-start)*stepSamples;
-     const auto eps=16.0L*std::numeric_limits<double>::epsilon()*
-                    std::max(1.0L,std::fabs(position));
+     const auto eps=ppqErrorInSamples+
+       16.0L*std::numeric_limits<double>::epsilon()*
+       std::max(1.0L,std::fabs(position));
      const auto frame=std::ceil(position-eps);
      if(frame<0||frame>=c.frames)continue;
      const auto index=static_cast<std::size_t>(
