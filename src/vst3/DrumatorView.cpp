@@ -1,5 +1,6 @@
 #include "DrumatorView.h"
 #include "DrumatorController.h"
+#include "core/StepVelocity.h"
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
@@ -105,7 +106,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("PATTERN A-H",VSTGUI::CRect(16,47,190,67),
+ c->drawString("PATTERN A-H | SHIFT+STEP: VELO",VSTGUI::CRect(16,47,250,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+controller_.visibleRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1050,footerY+21),
@@ -141,7 +142,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
-     c->setFillColor(v?on:off);
+     c->setFillColor(v>=112?on:(v>=80?VSTGUI::CColor{195,126,73,255}:(v>0?VSTGUI::CColor{122,100,83,255}:off)));
      c->drawRect({x+2,y+4,x+20,y+22},VSTGUI::kDrawFilled);
      if(step%4==0) {
        c->setFrameColor(border);
@@ -257,7 +258,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
    if(x>=kGridX&&x<kGridRight) {
       const auto step=static_cast<std::size_t>((x-kGridX)/kCellWidth);
-      if(!controller_.toggleStep(controller_.currentPattern(),row,step))
+      const bool updated=(buttons&VSTGUI::kShift)!=0
+          ?controller_.cycleStepVelocity(controller_.currentPattern(),row,step)
+          :controller_.toggleStep(controller_.currentPattern(),row,step);
+      if(!updated)
           status_="STEP KONNTE NICHT AN PROZESSOR GESENDET WERDEN";
       invalid();
       return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
