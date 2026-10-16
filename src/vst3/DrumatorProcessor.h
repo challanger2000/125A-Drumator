@@ -47,6 +47,8 @@ private:
  std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
  std::atomic<std::uint32_t> muteMask_{0};
  std::atomic<std::uint32_t> soloMask_{0};
+ std::array<std::atomic<float>,kRows> rowGain_{};
+ std::array<std::atomic<float>,kRows> rowPan_{};
  bool prepared_{false};
 };
 }
