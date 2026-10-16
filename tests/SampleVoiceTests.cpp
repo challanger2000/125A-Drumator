@@ -54,6 +54,30 @@ static void testKernel() {
     near(r[i],0.0,0.0001,"hard left pan leaked right");
  }
 }
+static void testRowMix() {
+ std::array<float,1024> source{};source.fill(1.f);
+ SincKernel kernel;require(kernel.prepare(1),"mix kernel");
+ SampleVoiceEngine engine;require(engine.setOutputRate(48000),"mix rate");
+ RowSound row;row.sample={source.data(),nullptr,source.size()};
+ row.kernel=&kernel;
+ require(engine.setRow(0,row),"mix row");
+ require(!engine.setRowMix(16,1.f,0.f)&&
+         !engine.setRowMix(0,-1.f,0.f)&&
+         !engine.setRowMix(0,1.f,2.f),"invalid mix accepted");
+ require(engine.setRowMix(0,.5f,-1.f),"gain pan update");
+ std::array<float,256> l{},r{};
+ const Trigger hit{0,0,0,127,0};
+ require(engine.render(&hit,1,l.data(),r.data(),256).accepted==1,
+         "mix event");
+ near(l[120],.5,.001,"row gain not applied");
+ near(r[120],0,.001,"row left pan not applied");
+ engine.reset();
+ require(engine.setRowMix(0,1.f,1.f),"right pan update");
+ require(engine.render(&hit,1,l.data(),r.data(),256).accepted==1,
+         "right pan event");
+ near(l[120],0,.001,"right pan leaked left");
+ near(r[120],1,.001,"right pan amplitude");
+}
 static void testRetriggerAndMute() {
  std::array<float,512> positive{};
  positive.fill(1.f);
@@ -195,9 +219,9 @@ int main() {
     for(std::size_t i=0;i<left.size();++i)
       require(left[i]==0.f&&right[i]==0.f,"empty sampler produced sound");
   }
-  testMuteSoloPolicy();testKernel();testRetriggerAndMute();testSampleSwapLifetime();
+  testMuteSoloPolicy();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testCapacityValidationAndAutomation();testBandlimiting();
-  std::cout<<"Drumator sample-voice regression: 7 groups PASS\n";
+  std::cout<<"Drumator sample-voice regression: 8 groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
   std::cerr<<"Drumator sample-voice regression FAIL: "<<ex.what()<<'\n';
