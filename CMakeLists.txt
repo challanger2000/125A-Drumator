@@ -112,6 +112,9 @@ if(DRUMATOR_BUILD_VST3)
       RESOURCES resource/Drumator.uidesc)
   # Steinberg official Win32 bundle resource setup, even though CI assembles
   # the final bundle manually to avoid administrator symlink privileges.
+  # The official helper macro is evaluated in this parent project scope.
+  # Explicitly supply its official public.sdk root as in Steinberg examples.
+  set(public_sdk_SOURCE_DIR "${_DrumatorSdkRoot}/public.sdk")
   smtg_target_prepare_bundle(Drumator)
   target_compile_features(Drumator PRIVATE cxx_std_17)
   if(MSVC)
