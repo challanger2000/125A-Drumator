@@ -217,8 +217,8 @@ private:
     std::array<PreparedSample*,kRows> current_{};
     std::array<PreparedSample*,kRetireSlots> retired_{};
     std::array<PreparedSample*,kReturnCapacity> returned_{};
-    alignas(64) std::atomic<std::uint64_t> write_{0};
-    alignas(64) std::atomic<std::uint64_t> read_{0};
+    std::atomic<std::uint64_t> write_{0};
+    std::atomic<std::uint64_t> read_{0};
 };
 
 } // namespace drumator
