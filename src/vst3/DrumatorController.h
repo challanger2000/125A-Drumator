@@ -24,6 +24,7 @@ public:
                   VSTGUI::VST3Editor*) override;
 
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
+ bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
  bool addRow();
  bool hideLastEmptyRow();
