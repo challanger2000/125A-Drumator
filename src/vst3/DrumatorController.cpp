@@ -63,7 +63,7 @@ std::uint8_t Controller::velocity(std::size_t p,std::size_t r,std::size_t s) con
  if(p>=kPatterns||r>=kRows||s>=kSteps)return 0;
  return grid_[(p*kRows+r)*kSteps+s];
 }
-std::size_t Controller::currentPattern() const noexcept {
+std::size_t Controller::currentPattern() noexcept {
  const double value=getParamNormalized(kPatternParam);
  if(!std::isfinite(value))return 0;
  return static_cast<std::size_t>(std::lround(std::clamp(value,0.0,1.0)*7.0));

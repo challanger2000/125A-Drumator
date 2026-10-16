@@ -25,7 +25,7 @@ public:
  bool changePattern(std::size_t pattern);
  bool loadWav(std::size_t row,const std::string& path);
  std::uint8_t velocity(std::size_t pattern,std::size_t row,std::size_t step) const noexcept;
- std::size_t currentPattern() const noexcept;
+ std::size_t currentPattern() noexcept;
  const std::string& label(std::size_t row) const noexcept;
 private:
  std::array<std::uint8_t,kCells> grid_{};

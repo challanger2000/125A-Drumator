@@ -90,7 +90,7 @@ void DrumatorView::load(std::size_t row) {
                                             VSTGUI::CNewFileSelector::kSelectFile);
  if(!picker) {status_="DATEIDIALOG NICHT VERFUEGBAR";invalid();return;}
  picker->addFileExtension(VSTGUI::CFileExtension("PCM16 WAVE","wav","audio/wav"));
- picker->setTitle("Drumulator WAV-Sample auswaehlen");
+ picker->setTitle("Drumator WAV-Sample auswaehlen");
  const bool selected=picker->runModal();
  if(selected&&picker->getNumSelectedFiles()>0) {
    const auto* file=picker->getSelectedFile(0);
