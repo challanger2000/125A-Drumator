@@ -152,6 +152,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(controller_.isRowSolo(row)?accent:off);
    c->drawRect({226,y+3,249,y+24},VSTGUI::kDrawFilled);
    c->drawString("S",VSTGUI::CRect(226,y+3,249,y+24));
+   char chokeText[8]{};
+   std::snprintf(chokeText,sizeof(chokeText),"%u",controller_.rowChoke(row));
+   c->setFontColor(accent);
+   c->drawString(chokeText,VSTGUI::CRect(249,y+3,266,y+24));
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
@@ -294,6 +298,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
    if(x>=226&&x<249) {
       if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
+      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=249&&x<kGridX) {
+      if(!controller_.cycleRowChoke(row))status_="CHOKE NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kLabelX&&x<kGridX-12) {
