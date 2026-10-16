@@ -26,6 +26,11 @@ int main(){
        "sorted same sample offset wrong");
   need(batch.data()[2].sampleOffset==50&&batch.data()[2].row==15&&
        batch.data()[2].velocity==127,"last row wrong");
+  batch.applyMuteSolo(1u<<7,0);
+  need(batch.size()==2&&batch.data()[0].row==0&&batch.data()[1].row==15,
+       "mute did not filter expected row");
+  batch.applyMuteSolo(0,1u<<15);
+  need(batch.size()==1&&batch.data()[0].row==15,"solo isolation failed");
   batch.clear();
   need(batch.size()==0,"clear");
   for(std::size_t i=0;i<TriggerBatch::kCapacity;++i)
