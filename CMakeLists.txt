@@ -23,3 +23,29 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME drumator_voice_tests COMMAND drumator_voice_tests)
 endif()
+
+option(DRUMATOR_BUILD_VST3 "Build SDK-pinned VST3 integration prototype" OFF)
+if(DRUMATOR_BUILD_VST3)
+  if(NOT DEFINED VST3_SDK_ROOT OR NOT EXISTS "${VST3_SDK_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "VST3_SDK_ROOT must be the pinned recursive SDK checkout")
+  endif()
+  set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
+  add_subdirectory("${VST3_SDK_ROOT}" "${CMAKE_BINARY_DIR}/steinberg_sdk")
+  smtg_add_vst3plugin(Drumator
+    src/vst3/PluginIDs.h
+    src/vst3/DrumatorProcessor.h
+    src/vst3/DrumatorProcessor.cpp
+    src/vst3/DrumatorController.h
+    src/vst3/DrumatorController.cpp
+    src/vst3/Factory.cpp
+    src/core/SequencerCore.h
+    src/core/SampleVoiceEngine.h
+  )
+  target_link_libraries(Drumator PRIVATE sdk drumator_core)
+  target_compile_features(Drumator PRIVATE cxx_std_17)
+  if(MSVC)
+    target_compile_options(Drumator PRIVATE /W4)
+  endif()
+endif()
