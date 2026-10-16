@@ -126,6 +126,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(letters);
  c->drawString("100%",VSTGUI::CRect(880,39,937,69));
  c->drawString("150%",VSTGUI::CRect(946,39,1027,69));
+ char swingLabel[28]{};
+ std::snprintf(swingLabel,sizeof(swingLabel),"SWING %u%%",controller_.swingPercent());
+ c->setFontColor(accent);
+ c->drawString(swingLabel,VSTGUI::CRect(16,74,182,98),VSTGUI::kLeftText);
+ c->drawString("- / +",VSTGUI::CRect(185,74,244,98));
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=0;row<controller_.visibleRows();++row) {
    const double y=kGridY+row*kRowHeight;
@@ -250,6 +255,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
+ if(y>=74&&y<98&&x>=185&&x<244) {
+   if(!controller_.adjustSwing(x<214?-5:5))status_="SWING NICHT UEBERNOMMEN";
+   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
  if(y>=kHeaderY&&y<kHeaderY+30) {
    if(x>=kPatternX&&x<kPatternX+8*kPatternWidth) {
      const auto index=static_cast<std::size_t>((x-kPatternX)/kPatternWidth);
