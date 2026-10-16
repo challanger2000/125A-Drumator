@@ -86,6 +86,7 @@ if(DRUMATOR_BUILD_VST3)
   set(SMTG_CREATE_MODULE_INFO OFF CACHE BOOL "" FORCE)
   add_subdirectory("${VST3_SDK_ROOT}" "${CMAKE_BINARY_DIR}/steinberg_sdk")
   smtg_add_vst3plugin(Drumator
+    ${VST3_SDK_ROOT}/public.sdk/source/main/dllmain.cpp
     src/vst3/PluginIDs.h
     src/vst3/DrumatorProcessor.h
     src/vst3/DrumatorProcessor.cpp
@@ -105,6 +106,9 @@ if(DRUMATOR_BUILD_VST3)
   target_link_libraries(Drumator PRIVATE sdk drumator_core vstgui_support)
   smtg_target_add_plugin_resources(Drumator
       RESOURCES resource/Drumator.uidesc)
+  # Steinberg official Win32 bundle resource setup, even though CI assembles
+  # the final bundle manually to avoid administrator symlink privileges.
+  smtg_target_prepare_bundle(Drumator)
   target_compile_features(Drumator PRIVATE cxx_std_17)
   if(MSVC)
     target_compile_options(Drumator PRIVATE /W4)
