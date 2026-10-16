@@ -24,6 +24,8 @@ public:
                   VSTGUI::VST3Editor*) override;
 
  bool toggleRowGate(std::size_t row,bool solo);
+ bool cycleRowChoke(std::size_t row);
+ unsigned rowChoke(std::size_t row) const noexcept {return row<kRows?choke_[row]:0;}
  bool adjustRowMix(std::size_t row,bool adjustPan,int delta);
  bool adjustRowPitch(std::size_t row,int delta);
  int rowPitch(std::size_t row) const noexcept {return row<kRows?static_cast<int>(pitch_[row])-24:0;}
@@ -54,6 +56,7 @@ private:
  std::array<std::uint8_t,kRows> gain_{};
  std::array<std::uint8_t,kRows> pan_{};
  std::array<std::uint8_t,kRows> pitch_{};
+ std::array<std::uint8_t,kRows> choke_{};
  std::uint8_t visibleRows_{kDefaultVisibleRows};
 };
 }
