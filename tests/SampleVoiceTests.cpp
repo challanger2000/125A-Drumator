@@ -1,4 +1,5 @@
 #include "core/SampleVoiceEngine.h"
+#include "core/RowMuteSolo.h"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -12,6 +13,21 @@ static void require(bool ok,const char* text){if(!ok)throw std::runtime_error(te
 static void near(double x,double expected,double tolerance,const char* msg){
  if(!std::isfinite(x)||std::abs(x-expected)>tolerance)
     throw std::runtime_error(msg);
+}
+static void testMuteSoloPolicy() {
+ RowMuteSolo gate;
+ require(gate.audible(0)&&gate.audible(15),"empty solos must allow all");
+ gate.mute[1]=true;
+ require(!gate.audible(1)&&gate.audible(2),"mute must affect only its row");
+ gate.solo[2]=true;
+ require(gate.audible(2)&&!gate.audible(0),"solo must isolate selected rows");
+ gate.solo[3]=true;
+ require(gate.audible(3),"multiple solo rows must remain audible");
+ gate.mute[3]=true;
+ require(!gate.audible(3),"mute must override solo");
+ require(!gate.audible(16),"out-of-range row must be silent");
+ gate.solo.fill(false);
+ require(gate.audible(0)&&!gate.audible(1),"releasing solo must restore nonmuted rows");
 }
 static void testKernel() {
  SincKernel kernel;
@@ -179,9 +195,9 @@ int main() {
     for(std::size_t i=0;i<left.size();++i)
       require(left[i]==0.f&&right[i]==0.f,"empty sampler produced sound");
   }
-  testKernel();testRetriggerAndMute();testSampleSwapLifetime();
+  testMuteSoloPolicy();testKernel();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testCapacityValidationAndAutomation();testBandlimiting();
-  std::cout<<"Drumator sample-voice regression: 6 groups PASS\n";
+  std::cout<<"Drumator sample-voice regression: 7 groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
   std::cerr<<"Drumator sample-voice regression FAIL: "<<ex.what()<<'\n';
