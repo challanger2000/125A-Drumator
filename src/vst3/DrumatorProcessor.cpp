@@ -305,6 +305,8 @@ Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
    std::lock_guard<std::mutex> guard(kitMutex_);
    kit_.selected=static_cast<std::uint8_t>(selected_.load(std::memory_order_relaxed));
    kit_.visible=visibleRows_.load(std::memory_order_relaxed);
+   kit_.muted=static_cast<std::uint16_t>(muteMask_.load(std::memory_order_relaxed));
+   kit_.solo=static_cast<std::uint16_t>(soloMask_.load(std::memory_order_relaxed));
    for(std::size_t p=0;p<kPatterns;++p)
     for(std::size_t r=0;r<kRows;++r)
      for(std::size_t s=0;s<kSteps;++s)
@@ -322,7 +324,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
  KitState candidate;
- if(magic==kKitMagic) {
+ if(magic==kKitMagic||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -369,6 +371,8 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     selected_.store(kit_.selected,std::memory_order_relaxed);
     patterns_.select(kit_.selected);
     visibleRows_.store(kit_.visible,std::memory_order_relaxed);
+    muteMask_.store(kit_.muted,std::memory_order_relaxed);
+    soloMask_.store(kit_.solo,std::memory_order_relaxed);
  }
  return Steinberg::kResultOk;
 }
