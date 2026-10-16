@@ -89,7 +89,8 @@ int main() {
     full.wav[0].resize(kMaxSingleWav+1,0);
     check(!KitCodec::encode(full,again),"Oversized single WAV accepted");
     check(encoded==previous,"Rejected single WAV modified prior bytes");
-    for(std::size_t row=4;row<kRows;++row) {full.wav[row].clear();full.names[row].clear();}\n    full.wav[0].resize(kMaxSingleWav,0);
+    for(std::size_t row=4;row<kRows;++row) {full.wav[row].clear();full.names[row].clear();}
+    full.wav[0].resize(kMaxSingleWav,0);
     for(std::size_t row=1;row<4;++row)
       full.wav[row].resize(kMaxSingleWav,0);
     check(KitCodec::encode(full,again),"Exact 64 MiB kit boundary rejected");
@@ -97,7 +98,7 @@ int main() {
     full.names[4]="Excess.wav";full.wav[4]=wav16();
     check(!KitCodec::encode(full,again),
           "Total kit above 64 MiB accepted");
-    std::cout<<"M11 sixteen-row recall and WAV size boundaries PASS\\n";
+    std::cout<<"M11 sixteen-row recall and WAV size boundaries PASS\n";
     std::cout<<"Embedded Drumator kit DMR4 encode/decode and rollback: PASS\n";
  }catch(const std::exception& e){
     std::cerr<<"Embedded kit state FAIL: "<<e.what()<<'\n';
