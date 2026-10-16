@@ -13,3 +13,6 @@ When DAW tempo/PPQ validity flags are absent, no new steps trigger. On host STOP
 Windows CI compiles both existing standalone tests plus the SDK instrument and publishes an explicitly **UNTESTED** integration artifact. Actual Steinberg Validator, 125A QA, editor lifecycle and Fender Studio Pro 8.1.2 tests remain future release gates.
 
 **No PASS claims without inspecting actual Actions evidence.**
+
+## SDK packaging mode for this early no-editor integration candidate
+The official SDK setting `SMTG_CREATE_BUNDLE_FOR_WINDOWS=OFF` builds a Windows x64 single-file `.vst3` module for this technical milestone. Steinberg explicitly supports this form; it does NOT stand in for final bundle-resource testing. The normal bundle path, 125A-Branding icon, metadata and resource lifecycle must be restored and validated before a user-ready Drumator release.
