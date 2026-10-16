@@ -1,7 +1,7 @@
 # 125A Drumator — development instructions
 
 ## Status
-DEVELOPMENT / Windows x64 VST3 integration prototype verified on 2026-10-16 at source commit `6bf1835693e4271a2814086116924c6d08de2c59`: Actions #38913822453 SUCCESS, standalone CTests **2/2 PASS**, moduleinfotool creation+validation PASS, official Steinberg VST3 Validator **47/47 PASS**, and a Windows VST3 bundle artifact uploaded. This is a *temporary synthesized-kick, no-GUI integration candidate*, NOT a feature-complete Drumator. **No** 125A Plugin Tester / end-to-end functional host/audio QA, editor QA, owner Fender Studio Pro 8.1.2 approval or FINAL release has taken place.
+DEVELOPMENT / Verified at source commit `8b2b41eb1feb8dca09a325e7d649841a34ce58af`, [Windows Actions #38917602904](https://github.com/challanger2000/125A-Drumator/actions/runs/38917602904): MSVC x64 Release build PASS; CTest **4/4 PASS** (`drumator_core_tests`, `drumator_voice_tests`, `drumator_wav_tests`, `drumator_exchange_tests`); official moduleinfotool creation and validation PASS; assembled Windows VST3 bundle official Steinberg Validator **47/47 PASS**. Engineering-only artifact `Drumator-M03-VST3-UNTESTED`, id `12052789021` (still temporary synthesized kick and no editor). The NEW PCM16 WAV decoder and sample handoff are **host-independent tested modules**, not yet connected to VST3 GUI/file loading. No 125A Plugin Tester, real DAW audio/UI QA, owner approval, or FINAL release exists.
 
 ## Mandatory first read
 Before *any* implementation, audit, DSP, GUI, build or release work:

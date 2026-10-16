@@ -1,6 +1,6 @@
 # Drumator milestone 05 — prepared sample ownership and audio-thread exchange
 
-Status: implementation candidate, Windows CI and full VST3 integration **NOT VERIFIED** until a specific workflow run succeeds. This code is a separately testable bridge, not yet a front-panel loading feature.
+Status: host-independent sample exchange **Windows regression VERIFIED**. **Its VST3 integration is NOT IMPLEMENTED**, and no playable file-import GUI exists.
 
 ## Data flow and ownership contract
 1. On a NON-AUDIO worker/control thread, read a WAV from disk (future VSTGUI/file browser; deliberately not implemented here).
@@ -37,3 +37,8 @@ Status: implementation candidate, Windows CI and full VST3 integration **NOT VER
 Build through the generated aggregate CMake target \`drumator_test_suite\`, not a hand-maintained list of test executables; CTest runs all registered tests afterwards. The prior run #38915132444, which failed due to the omitted WAV executable, remains documented. Avoid redundant full SDK rebuilds until code and tests are coherent.
 
 No claims of VST3 GUI, file loading, host audio QA, real-time safety measurement, 125A Plugin Tester PASS, Fender Studio Pro test, or FINAL.
+
+## Verified Windows evidence (2026-10-16)
+Verified at source commit `8b2b41eb1feb8dca09a325e7d649841a34ce58af`, [Windows Actions #38917602904](https://github.com/challanger2000/125A-Drumator/actions/runs/38917602904): MSVC x64 Release build PASS; CTest **4/4 PASS** (`drumator_core_tests`, `drumator_voice_tests`, `drumator_wav_tests`, `drumator_exchange_tests`); official moduleinfotool creation and validation PASS; assembled Windows VST3 bundle official Steinberg Validator **47/47 PASS**. Engineering-only artifact `Drumator-M03-VST3-UNTESTED`, id `12052789021` (still temporary synthesized kick and no editor).
+
+**Scope limit:** The existing VST3 bundle is the prior temporary test-kick instrument. Its Validator result validates the plugin assembly and host compliance tests, **not** actual sample-import handoff, realtime threaded asset replacement in the DAW, customer-level GUI, or independent real-audio comparison. These must still be built and validated separately.

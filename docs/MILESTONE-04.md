@@ -13,3 +13,6 @@ Status: independent decoder code and synthetic regression tests, NOT yet integra
 
 ## Explicit CI regression noted (2026-10-16)
 The first WAV test build (commit `cb917e0`, run [#38915132444](https://github.com/challanger2000/125A-Drumator/actions/runs/38915132444)) failed because the workflow built only two previously named tests, then CTest attempted to run a third executable. Compiler build was successful; `drumator_wav_tests` was NOT built or run. This was a build-target-list omission, **not a WAV decoder PASS**. Milestone 05 replaces the brittle explicit test-target list with a dynamically generated aggregate `drumator_test_suite` target. Preserve the failure record.
+
+## Confirmed correction
+At source `8b2b41e`, Windows Actions [#38917602904](https://github.com/challanger2000/125A-Drumator/actions/runs/38917602904) built the WAV executable as part of `drumator_test_suite` and ran it: `drumator_wav_tests` **PASS**. Original omission run #38915132444 remains documented above. This is a synthetic decoder regression, not in-plugin sample import approval.

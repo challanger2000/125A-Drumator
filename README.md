@@ -4,7 +4,7 @@ Vintage-inspired multi-format drum sampler with a 32-step running-light sequence
 
 **Status:** development; **Windows x64 VST3 technical prototype exists**, still with only a temporary internally generated kick and no editor/sample file loading. **NOT a Drumator release.**
 
-**Verified integration milestone:** [Windows Actions #38913822453](https://github.com/challanger2000/125A-Drumator/actions/runs/38913822453), compiled source commit `6bf1835693e4271a2814086116924c6d08de2c59`: MSVC x64 build PASS; standalone CTest 2/2 PASS; official Steinberg Validator 47/47 PASS on the **assembled bundle**; module metadata validation PASS. Artifact `Drumator-M03-VST3-UNTESTED` is for engineering integration only, not Fender Studio Pro-tested.
+**Latest verified technical milestone:** Verified at source commit `8b2b41eb1feb8dca09a325e7d649841a34ce58af`, [Windows Actions #38917602904](https://github.com/challanger2000/125A-Drumator/actions/runs/38917602904): MSVC x64 Release build PASS; CTest **4/4 PASS** (`drumator_core_tests`, `drumator_voice_tests`, `drumator_wav_tests`, `drumator_exchange_tests`); official moduleinfotool creation and validation PASS; assembled Windows VST3 bundle official Steinberg Validator **47/47 PASS**. Engineering-only artifact `Drumator-M03-VST3-UNTESTED`, id `12052789021` (still temporary synthesized kick and no editor).
 
 Development: `develop/v1.0.0`.
 
