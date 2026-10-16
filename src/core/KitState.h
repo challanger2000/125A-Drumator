@@ -15,16 +15,21 @@
 #include <vector>
 namespace drumator {
 constexpr std::uint32_t kKitMagicV4=0x34524d44u;
-constexpr std::uint32_t kKitMagic=0x35524d44u; // DMR5: adds mute/solo bitmasks // "DMR4", little endian
+constexpr std::uint32_t kKitMagicV5=0x35524d44u;
+constexpr std::uint32_t kKitMagic=0x36524d44u; // DMR6: per-row gain/pan
 constexpr std::size_t kMaxSingleWav=16u*1024u*1024u;
 constexpr std::size_t kMaxKitWavs=64u*1024u*1024u;
 constexpr std::size_t kMaxKitName=512;
-constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u)+kCells+20u;
+constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u)+kCells+20u+2u*kRows;
 struct KitState {
  std::uint8_t selected{0};
  std::uint8_t visible{kDefaultVisibleRows};
  std::uint16_t muted{0};
  std::uint16_t solo{0};
+ std::array<std::uint8_t,kRows> gain{};
+ std::array<std::uint8_t,kRows> pan{};
+ KitState(){gain.fill(100);pan.fill(100);}
+
  std::array<std::uint8_t,kCells> grid{};
  std::array<std::string,kRows> names{};
  std::array<std::vector<std::uint8_t>,kRows> wav{};
@@ -57,6 +62,8 @@ struct KitCodec {
  static bool valid(const KitState& src,bool validateWav) {
    if(src.selected>=kPatterns||!RowVisibility::valid(src.visible))return false;
    for(const auto v:src.grid)if(v>127)return false;
+   for(auto x:src.gain)if(x>200)return false;
+   for(auto x:src.pan)if(x>200)return false;
    std::size_t sum=0;
    for(std::size_t r=0;r<kRows;++r) {
       const auto& bytes=src.wav[r];
@@ -80,7 +87,7 @@ struct KitCodec {
    if(!valid(state,false))return false;
    try {
      std::vector<std::uint8_t> value;
-     std::size_t size=8+2+4+kCells+4; // header, selected/count, cells, checksum
+     std::size_t size=8+2+4+2*kRows+kCells+4; // header, selected/count, cells, checksum
      for(std::size_t r=0;r<kRows;++r)
          size+=6+state.names[r].size()+state.wav[r].size();
      if(size>kMaxKitBytes||size-8>std::numeric_limits<std::uint32_t>::max())
@@ -91,6 +98,8 @@ struct KitCodec {
      value.push_back(state.selected);
      value.push_back(state.visible);
      put16(value,state.muted);put16(value,state.solo);
+     value.insert(value.end(),state.gain.begin(),state.gain.end());
+     value.insert(value.end(),state.pan.begin(),state.pan.end());
      value.insert(value.end(),state.grid.begin(),state.grid.end());
      for(std::size_t r=0;r<kRows;++r) {
         const auto& name=state.names[r];
@@ -109,10 +118,12 @@ struct KitCodec {
  static bool decode(const std::uint8_t* data,std::size_t size,KitState& out,
                     bool validateWav=true) {
    if(!data||size<8+2+kCells+6*kRows+4||size>kMaxKitBytes ||
-      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV4)||
+      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV5&&u32(data)!=kKitMagicV4)||
       u32(data+4)!=size-8)return false;
-   const bool v5=u32(data)==kKitMagic;
+   const bool v6=u32(data)==kKitMagic;
+   const bool v5=v6||u32(data)==kKitMagicV5;
    if(v5&&size<8+2+4+kCells+6*kRows+4)return false;
+   if(v6&&size<8+2+4+2*kRows+kCells+6*kRows+4)return false;
    if(u32(data+size-4)!=hash(data+8,size-12))return false;
    try {
       KitState candidate;
@@ -121,6 +132,8 @@ struct KitCodec {
       candidate.visible=data[pos++];
       if(v5){candidate.muted=u16(data+pos);pos+=2;
              candidate.solo=u16(data+pos);pos+=2;}
+      if(v6){for(auto& x:candidate.gain)x=data[pos++];
+             for(auto& x:candidate.pan)x=data[pos++];}
       if(candidate.selected>=kPatterns||!RowVisibility::valid(candidate.visible))
           return false;
       std::memcpy(candidate.grid.data(),data+pos,kCells);
