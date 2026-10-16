@@ -30,6 +30,7 @@ int main() {
  try {
     KitState original{};
     original.visible=6;original.selected=5;
+    original.muted=0x8001;original.solo=0x0006;
     original.grid[AtomicPatternBank::index(5,2,31)]=95;
     original.grid[AtomicPatternBank::index(0,15,0)]=127;
     original.names[0]="Kick_01.wav";
@@ -41,6 +42,7 @@ int main() {
     check(KitCodec::u32(encoded.data())==kKitMagic,"DMR4 format ID");
     KitState copy{};
     check(KitCodec::decode(encoded.data(),encoded.size(),copy),"Unable to decode");
+    check(copy.muted==0x8001&&copy.solo==0x0006,"Mute/solo state lost");
     check(copy.visible==6&&copy.selected==5,"Song layout/program not restored");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
     check(copy.names==original.names,"Sample names not restored");
