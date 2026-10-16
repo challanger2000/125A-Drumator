@@ -18,16 +18,18 @@ constexpr std::uint32_t kKitMagicV4=0x34524d44u;
 constexpr std::uint32_t kKitMagicV5=0x35524d44u;
 constexpr std::uint32_t kKitMagicV6=0x36524d44u;
 constexpr std::uint32_t kKitMagicV7=0x37524d44u;
-constexpr std::uint32_t kKitMagic=0x38524d44u; // DMR8: choke groups
+constexpr std::uint32_t kKitMagicV8=0x38524d44u;
+constexpr std::uint32_t kKitMagic=0x39524d44u; // DMR9: swing percent
 constexpr std::size_t kMaxSingleWav=16u*1024u*1024u;
 constexpr std::size_t kMaxKitWavs=64u*1024u*1024u;
 constexpr std::size_t kMaxKitName=512;
-constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u)+kCells+20u+4u*kRows;
+constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u)+kCells+20u+4u*kRows+1u;
 struct KitState {
  std::uint8_t selected{0};
  std::uint8_t visible{kDefaultVisibleRows};
  std::uint16_t muted{0};
  std::uint16_t solo{0};
+ std::uint8_t swing{0};
  std::array<std::uint8_t,kRows> gain{};
  std::array<std::uint8_t,kRows> pan{};
  std::array<std::uint8_t,kRows> pitch{};
@@ -65,6 +67,7 @@ struct KitCodec {
  }
  static bool valid(const KitState& src,bool validateWav) {
    if(src.selected>=kPatterns||!RowVisibility::valid(src.visible))return false;
+   if(src.swing>50)return false;
    for(const auto v:src.grid)if(v>127)return false;
    for(auto x:src.gain)if(x>200)return false;
    for(auto x:src.pan)if(x>200)return false;
@@ -93,7 +96,7 @@ struct KitCodec {
    if(!valid(state,false))return false;
    try {
      std::vector<std::uint8_t> value;
-     std::size_t size=8+2+4+4*kRows+kCells+4; // header, selected/count, cells, checksum
+     std::size_t size=8+2+4+4*kRows+1+kCells+4; // header, selected/count, cells, checksum
      for(std::size_t r=0;r<kRows;++r)
          size+=6+state.names[r].size()+state.wav[r].size();
      if(size>kMaxKitBytes||size-8>std::numeric_limits<std::uint32_t>::max())
@@ -108,6 +111,7 @@ struct KitCodec {
      value.insert(value.end(),state.pan.begin(),state.pan.end());
      value.insert(value.end(),state.pitch.begin(),state.pitch.end());
      value.insert(value.end(),state.choke.begin(),state.choke.end());
+     value.push_back(state.swing);
      value.insert(value.end(),state.grid.begin(),state.grid.end());
      for(std::size_t r=0;r<kRows;++r) {
         const auto& name=state.names[r];
@@ -126,9 +130,10 @@ struct KitCodec {
  static bool decode(const std::uint8_t* data,std::size_t size,KitState& out,
                     bool validateWav=true) {
    if(!data||size<8+2+kCells+6*kRows+4||size>kMaxKitBytes ||
-      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV7&&u32(data)!=kKitMagicV6&&u32(data)!=kKitMagicV5&&u32(data)!=kKitMagicV4)||
+      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV8&&u32(data)!=kKitMagicV7&&u32(data)!=kKitMagicV6&&u32(data)!=kKitMagicV5&&u32(data)!=kKitMagicV4)||
       u32(data+4)!=size-8)return false;
-   const bool v8=u32(data)==kKitMagic;
+   const bool v9=u32(data)==kKitMagic;
+   const bool v8=v9||u32(data)==kKitMagicV8;
    const bool v7=v8||u32(data)==kKitMagicV7;
    const bool v6=v7||u32(data)==kKitMagicV6;
    const bool v5=v6||u32(data)==kKitMagicV5;
@@ -136,6 +141,7 @@ struct KitCodec {
    if(v6&&size<8+2+4+2*kRows+kCells+6*kRows+4)return false;
    if(v7&&size<8+2+4+3*kRows+kCells+6*kRows+4)return false;
    if(v8&&size<8+2+4+4*kRows+kCells+6*kRows+4)return false;
+   if(v9&&size<8+2+4+4*kRows+1+kCells+6*kRows+4)return false;
    if(u32(data+size-4)!=hash(data+8,size-12))return false;
    try {
       KitState candidate;
@@ -148,6 +154,7 @@ struct KitCodec {
              for(auto& x:candidate.pan)x=data[pos++];}
       if(v7)for(auto& x:candidate.pitch)x=data[pos++];
       if(v8)for(auto& x:candidate.choke)x=data[pos++];
+      if(v9)candidate.swing=data[pos++];
       if(candidate.selected>=kPatterns||!RowVisibility::valid(candidate.visible))
           return false;
       std::memcpy(candidate.grid.data(),data+pos,kCells);
