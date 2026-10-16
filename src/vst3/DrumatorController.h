@@ -36,6 +36,8 @@ public:
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
+ bool adjustSwing(int delta);
+ unsigned swingPercent() const noexcept {return swingPercent_;}
  bool addRow();
  bool hideLastEmptyRow();
  std::size_t visibleRows() const noexcept {return visibleRows_;}
@@ -58,5 +60,6 @@ private:
  std::array<std::uint8_t,kRows> pitch_{};
  std::array<std::uint8_t,kRows> choke_{};
  std::uint8_t visibleRows_{kDefaultVisibleRows};
+ std::uint8_t swingPercent_{0};
 };
 }
