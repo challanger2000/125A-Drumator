@@ -140,10 +140,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(name.c_str(),VSTGUI::CRect(kLabelX+36,y,143,y+26),
                  VSTGUI::kLeftText);
    char mixText[32]{};
-   std::snprintf(mixText,sizeof(mixText),"V%u P%+d",
-                 controller_.rowGain(row),controller_.rowPan(row));
+   std::snprintf(mixText,sizeof(mixText),"V%u P%+d T%+d",
+                 controller_.rowGain(row),controller_.rowPan(row),controller_.rowPitch(row));
    c->setFontColor(accent);
    c->drawString(mixText,VSTGUI::CRect(145,y,194,y+26),VSTGUI::kLeftText);
+   // Ctrl+Shift+click on the row mix display adjusts pitch by one semitone.
    c->setFillColor(controller_.isRowMuted(row)?on:off);
    c->drawRect({195,y+3,218,y+24},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
@@ -274,6 +275,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(y>=kGridY&&y<kGridY+controller_.visibleRows()*kRowHeight) {
    const auto row=static_cast<std::size_t>((y-kGridY)/kRowHeight);
    if(x>=145&&x<194) {
+      const bool pitch=(buttons&VSTGUI::kShift)!=0 &&
+                       (buttons&VSTGUI::kControl)!=0;
+      if(pitch) {
+         if(!controller_.adjustRowPitch(row,1))status_="PITCH NICHT UEBERNOMMEN";
+         invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+      }
       const bool pan=(buttons&VSTGUI::kShift)!=0;
       const int direction=(buttons&VSTGUI::kControl)!=0?-10:10;
       if(!controller_.adjustRowMix(row,pan,direction))
