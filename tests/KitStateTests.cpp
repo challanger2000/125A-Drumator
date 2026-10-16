@@ -31,7 +31,7 @@ int main() {
     KitState original{};
     original.visible=6;original.selected=5;
     original.muted=0x8001;original.solo=0x0006;
-    original.gain[0]=50;original.pan[0]=0;
+    original.gain[0]=50;original.pan[0]=0;original.pitch[0]=36;
     original.gain[15]=200;original.pan[15]=200;
     original.grid[AtomicPatternBank::index(5,2,31)]=95;
     original.grid[AtomicPatternBank::index(0,15,0)]=127;
@@ -45,7 +45,8 @@ int main() {
     KitState copy{};
     check(KitCodec::decode(encoded.data(),encoded.size(),copy),"Unable to decode");
     check(copy.muted==0x8001&&copy.solo==0x0006,"Mute/solo state lost");
-    check(copy.gain==original.gain&&copy.pan==original.pan,"Volume/pan state lost");
+    check(copy.gain==original.gain&&copy.pan==original.pan&&
+          copy.pitch==original.pitch,"Volume/pan/pitch state lost");
     check(copy.visible==6&&copy.selected==5,"Song layout/program not restored");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
     check(copy.names==original.names,"Sample names not restored");
@@ -55,7 +56,7 @@ int main() {
           "Roundtrip must produce deterministic DMR4");
     // Old DMR4 projects have no row masks and must reopen with both off.
     auto legacy=encoded;
-    legacy.erase(legacy.begin()+10,legacy.begin()+46);
+    legacy.erase(legacy.begin()+10,legacy.begin()+62);
     for(int i=0;i<4;++i)
       legacy[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV4>>(8*i));
     const auto legacyLength=static_cast<std::uint32_t>(legacy.size()-8);
@@ -71,7 +72,7 @@ int main() {
     check(prior.muted==0&&prior.solo==0&&prior.wav==original.wav&&
           prior.grid==original.grid,"Legacy migration damaged kit");
     auto priorV5=encoded;
-    priorV5.erase(priorV5.begin()+14,priorV5.begin()+46);
+    priorV5.erase(priorV5.begin()+14,priorV5.begin()+62);
     for(int i=0;i<4;++i)
       priorV5[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV5>>(8*i));
     const auto len5=static_cast<std::uint32_t>(priorV5.size()-8);
@@ -87,6 +88,22 @@ int main() {
     check(migrated.muted==original.muted&&migrated.solo==original.solo&&
           migrated.gain[0]==100&&migrated.pan[0]==100,
           "DMR5 migration lost gates or neutral row mix");
+    auto priorV6=encoded;
+    priorV6.erase(priorV6.begin()+46,priorV6.begin()+62);
+    for(int i=0;i<4;++i)
+       priorV6[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV6>>(8*i));
+    const auto len6=static_cast<std::uint32_t>(priorV6.size()-8);
+    for(int i=0;i<4;++i)
+       priorV6[4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(len6>>(8*i));
+    const auto crc6=KitCodec::hash(priorV6.data()+8,priorV6.size()-12);
+    for(int i=0;i<4;++i)
+       priorV6[priorV6.size()-4+static_cast<std::size_t>(i)]=
+           static_cast<std::uint8_t>(crc6>>(8*i));
+    KitState migrated6{};
+    check(KitCodec::decode(priorV6.data(),priorV6.size(),migrated6),
+          "Legacy DMR6 project cannot reopen");
+    check(migrated6.pitch[0]==24&&migrated6.gain==original.gain&&
+          migrated6.pan==original.pan,"DMR6 migration changed row mix");
     auto damaged=encoded;
     damaged[20]^=1;
     check(!KitCodec::decode(damaged.data(),damaged.size(),copy),
