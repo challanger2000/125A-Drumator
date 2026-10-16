@@ -169,6 +169,23 @@ bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
  return ok;
 }
+bool Controller::toggleRowGate(std::size_t row,bool solo) {
+ if(row>=kRows)return false;
+ auto& gates=solo?solo_:muted_;
+ auto* msg=allocateMessage();
+ if(!msg)return false;
+ msg->setMessageID("Drumator.RowGate");
+ auto* attr=msg->getAttributes();
+ if(!attr){msg->release();return false;}
+ const bool next=!gates[row];
+ attr->setInt("Row",static_cast<Steinberg::int64>(row));
+ attr->setInt("Solo",solo?1:0);
+ attr->setInt("On",next?1:0);
+ const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok)gates[row]=next;
+ return ok;
+}
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
  const auto next=velocity(p,r,s)>0?0:127;
