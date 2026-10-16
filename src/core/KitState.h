@@ -14,14 +14,17 @@
 #include <utility>
 #include <vector>
 namespace drumator {
-constexpr std::uint32_t kKitMagic=0x34524d44u; // "DMR4", little endian
+constexpr std::uint32_t kKitMagicV4=0x34524d44u;
+constexpr std::uint32_t kKitMagic=0x35524d44u; // DMR5: adds mute/solo bitmasks // "DMR4", little endian
 constexpr std::size_t kMaxSingleWav=16u*1024u*1024u;
 constexpr std::size_t kMaxKitWavs=64u*1024u*1024u;
 constexpr std::size_t kMaxKitName=512;
-constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u)+kCells+16u;
+constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u)+kCells+20u;
 struct KitState {
  std::uint8_t selected{0};
  std::uint8_t visible{kDefaultVisibleRows};
+ std::uint16_t muted{0};
+ std::uint16_t solo{0};
  std::array<std::uint8_t,kCells> grid{};
  std::array<std::string,kRows> names{};
  std::array<std::vector<std::uint8_t>,kRows> wav{};
@@ -77,7 +80,7 @@ struct KitCodec {
    if(!valid(state,false))return false;
    try {
      std::vector<std::uint8_t> value;
-     std::size_t size=8+2+kCells+4; // header, selected/count, cells, checksum
+     std::size_t size=8+2+4+kCells+4; // header, selected/count, cells, checksum
      for(std::size_t r=0;r<kRows;++r)
          size+=6+state.names[r].size()+state.wav[r].size();
      if(size>kMaxKitBytes||size-8>std::numeric_limits<std::uint32_t>::max())
@@ -87,6 +90,7 @@ struct KitCodec {
      put32(value,static_cast<std::uint32_t>(size-8));
      value.push_back(state.selected);
      value.push_back(state.visible);
+     put16(value,state.muted);put16(value,state.solo);
      value.insert(value.end(),state.grid.begin(),state.grid.end());
      for(std::size_t r=0;r<kRows;++r) {
         const auto& name=state.names[r];
@@ -105,13 +109,18 @@ struct KitCodec {
  static bool decode(const std::uint8_t* data,std::size_t size,KitState& out,
                     bool validateWav=true) {
    if(!data||size<8+2+kCells+6*kRows+4||size>kMaxKitBytes ||
-      u32(data)!=kKitMagic||u32(data+4)!=size-8)return false;
+      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV4)||
+      u32(data+4)!=size-8)return false;
+   const bool v5=u32(data)==kKitMagic;
+   if(v5&&size<8+2+4+kCells+6*kRows+4)return false;
    if(u32(data+size-4)!=hash(data+8,size-12))return false;
    try {
       KitState candidate;
       std::size_t pos=8;
       candidate.selected=data[pos++];
       candidate.visible=data[pos++];
+      if(v5){candidate.muted=u16(data+pos);pos+=2;
+             candidate.solo=u16(data+pos);pos+=2;}
       if(candidate.selected>=kPatterns||!RowVisibility::valid(candidate.visible))
           return false;
       std::memcpy(candidate.grid.data(),data+pos,kCells);
