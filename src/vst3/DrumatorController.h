@@ -25,6 +25,8 @@ public:
 
  bool toggleRowGate(std::size_t row,bool solo);
  bool adjustRowMix(std::size_t row,bool adjustPan,int delta);
+ bool adjustRowPitch(std::size_t row,int delta);
+ int rowPitch(std::size_t row) const noexcept {return row<kRows?static_cast<int>(pitch_[row])-24:0;}
  unsigned rowGain(std::size_t row) const noexcept {return row<kRows?gain_[row]:100;}
  int rowPan(std::size_t row) const noexcept {return row<kRows?static_cast<int>(pan_[row])-100:0;}
  bool isRowMuted(std::size_t row) const noexcept {return row<kRows&&muted_[row];}
@@ -51,6 +53,7 @@ private:
  std::array<bool,kRows> solo_{};
  std::array<std::uint8_t,kRows> gain_{};
  std::array<std::uint8_t,kRows> pan_{};
+ std::array<std::uint8_t,kRows> pitch_{};
  std::uint8_t visibleRows_{kDefaultVisibleRows};
 };
 }
