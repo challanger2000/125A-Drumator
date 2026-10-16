@@ -1,6 +1,6 @@
 # Milestone 07 — first VSTGUI step-grid prototype
 
-Status: SOURCE CANDIDATE until Windows CI and independent host editor lifecycle test.
+Status: WINDOWS CI BUILD/TEST/VALIDATOR VERIFIED for the M07 source, but independent host editor lifecycle and user-file import still UNTESTED.
 
 ## Design
 - 1100x600 VSTGUI window; buttons 100% / 150% (1650x900). Confirm usable at 1920x1080 host resolution.
@@ -28,3 +28,8 @@ Status: SOURCE CANDIDATE until Windows CI and independent host editor lifecycle 
 - VSTGUI resource Drumator.uidesc inside bundled Contents/Resources.
 - Official moduleinfotool, Steinberg Validator and eventual actual editor/UI-to-audio QA.
 - No claims of finished Drumator or working DAW editor before Windows/host evidence.
+
+## Confirmed Windows QA (2026-10-16)
+Windows CI VERIFIED at source commit d1055c1b59aba15b6a7c9d594e5f882b13fd630d, Actions #38923496070: Windows x64 MSVC build PASS, CTest 6/6 PASS, official Steinberg Validator 47/47 PASS on assembled standard Windows VST3 bundle, moduleinfotool PASS; uploaded engineering-only artifact Drumator-M07-GUI-PROTOTYPE-UNTESTED (ID 12054908672). No actual Fender Studio Pro editor/interactive WAV import test, 125A Plugin Tester, sample file project recall or FINAL release.
+
+**Scope:** No green CI result establishes a usable GUI window, GUI-file picker interaction, persisted sample paths, or user DAW sound playback until those are explicitly tested in Studio Pro. The first C++ const qualifier defect (run #38921864891), Windows missing official SDK moduleHandle (run #38922245302), and SDK helper macro source-root / path normalization issues (runs #38922848467, #38923220766) remain preserved in Actions history.
