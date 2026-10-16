@@ -9,7 +9,7 @@
 - Every row is retained internally. "Hiding" a row is not deleting it; user cannot hide a populated last row from the GUI.
 - Empty selected row still behaves exactly as M08 (silence). All prior audio paths remain unchanged.
 
-## Independent Windows QA (pending until linked run PASS)
+## Independent Windows QA (confirmed for source commit and run below)
 - Standalone seven CTests, including `drumator_visible_rows_tests` with bounds, last-step-in-another-pattern and loaded-row guards.
 - **New VST3 audio-host smoke**: loads the packaged PE DLL; calls official Steinberg factory/controller/processor APIs, sets audio bus and sample rate, connects peer endpoints; sends PCM16, PCM24, FLOAT32 synthetic WAV assets as binary messages, exercises actual stopped-transport MIDI input and checks produced float buffers against ground-truth sample levels. Reject a corrupt WAV, verify the previous sound continues and unloaded row 2 remains silent.
 - Keep Steinberg Validator, moduleinfotool, exact package-tree inspection, independent artifact download/ZIP integrity, and packaged editor geometry verification.
@@ -18,3 +18,8 @@
 
 ## Resource conservation
 Bundled source+QA changes into one Windows run, do not trigger builds for documentation-only commits. Preserve failure logs and correct real defects without relaxing assertions.
+
+## Verification evidence (2026-10-16)
+**M09 verified Windows QA:** source `c7e8a08eac6ab8fd2392d23151d44d18c2b81586`, [Actions #38956743559](https://github.com/challanger2000/125A-Drumator/actions/runs/38956743559) SUCCESS. Seven CTests **7/7 PASS**, official Steinberg Validator **47/47 PASS**, packaged editor geometry **1100x300 PASS**, actual packaged VST3 host simulation PASS for silence before load, PCM16 +0.50/+0.50, PCM24 +0.25/+0.25 and FLOAT32 -0.50/-0.50 L/R amplitude; corrupt WAV rejection preserves prior sound; unloaded row 2 silent. Artifact `125A-Drumator-M09-4-Rows-Host-Audio-QA` id `12070159256`, downloaded as ZIP, verified exact `125A Drumator.vst3` tree (3 nonempty files), valid JSON resources, PE x64 signature and ZIP integrity. NO claim of real Studio Pro browser drag/drop, GUI plus/minus interaction, recalled sample assets, prolonged paced realtime load or V1 final.
+
+First Windows run [#38956225584](https://github.com/challanger2000/125A-Drumator/actions/runs/38956225584) compiled and passed 7/7 CTests, Steinberg Validator 47/47 and editor 1100x300, but the new packaged-audio host test **correctly failed** because `IAudioProcessor::setProcessing(true)` inherited SDK `AudioEffect::setProcessing` returning `kNotImplemented`. Explicitly implementing that lifecycle in source `c7e8a08` allowed the follow-up host smoke to verify actual PCM audio outputs. Both runs remain preserved.
