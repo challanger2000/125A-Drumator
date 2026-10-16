@@ -30,7 +30,7 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
    for(std::size_t step=0;step<kSteps;step+=4)
      grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
  for(auto& name:labels_)name="LEER - WAV LADEN";
- gain_.fill(100);pan_.fill(100);pitch_.fill(24);
+ gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream* state) {
@@ -39,7 +39,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -58,7 +58,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
           muted_[row]=(candidate.muted&(1u<<row))!=0;
           solo_[row]=(candidate.solo&(1u<<row))!=0;
           gain_[row]=candidate.gain[row];pan_[row]=candidate.pan[row];
-          pitch_[row]=candidate.pitch[row];
+          pitch_[row]=candidate.pitch[row];choke_[row]=candidate.choke[row];
        }
        for(std::size_t row=0;row<kRows;++row)
           labels_[row]=candidate.names[row].empty()
@@ -176,6 +176,19 @@ bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  const auto ok=sendMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
+ return ok;
+}
+bool Controller::cycleRowChoke(std::size_t row) {
+ if(row>=kRows)return false;
+ const auto next=static_cast<std::uint8_t>((choke_[row]+1)%5);
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.RowChoke");
+ auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
+ attrs->setInt("Row",static_cast<Steinberg::int64>(row));
+ attrs->setInt("Group",next);
+ const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok)choke_[row]=next;
  return ok;
 }
 bool Controller::adjustRowPitch(std::size_t row,int delta) {
