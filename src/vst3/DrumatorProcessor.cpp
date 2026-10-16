@@ -64,11 +64,27 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  const auto* id=msg->getMessageID();
  if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
     std::strcmp(id,"Drumator.StepEdit")!=0&&
-    std::strcmp(id,"Drumator.VisibleRows")!=0)
+    std::strcmp(id,"Drumator.VisibleRows")!=0&&
+    std::strcmp(id,"Drumator.RowGate")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.RowGate")==0) {
+   Steinberg::int64 isSolo=-1,isOn=-1;
+   if(attrs->getInt("Row",row)!=Steinberg::kResultOk||
+      attrs->getInt("Solo",isSolo)!=Steinberg::kResultOk||
+      attrs->getInt("On",isOn)!=Steinberg::kResultOk||
+      row<0||row>=static_cast<Steinberg::int64>(kRows)||
+      (isSolo!=0&&isSolo!=1)||(isOn!=0&&isOn!=1))
+     return Steinberg::kInvalidArgument;
+   auto& mask=isSolo?soloMask_:muteMask_;
+   const auto bit=std::uint32_t{1}<<static_cast<unsigned>(row);
+   if(isOn)mask.fetch_or(bit,std::memory_order_relaxed);
+   else mask.fetch_and(~bit,std::memory_order_relaxed);
+   return Steinberg::kResultOk;
+ }
+
  if(std::strcmp(id,"Drumator.VisibleRows")==0) {
    Steinberg::int64 count=0;
    if(attrs->getInt("Count",count)!=Steinberg::kResultOk||
@@ -246,6 +262,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                             static_cast<std::uint32_t>(data.numSamples));
    }
  }
+ triggers_.applyMuteSolo(muteMask_.load(std::memory_order_relaxed),
+                         soloMask_.load(std::memory_order_relaxed));
  triggers_.sort();
  const auto rendered=voices_.render(triggers_.data(),triggers_.size(),left,right,
                                    static_cast<std::uint32_t>(data.numSamples));
