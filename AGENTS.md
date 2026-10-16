@@ -1,7 +1,7 @@
 # 125A Drumator — development instructions
 
 ## Status
-DEVELOPMENT / host-independent sequencer AND sample-voice core both verified in Windows CI (2/2 standalone test executables PASS, run #38906773944, commit 35c6436). No VST3 binary, SDK-integrated Windows plugin build, Steinberg Validator result, 125A QA result, user host-test approval, or FINAL release exists.
+DEVELOPMENT / first actual Windows x64 VST3 instrument prototype built and verified on 2026-10-16 at source commit `6bf1835693e4271a2814086116924c6d08de2c59`: Actions #38913822453 SUCCESS, standalone CTests **2/2 PASS**, moduleinfotool creation+validation PASS, official Steinberg VST3 Validator **47/47 PASS**, and a Windows VST3 bundle artifact uploaded. This is a *temporary synthesized-kick, no-GUI integration candidate*, NOT a feature-complete Drumator. **No** 125A Plugin Tester / end-to-end functional host/audio QA, editor QA, owner Fender Studio Pro 8.1.2 approval or FINAL release has taken place.
 
 ## Mandatory first read
 Before *any* implementation, audit, DSP, GUI, build or release work:

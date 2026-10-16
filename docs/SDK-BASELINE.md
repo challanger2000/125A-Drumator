@@ -25,8 +25,7 @@ Expected top-level HEAD: `3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96`.
 Validate each submodule commit from the tagged SDK checkout before compiling. Fix this dependency baseline in the future build configuration; no silently floating `HEAD`.
 
 ## Current state
-**SDK VERSION PIN DOCUMENTED; SDK INTEGRATION/BUILD NOT YET IMPLEMENTED OR TESTED.**
-Before writing CMake targets or using an unfamiliar API, inspect the exact SDK revision and official examples. Implement actual integration on `develop/v1.0.0` and verify under Windows CI; no untested build claim.
+**SDK 3.8.1 INTEGRATION IMPLEMENTED and VERIFIED for the initial Windows x64 VST3 test instrument**, exact source `6bf1835693e4271a2814086116924c6d08de2c59`, Actions #38913822453. Official moduleinfotool and Validator 47/47 PASS on the assembled VST3 bundle. The VSTGUI editor, real sample file loading and full host QA are **NOT YET IMPLEMENTED/VERIFIED**. See `docs/MILESTONE-03.md`.
 
 Official primary sources:
 - https://github.com/steinbergmedia/vst3sdk/tree/v3.8.1_build_84
