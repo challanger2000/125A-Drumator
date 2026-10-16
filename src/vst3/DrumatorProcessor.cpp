@@ -68,11 +68,38 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.StepEdit")!=0&&
     std::strcmp(id,"Drumator.VisibleRows")!=0&&
     std::strcmp(id,"Drumator.RowGate")!=0&&
-    std::strcmp(id,"Drumator.RowMix")!=0)
+    std::strcmp(id,"Drumator.RowMix")!=0&&
+    std::strcmp(id,"Drumator.RowPitch")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.RowPitch")==0) {
+   Steinberg::int64 rowIndex=-1,semitones=999;
+   if(attrs->getInt("Row",rowIndex)!=Steinberg::kResultOk||
+      attrs->getInt("Semitones",semitones)!=Steinberg::kResultOk||
+      rowIndex<0||rowIndex>=static_cast<Steinberg::int64>(kRows)||
+      semitones< -24||semitones>24)return Steinberg::kInvalidArgument;
+   const auto idx=static_cast<std::size_t>(rowIndex);
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   const auto rate=outputRate_.load(std::memory_order_acquire);
+   if(!(rate>0.0)||!std::isfinite(rate))return Steinberg::kResultFalse;
+   std::unique_ptr<PreparedSample> candidate;
+   if(kit_.wav[idx].empty()) {
+     try {candidate=PreparedSample::silence(rate);}
+     catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
+   }else if(PreparedSample::fromWav(
+       kit_.wav[idx].data(),kit_.wav[idx].size(),rate,
+       static_cast<double>(semitones),1.f,0.f,0,false,candidate)!=
+       PrepareStatus::Ok)return Steinberg::kResultFalse;
+   if(!candidate)return Steinberg::kResultFalse;
+   for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
+   auto pending=exchange_.withdraw(idx);
+   (void)pending;
+   if(!exchange_.publish(idx,candidate))return Steinberg::kResultFalse;
+   kit_.pitch[idx]=static_cast<std::uint8_t>(semitones+24);
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.RowMix")==0) {
    Steinberg::int64 rowIndex=-1,gainValue=-1,panValue=-1;
    if(attrs->getInt("Row",rowIndex)!=Steinberg::kResultOk||
@@ -160,7 +187,9 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  std::unique_ptr<PreparedSample> candidate;
  const auto prepared=PreparedSample::fromWav(
      static_cast<const std::uint8_t*>(bytes),
-     static_cast<std::size_t>(size),rate,0.0,1.f,0.f,0,false,candidate);
+     static_cast<std::size_t>(size),rate,
+     static_cast<double>(static_cast<int>(kit_.pitch[static_cast<std::size_t>(row)])-24),
+     1.f,0.f,0,false,candidate);
  if(prepared!=PrepareStatus::Ok)return Steinberg::kResultFalse;
  {
     std::lock_guard<std::mutex> guard(kitMutex_);
@@ -306,7 +335,8 @@ bool Processor::publishRestoredKit(const KitState& kit,double rate) {
        catch(const std::bad_alloc&) {return false;}
        if(!fresh[row])return false;
     }else if(PreparedSample::fromWav(
-         kit.wav[row].data(),kit.wav[row].size(),rate,0.0,1.f,0.f,0,false,
+         kit.wav[row].data(),kit.wav[row].size(),rate,
+         static_cast<double>(static_cast<int>(kit.pitch[row])-24),1.f,0.f,0,false,
          fresh[row])!=PrepareStatus::Ok)return false;
  }
  for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
