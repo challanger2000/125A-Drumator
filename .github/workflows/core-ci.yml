@@ -30,7 +30,7 @@ jobs:
       - name: Configure Windows x64 VST3 and standalone QA
         run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON -DDRUMATOR_BUILD_VST3=ON -DVST3_SDK_ROOT="$env:GITHUB_WORKSPACE/sdk"
       - name: Build tests and Drumator VST3
-        run: cmake --build build --config Release --target drumator_core_tests drumator_voice_tests Drumator validator moduleinfotool --parallel 2
+        run: cmake --build build --config Release --target drumator_test_suite Drumator validator moduleinfotool --parallel 2
       - name: Run deterministic regressions
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Assemble standard Windows VST3 bundle and validate

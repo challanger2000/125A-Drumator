@@ -74,6 +74,7 @@ struct RowSound {
     float pan{0.f};  // -1 left, 0 center, +1 right.
     std::uint8_t chokeGroup{0}; // 0 = disabled.
     bool mute{false};
+    const void* ownerToken{nullptr}; // audio-owned identity for safe deferred reclaim
 };
 
 enum class RenderStatus { Ok,InvalidInput,InvalidEvents };
@@ -116,6 +117,13 @@ public:
     // sample replacement (existing one-shots continue).
     void reset() noexcept {
         for(auto& v:voices_)v.active=false;
+    }
+    // Audio-thread-only: are there voices still reading this immutable asset?
+    bool references(const void* token) const noexcept {
+        if(!token)return false;
+        for(const auto& v:voices_)
+            if(v.active && v.ownerToken==token)return true;
+        return false;
     }
     std::uint32_t active() const noexcept {
         std::uint32_t count=0;
@@ -199,6 +207,7 @@ private:
         double gainL{0.0},gainR{0.0};
         std::uint32_t releaseLeft{0},releaseTotal{0};
         std::uint8_t group{0};
+        const void* ownerToken{nullptr};
         bool active{false};
     };
     void fire(const Trigger& event,RenderResult& result) noexcept {
@@ -226,6 +235,7 @@ private:
             v.gainR=static_cast<double>(row.gain)*velocity*
                     std::sin((pan+1.0)*pi/4.0);
             v.group=row.chokeGroup;
+            v.ownerToken=row.ownerToken;
             v.releaseTotal=0;
             v.releaseLeft=0;
             v.active=true;

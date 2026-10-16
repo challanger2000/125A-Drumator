@@ -34,6 +34,12 @@ class WavPcm16Decoder {
   static bool id(const std::uint8_t* p,const char* s) noexcept {
     return std::memcmp(p,s,4)==0;
   }
+  // The signed PCM mapping is explicit; converting an out-of-range
+  // uint16_t directly to int16_t is implementation-defined in C++17.
+  static std::int32_t signed16(const std::uint8_t* p) noexcept {
+    const auto value=static_cast<std::int32_t>(u16(p));
+    return value>=32768 ? value-65536 : value;
+  }
 public:
   // Guardrail for untrusted files. Not an audio-thread function.
   static constexpr std::size_t kMaxFrames=20'000'000;
@@ -92,10 +98,10 @@ public:
     }
     for(std::size_t i=0;i<frames;++i) {
       const auto* frame=bytes+dataStart+i*blockAlign;
-      const auto l=static_cast<std::int16_t>(u16(frame));
+      const auto l=signed16(frame);
       candidate.left[i]=static_cast<float>(l)/32768.f;
       if(channels==2) {
-        const auto r=static_cast<std::int16_t>(u16(frame+2));
+        const auto r=signed16(frame+2);
         candidate.right[i]=static_cast<float>(r)/32768.f;
       }
     }

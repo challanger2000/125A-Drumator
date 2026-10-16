@@ -10,3 +10,6 @@ Status: independent decoder code and synthetic regression tests, NOT yet integra
 - Additional WAV formats, sample rate conversion, host-safe asset handoff, file picker and project recall are pending.
 - Never call this decoder from process().
 - Tests are synthetic; fixed real WAV fixtures and independent decoder comparison still required before shipping.
+
+## Explicit CI regression noted (2026-10-16)
+The first WAV test build (commit `cb917e0`, run [#38915132444](https://github.com/challanger2000/125A-Drumator/actions/runs/38915132444)) failed because the workflow built only two previously named tests, then CTest attempted to run a third executable. Compiler build was successful; `drumator_wav_tests` was NOT built or run. This was a build-target-list omission, **not a WAV decoder PASS**. Milestone 05 replaces the brittle explicit test-target list with a dynamically generated aggregate `drumator_test_suite` target. Preserve the failure record.
