@@ -379,7 +379,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
  KitState candidate;
- if(magic==kKitMagic||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
