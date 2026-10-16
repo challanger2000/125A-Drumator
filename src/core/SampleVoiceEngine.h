@@ -113,6 +113,15 @@ public:
         rows_[row]=sound;
         return true;
     }
+    // Called only by the audio-thread owner at block boundaries.
+    // Existing one-shot voices retain their launch gain/pan.
+    bool setRowMix(std::size_t row,float gain,float pan) noexcept {
+        if(row>=kRows||!std::isfinite(gain)||gain<0.f||gain>2.f||
+           !std::isfinite(pan)||pan< -1.f||pan>1.f)return false;
+        rows_[row].gain=gain;
+        rows_[row].pan=pan;
+        return true;
+    }
     // reset() only at a host lifecycle discontinuity; not for ordinary
     // sample replacement (existing one-shots continue).
     void reset() noexcept {
