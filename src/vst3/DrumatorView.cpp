@@ -278,7 +278,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       const bool pitch=(buttons&VSTGUI::kShift)!=0 &&
                        (buttons&VSTGUI::kControl)!=0;
       if(pitch) {
-         if(!controller_.adjustRowPitch(row,1))status_="PITCH NICHT UEBERNOMMEN";
+         const int pitchDelta=(buttons&VSTGUI::kAlt)!=0?-1:1;
+         if(!controller_.adjustRowPitch(row,pitchDelta))status_="PITCH NICHT UEBERNOMMEN";
          invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
       }
       const bool pan=(buttons&VSTGUI::kShift)!=0;
