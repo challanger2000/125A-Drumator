@@ -46,6 +46,12 @@ Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
  if(!state) {voices_.reset();wasPlaying_=false;}
  return AudioEffect::setActive(state);
 }
+Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
+ // Steinberg's AudioEffect default returns kNotImplemented. A real host
+ // may invoke this independently of setActive; honor the lifecycle.
+ if(!state) {voices_.reset();wasPlaying_=false;}
+ return Steinberg::kResultOk;
+}
 // Messages are delivered on the UI thread by the VST3 IConnectionPoint
 // contract, never by process(). The controller will eventually send the
 // bounded PCM16 WAV payload after a user picks a sample.
