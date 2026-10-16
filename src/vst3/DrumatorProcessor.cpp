@@ -136,14 +136,14 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
 }
 Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
- Steinberg::IBStreamer stream(state,Steinberg::kLittleEndian);
+ Steinberg::IBStreamer stream(state,kLittleEndian);
  return stream.writeInt32u(kStateMagic)&&
         stream.writeInt32u(selected_.load(std::memory_order_relaxed))
         ? Steinberg::kResultOk : Steinberg::kResultFalse;
 }
 Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
- Steinberg::IBStreamer stream(state,Steinberg::kLittleEndian);
+ Steinberg::IBStreamer stream(state,kLittleEndian);
  Steinberg::uint32 magic=0,pattern=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||
     magic!=kStateMagic||pattern>=kPatterns)

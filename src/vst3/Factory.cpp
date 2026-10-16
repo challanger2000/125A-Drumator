@@ -9,20 +9,20 @@ BEGIN_FACTORY_DEF("125A Systems",
 
 DEF_CLASS2(INLINE_UID_FROM_FUID(drumator::kProcessorCID),
            Steinberg::PClassInfo::kManyInstances,
-           Steinberg::Vst::kVstAudioEffectClass,
+           kVstAudioEffectClass,
            "125A Drumator",
            Steinberg::Vst::kDistributable,
            Steinberg::Vst::PlugType::kInstrumentDrum,
            drumator::kPluginVersion,
-           Steinberg::Vst::kVstVersionString,
+           kVstVersionString,
            drumator::Processor::createInstance)
 
 DEF_CLASS2(INLINE_UID_FROM_FUID(drumator::kControllerCID),
            Steinberg::PClassInfo::kManyInstances,
-           Steinberg::Vst::kVstComponentControllerClass,
+           kVstComponentControllerClass,
            "125A Drumator Controller",0,"",
            drumator::kPluginVersion,
-           Steinberg::Vst::kVstVersionString,
+           kVstVersionString,
            drumator::Controller::createInstance)
 
 END_FACTORY

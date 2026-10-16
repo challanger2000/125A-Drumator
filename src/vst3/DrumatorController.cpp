@@ -15,7 +15,7 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
 }
 Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
- Steinberg::IBStreamer stream(state,Steinberg::kLittleEndian);
+ Steinberg::IBStreamer stream(state,kLittleEndian);
  Steinberg::uint32 magic=0,pattern=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(pattern)||
     magic!=kStateMagic||pattern>=kPatterns)
