@@ -23,6 +23,9 @@ public:
                   const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
                   VSTGUI::VST3Editor*) override;
 
+ bool toggleRowGate(std::size_t row,bool solo);
+ bool isRowMuted(std::size_t row) const noexcept {return row<kRows&&muted_[row];}
+ bool isRowSolo(std::size_t row) const noexcept {return row<kRows&&solo_[row];}
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
@@ -41,6 +44,8 @@ public:
 private:
  std::array<std::uint8_t,kCells> grid_{};
  std::array<std::string,kRows> labels_{};
+ std::array<bool,kRows> muted_{};
+ std::array<bool,kRows> solo_{};
  std::uint8_t visibleRows_{kDefaultVisibleRows};
 };
 }
