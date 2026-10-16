@@ -2,6 +2,7 @@
 #include "DrumatorView.h"
 #include "PluginIDs.h"
 #include "core/WavPcm16Decoder.h"
+#include "core/StepVelocity.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstattributes.h"
@@ -149,6 +150,24 @@ bool Controller::hideLastEmptyRow() {
  message->release();
  if(good)--visibleRows_;
  return good;
+}
+bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
+ if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
+ const auto current=velocity(p,r,s);
+ const auto next=drumator::nextStepVelocity(current);
+ auto* msg=allocateMessage();
+ if(!msg)return false;
+ msg->setMessageID("Drumator.StepEdit");
+ auto* attr=msg->getAttributes();
+ if(!attr){msg->release();return false;}
+ attr->setInt("Pattern",static_cast<Steinberg::int64>(p));
+ attr->setInt("Row",static_cast<Steinberg::int64>(r));
+ attr->setInt("Step",static_cast<Steinberg::int64>(s));
+ attr->setInt("Velocity",static_cast<Steinberg::int64>(next));
+ const auto ok=sendMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
+ return ok;
 }
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
