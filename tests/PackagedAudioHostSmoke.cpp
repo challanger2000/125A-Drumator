@@ -165,6 +165,24 @@ int main(int argc,char** argv) {
  audition(16,false,.5f);
  audition(24,false,.25f);
  audition(32,true,-.5f);
+ // M18 packaged host: verify actual per-row mix, not only core math.
+ auto rowMix=[&](int gain,int pan)->tresult {
+   HostMessage msg;msg.setMessageID("Drumator.RowMix");
+   auto* attrs=msg.getAttributes();
+   require(attrs->setInt("Row",0)==kResultOk,"Mix Row attribute");
+   require(attrs->setInt("Gain",gain)==kResultOk,"Mix Gain attribute");
+   require(attrs->setInt("Pan",pan)==kResultOk,"Mix Pan attribute");
+   return processorPoint->notify(&msg);
+ };
+ require(rowMix(50,-100)==kResultOk,"Mix half-gain left");
+ run(36);
+ double mixedL=0,mixedR=0;
+ for(int i=50;i<190;++i){mixedL+=left[i];mixedR+=right[i];}
+ require(std::abs(mixedL/140.+.25)<.015&&std::abs(mixedR/140.)<.015,
+         "Packaged VST3 gain/pan mismatch");
+ require(rowMix(100,0)==kResultOk,"Restore unity center");
+ require(rowMix(201,0)!=kResultOk,"Overrange row gain accepted");
+ for(int tail=0;tail<7;++tail)run(-1);
  auto bad=makeWav(16,false,.25f);bad[0]='X';
  require(send(bad,0)!=kResultOk,"Corrupt WAV accepted");
  run(36);
