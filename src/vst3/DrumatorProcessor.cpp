@@ -26,6 +26,8 @@ constexpr auto kStateMagicV3Local=kStateMagicV3; // plus visible row count
 }
 Processor::Processor() {
  setControllerClass(kControllerCID);
+ for(auto& gain:rowGain_)gain.store(1.f,std::memory_order_relaxed);
+ for(auto& pan:rowPan_)pan.store(0.f,std::memory_order_relaxed);
  // The initial test pattern is supplied by AtomicPatternBank.
 }
 Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context) {
@@ -65,11 +67,26 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
     std::strcmp(id,"Drumator.StepEdit")!=0&&
     std::strcmp(id,"Drumator.VisibleRows")!=0&&
-    std::strcmp(id,"Drumator.RowGate")!=0)
+    std::strcmp(id,"Drumator.RowGate")!=0&&
+    std::strcmp(id,"Drumator.RowMix")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.RowMix")==0) {
+   Steinberg::int64 rowIndex=-1,gainValue=-1,panValue=-1;
+   if(attrs->getInt("Row",rowIndex)!=Steinberg::kResultOk||
+      attrs->getInt("Gain",gainValue)!=Steinberg::kResultOk||
+      attrs->getInt("Pan",panValue)!=Steinberg::kResultOk||
+      rowIndex<0||rowIndex>=static_cast<Steinberg::int64>(kRows)||
+      gainValue<0||gainValue>200||panValue< -100||panValue>100)
+      return Steinberg::kInvalidArgument;
+   rowGain_[static_cast<std::size_t>(rowIndex)].store(
+       static_cast<float>(gainValue)/100.f,std::memory_order_relaxed);
+   rowPan_[static_cast<std::size_t>(rowIndex)].store(
+       static_cast<float>(panValue)/100.f,std::memory_order_relaxed);
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.RowGate")==0) {
    Steinberg::int64 isSolo=-1,isOn=-1;
    if(attrs->getInt("Row",row)!=Steinberg::kResultOk||
@@ -262,6 +279,10 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                             static_cast<std::uint32_t>(data.numSamples));
    }
  }
+ for(std::size_t row=0;row<kRows;++row)
+   if(!voices_.setRowMix(row,rowGain_[row].load(std::memory_order_relaxed),
+                           rowPan_[row].load(std::memory_order_relaxed)))
+     return Steinberg::kResultFalse;
  triggers_.applyMuteSolo(muteMask_.load(std::memory_order_relaxed),
                          soloMask_.load(std::memory_order_relaxed));
  triggers_.sort();
