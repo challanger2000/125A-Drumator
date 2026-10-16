@@ -30,7 +30,7 @@ int main() {
  try {
     KitState original{};
     original.visible=6;original.selected=5;
-    original.muted=0x8001;original.solo=0x0006;
+    original.muted=0x8001;original.solo=0x0006;original.swing=35;
     original.gain[0]=50;original.pan[0]=0;original.pitch[0]=36;
     original.choke[0]=1;original.choke[15]=4;
     original.gain[15]=200;original.pan[15]=200;
@@ -45,7 +45,8 @@ int main() {
     check(KitCodec::u32(encoded.data())==kKitMagic,"DMR4 format ID");
     KitState copy{};
     check(KitCodec::decode(encoded.data(),encoded.size(),copy),"Unable to decode");
-    check(copy.muted==0x8001&&copy.solo==0x0006,"Mute/solo state lost");
+    check(copy.muted==0x8001&&copy.solo==0x0006&&copy.swing==35,
+          "Mute/solo/swing state lost");
     check(copy.gain==original.gain&&copy.pan==original.pan&&
           copy.pitch==original.pitch&&copy.choke==original.choke,
           "Volume/pan/pitch/choke state lost");
@@ -58,7 +59,7 @@ int main() {
           "Roundtrip must produce deterministic DMR4");
     // Old DMR4 projects have no row masks and must reopen with both off.
     auto legacy=encoded;
-    legacy.erase(legacy.begin()+10,legacy.begin()+78);
+    legacy.erase(legacy.begin()+10,legacy.begin()+79);
     for(int i=0;i<4;++i)
       legacy[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV4>>(8*i));
     const auto legacyLength=static_cast<std::uint32_t>(legacy.size()-8);
@@ -74,7 +75,7 @@ int main() {
     check(prior.muted==0&&prior.solo==0&&prior.wav==original.wav&&
           prior.grid==original.grid,"Legacy migration damaged kit");
     auto priorV5=encoded;
-    priorV5.erase(priorV5.begin()+14,priorV5.begin()+78);
+    priorV5.erase(priorV5.begin()+14,priorV5.begin()+79);
     for(int i=0;i<4;++i)
       priorV5[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV5>>(8*i));
     const auto len5=static_cast<std::uint32_t>(priorV5.size()-8);
@@ -91,7 +92,7 @@ int main() {
           migrated.gain[0]==100&&migrated.pan[0]==100,
           "DMR5 migration lost gates or neutral row mix");
     auto priorV6=encoded;
-    priorV6.erase(priorV6.begin()+46,priorV6.begin()+78);
+    priorV6.erase(priorV6.begin()+46,priorV6.begin()+79);
     for(int i=0;i<4;++i)
        priorV6[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV6>>(8*i));
     const auto len6=static_cast<std::uint32_t>(priorV6.size()-8);
@@ -107,7 +108,7 @@ int main() {
     check(migrated6.pitch[0]==24&&migrated6.gain==original.gain&&
           migrated6.pan==original.pan,"DMR6 migration changed row mix");
     auto priorV7=encoded;
-    priorV7.erase(priorV7.begin()+62,priorV7.begin()+78);
+    priorV7.erase(priorV7.begin()+62,priorV7.begin()+79);
     for(int i=0;i<4;++i)
       priorV7[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV7>>(8*i));
     const auto len7=static_cast<std::uint32_t>(priorV7.size()-8);
@@ -122,6 +123,23 @@ int main() {
           "Legacy DMR7 project cannot reopen");
     check(migrated7.choke[0]==0&&migrated7.pitch[0]==original.pitch[0],
           "DMR7 migration did not preserve pitch and disable choke");
+    auto priorV8=encoded;
+    // Keep checksum bytes; remove only swing byte at offset 78.
+    priorV8.erase(priorV8.begin()+78);
+    for(int i=0;i<4;++i)
+      priorV8[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV8>>(8*i));
+    const auto len8=static_cast<std::uint32_t>(priorV8.size()-8);
+    for(int i=0;i<4;++i)
+      priorV8[4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(len8>>(8*i));
+    const auto crc8=KitCodec::hash(priorV8.data()+8,priorV8.size()-12);
+    for(int i=0;i<4;++i)
+      priorV8[priorV8.size()-4+static_cast<std::size_t>(i)]=
+          static_cast<std::uint8_t>(crc8>>(8*i));
+    KitState migrated8{};
+    check(KitCodec::decode(priorV8.data(),priorV8.size(),migrated8),
+          "Legacy DMR8 project cannot reopen");
+    check(migrated8.swing==0&&migrated8.choke==original.choke,
+          "DMR8 migration lost choke or did not reset swing");
     auto damaged=encoded;
     damaged[20]^=1;
     check(!KitCodec::decode(damaged.data(),damaged.size(),copy),
