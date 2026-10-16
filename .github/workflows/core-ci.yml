@@ -41,17 +41,26 @@ jobs:
           if ($found.Count -ne 1) {
             throw "Expected exactly one compiled Windows VST3 binary; found $($found.Count)"
           }
-          $bundle = Join-Path $PWD 'artifact/Drumator.vst3'
+          $bundle = Join-Path $PWD 'artifact/125A Drumator.vst3'
           $binaryDirectory = Join-Path $bundle 'Contents/x86_64-win'
           $resourceDirectory = Join-Path $bundle 'Contents/Resources'
           New-Item -ItemType Directory -Path $binaryDirectory,$resourceDirectory -Force | Out-Null
-          Copy-Item $found[0].FullName -Destination (Join-Path $binaryDirectory 'Drumator.vst3')
+          Copy-Item $found[0].FullName -Destination (Join-Path $binaryDirectory '125A Drumator.vst3')
           Copy-Item 'resource/Drumator.uidesc' -Destination (Join-Path $resourceDirectory 'Drumator.uidesc')
           $moduleInfo = Join-Path $resourceDirectory 'moduleinfo.json'
           & './build/bin/Release/moduleinfotool.exe' -create -version 0.1.0 -path $bundle -output $moduleInfo
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $moduleInfo)) {
             throw "Official Steinberg moduleinfotool creation failed"
           }
+          # The SDK serializer emits trailing commas. Normalize to strict JSON
+          # without changing class IDs or other generated metadata.
+          $rawInfo = [System.IO.File]::ReadAllText($moduleInfo)
+          $normalizedInfo = [regex]::Replace($rawInfo, ',(?=\s*[}\]])', '')
+          $parsedInfo = $normalizedInfo | ConvertFrom-Json
+          if ($parsedInfo.Classes[0].Name -ne '125A Drumator') {
+            throw 'VST3 factory name is not 125A Drumator'
+          }
+          [System.IO.File]::WriteAllText($moduleInfo, $normalizedInfo, [System.Text.UTF8Encoding]::new($false))
           & './build/bin/Release/moduleinfotool.exe' -validate -path $bundle
           if ($LASTEXITCODE -ne 0) { throw 'Official Steinberg moduleinfotool validation failed' }
           & './build/bin/Release/validator.exe' $bundle
@@ -60,9 +69,28 @@ jobs:
           if (@($bundleFiles | Where-Object { $_.Length -eq 0 }).Count -gt 0) {
             throw 'Bundle contains zero-length files'
           }
+          # Assert the exact complete, conventionally named installable tree.
+          $artifactRoot = Join-Path $PWD 'artifact'
+          $topLevel = @(Get-ChildItem $artifactRoot)
+          if ($topLevel.Count -ne 1 -or $topLevel[0].Name -cne '125A Drumator.vst3' -or -not $topLevel[0].PSIsContainer) {
+            throw 'Wrong VST3 outer folder name or unexpected artifact root content'
+          }
+          $expected = @(
+            '125A Drumator.vst3/Contents/x86_64-win/125A Drumator.vst3',
+            '125A Drumator.vst3/Contents/Resources/Drumator.uidesc',
+            '125A Drumator.vst3/Contents/Resources/moduleinfo.json'
+          ) | Sort-Object
+          $actual = @($bundleFiles | ForEach-Object {
+            [System.IO.Path]::GetRelativePath($artifactRoot, $_.FullName).Replace('\','/')
+          }) | Sort-Object
+          if (@(Compare-Object $expected $actual).Count -ne 0) {
+            throw "Wrong VST3 packaging: actual=$($actual -join ', ')"
+          }
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - uses: actions/upload-artifact@v4
         with:
-          name: Drumator-M07-GUI-PROTOTYPE-UNTESTED
-          path: artifact/Drumator.vst3
+          name: 125A-Drumator-M07-Windows-x64-GUI-PROTOTYPE
+          # Upload the artifact ROOT, not the .vst3 directory itself: 
+          # upload-artifact strips the supplied root from stored paths.
+          path: artifact/
           if-no-files-found: error
