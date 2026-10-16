@@ -38,6 +38,10 @@ if(DRUMATOR_BUILD_VST3)
   # Integration-only: SDK-supported legacy Windows single-file VST3.
   # Avoid bundle icon/metadata hooks until 125A assets are added and verified.
   set(SMTG_CREATE_BUNDLE_FOR_WINDOWS OFF CACHE BOOL "" FORCE)
+  # Execute official Steinberg Validator AFTER constructing the standard
+  # Windows bundle directory in CI, not on the transient single-file binary.
+  set(SMTG_RUN_VST_VALIDATOR OFF CACHE BOOL "" FORCE)
+  set(SMTG_CREATE_MODULE_INFO OFF CACHE BOOL "" FORCE)
   add_subdirectory("${VST3_SDK_ROOT}" "${CMAKE_BINARY_DIR}/steinberg_sdk")
   smtg_add_vst3plugin(Drumator
     src/vst3/PluginIDs.h
