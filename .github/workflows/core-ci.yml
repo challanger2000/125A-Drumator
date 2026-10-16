@@ -1,0 +1,22 @@
+name: Drumator Core Windows QA
+on:
+  push:
+    branches:
+      - develop/v1.0.0
+    paths:
+      - 'src/core/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/core-ci.yml'
+  workflow_dispatch:
+jobs:
+  core:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure x64
+        run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON
+      - name: Build with warnings as errors
+        run: cmake --build build --config Release --parallel 2
+      - name: Run deterministic regressions
+        run: ctest --test-dir build -C Release --output-on-failure
