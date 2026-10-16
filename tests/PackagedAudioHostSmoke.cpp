@@ -146,45 +146,7 @@ int main(int argc,char** argv) {
  auto audition=[&](int bits,bool floating,float amp){
    const auto wav=makeWav(bits,floating,amp);
    require(send(wav,0)==kResultOk,"Host WAV message rejected");
-   // M11: exercise all 16 independent sample slots through the packaged VST3.
- // Retain unique WAV bytes per row, verify each MIDI note and full song state.
- for(int row=0;row<16;++row) {
-   const float amplitude=0.10f+static_cast<float>(row)*0.025f;
-   require(send(makeWav(32,true,amplitude),row)==kResultOk,
-           "Full kit load rejected by processor");
-   run(36+row);
-   double measured=0;
-   for(int i=50;i<190;++i) {
-     require(std::isfinite(left[i])&&std::isfinite(right[i]),
-             "Full kit audio produced NaN or Inf");
-     measured+=left[i];
-   }
-   require(std::abs(measured/140.-amplitude)<0.02,
-           "Full kit MIDI row playback amplitude mismatch");
-   for(int tail=0;tail<5;++tail)run(-1);
- }
- Steinberg::ResizableMemoryIBStream fullState;
- require(component->getState(&fullState)==kResultOk,
-         "Full 16-row getState failed");
- drumator::KitState fullKit;
- require(drumator::KitCodec::decode(
-           static_cast<const std::uint8_t*>(fullState.getData()),
-           fullState.getCursor(),fullKit),
-         "Full kit encoded state failed CRC or WAV validation");
- for(int row=0;row<16;++row)
-   require(fullKit.wav[static_cast<std::size_t>(row)]==
-            makeWav(32,true,0.10f+static_cast<float>(row)*0.025f),
-           "Full 16-row kit lost embedded WAV bytes");
- // A deterministic extended callback workload; this is NOT a paced,
- // real-time deadline or Studio One endurance test.
- for(int block=0;block<8192;++block) {
-   run(block%16==0?36+(block/16)%16:-1);
-   for(int n=0;n<256;++n)
-     require(std::isfinite(left[n])&&std::isfinite(right[n]),
-             "Extended processing encountered nonfinite output");
- }
- std::cout<<"M11 full 16-row packaged audio and 8192-block finite-output PASS\\n";
- require(audio->setProcessing(false)==kResultOk,"Stop processing");
+   require(audio->setProcessing(false)==kResultOk,"Stop processing");
    require(component->setActive(false)==kResultOk,"Deactivate");
    require(component->setActive(true)==kResultOk,"Reactivate");
    require(audio->setProcessing(true)==kResultOk,"Resume processing");
@@ -273,6 +235,44 @@ int main(int argc,char** argv) {
  restoredAudio->release();restoredController->release();restored->release();
  std::cout<<"DMR4 actual fresh-instance audio recall -0.5 PASS\n";
 
+ // M11: exercise all 16 independent sample slots through the packaged VST3.
+ // Retain unique WAV bytes per row, verify each MIDI note and full song state.
+ for(int row=0;row<16;++row) {
+   const float amplitude=0.10f+static_cast<float>(row)*0.025f;
+   require(send(makeWav(32,true,amplitude),row)==kResultOk,
+           "Full kit load rejected by processor");
+   run(36+row);
+   double measured=0;
+   for(int i=50;i<190;++i) {
+     require(std::isfinite(left[i])&&std::isfinite(right[i]),
+             "Full kit audio produced NaN or Inf");
+     measured+=left[i];
+   }
+   require(std::abs(measured/140.-amplitude)<0.02,
+           "Full kit MIDI row playback amplitude mismatch");
+   for(int tail=0;tail<5;++tail)run(-1);
+ }
+ Steinberg::ResizableMemoryIBStream fullState;
+ require(component->getState(&fullState)==kResultOk,
+         "Full 16-row getState failed");
+ drumator::KitState fullKit;
+ require(drumator::KitCodec::decode(
+           static_cast<const std::uint8_t*>(fullState.getData()),
+           fullState.getCursor(),fullKit),
+         "Full kit encoded state failed CRC or WAV validation");
+ for(int row=0;row<16;++row)
+   require(fullKit.wav[static_cast<std::size_t>(row)]==
+            makeWav(32,true,0.10f+static_cast<float>(row)*0.025f),
+           "Full 16-row kit lost embedded WAV bytes");
+ // A deterministic extended callback workload; this is NOT a paced,
+ // real-time deadline or Studio One endurance test.
+ for(int block=0;block<8192;++block) {
+   run(block%16==0?36+(block/16)%16:-1);
+   for(int n=0;n<256;++n)
+     require(std::isfinite(left[n])&&std::isfinite(right[n]),
+             "Extended processing encountered nonfinite output");
+ }
+ std::cout<<"M11 full 16-row packaged audio and 8192-block finite-output PASS\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
