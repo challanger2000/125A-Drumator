@@ -85,8 +85,12 @@ if(DRUMATOR_BUILD_VST3)
   set(SMTG_RUN_VST_VALIDATOR OFF CACHE BOOL "" FORCE)
   set(SMTG_CREATE_MODULE_INFO OFF CACHE BOOL "" FORCE)
   add_subdirectory("${VST3_SDK_ROOT}" "${CMAKE_BINARY_DIR}/steinberg_sdk")
+  # GitHub Windows GITHUB_WORKSPACE may use backslashes. The Steinberg
+  # cmake macro interpolates source paths into a CMake parse expression;
+  # normalize the official SDK source location first.
+  file(TO_CMAKE_PATH "${VST3_SDK_ROOT}" _DrumatorSdkRoot)
   smtg_add_vst3plugin(Drumator
-    ${VST3_SDK_ROOT}/public.sdk/source/main/dllmain.cpp
+    ${_DrumatorSdkRoot}/public.sdk/source/main/dllmain.cpp
     src/vst3/PluginIDs.h
     src/vst3/DrumatorProcessor.h
     src/vst3/DrumatorProcessor.cpp
