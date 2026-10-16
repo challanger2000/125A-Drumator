@@ -144,6 +144,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
      c->setFillColor(v>=112?on:(v>=80?VSTGUI::CColor{195,126,73,255}:(v>0?VSTGUI::CColor{122,100,83,255}:off)));
      c->drawRect({x+2,y+4,x+20,y+22},VSTGUI::kDrawFilled);
+     // Five-level step display: OFF has no bar; 32/64/96/127
+     // increase the inset bar height. Preserve the surrounding grid.
+     if(v>0) {
+       const double barHeight=3.0+13.0*static_cast<double>(v)/127.0;
+       c->setFillColor(VSTGUI::CColor{244,235,213,255});
+       c->drawRect({x+16,y+21-barHeight,x+18,y+21},
+                   VSTGUI::kDrawFilled);
+     }
      if(step%4==0) {
        c->setFrameColor(border);
        c->drawRect({x+1,y+3,x+21,y+23},VSTGUI::kDrawStroked);
