@@ -47,6 +47,7 @@ struct Clock {
  double ppq{0},bpm{120},rate{44100};
  std::int32_t frames{0};
  bool playing{false};
+ double swing{0.0}; // 0..0.5 of a 16th step, delayed odd steps
 };
 struct Trigger {
  std::uint32_t sampleOffset;
@@ -63,7 +64,8 @@ public:
  template<class Bank,class Callback>
  static ScheduleResult run(const Bank& b,const Clock& c,Callback&& emit) noexcept {
    if(!std::isfinite(c.ppq)||!std::isfinite(c.bpm)||!std::isfinite(c.rate)||
-      c.bpm<=0||c.rate<=0||c.frames<0)return {ScheduleStatus::InvalidClock,0};
+      c.bpm<=0||c.rate<=0||c.frames<0||
+      !std::isfinite(c.swing)||c.swing<0.0||c.swing>0.5)return {ScheduleStatus::InvalidClock,0};
    if(!c.playing||!c.frames)return {};
    const long double start=static_cast<long double>(c.ppq)*4.0L;
    const long double stepSamples=15.0L*static_cast<long double>(c.rate)/
@@ -72,7 +74,7 @@ public:
    const long double end=start+static_cast<long double>(c.frames)/stepSamples;
    const auto tol=8.0L*std::numeric_limits<double>::epsilon()*
        std::max(1.0L,std::max(std::fabs(start),std::fabs(end)));
-   const auto beginFloat=std::ceil(start-tol),endFloat=std::ceil(end-tol);
+   const auto beginFloat=std::ceil(start-(c.swing>0.0?1.0L:0.0L)-tol),endFloat=std::ceil(end-tol);
    const auto minIndex=static_cast<long double>(std::numeric_limits<std::int64_t>::min()+1);
    const auto maxIndex=static_cast<long double>(std::numeric_limits<std::int64_t>::max()-1);
    if(!std::isfinite(beginFloat)||!std::isfinite(endFloat)||
@@ -90,7 +92,8 @@ public:
    const auto first=static_cast<std::int64_t>(beginFloat);
    const auto last=static_cast<std::int64_t>(endFloat);
    for(auto absolute=first;absolute<last;++absolute){
-     const auto position=(static_cast<long double>(absolute)-start)*stepSamples;
+     const auto swingOffset=(absolute%2!=0)?static_cast<long double>(c.swing):0.0L;
+     const auto position=(static_cast<long double>(absolute)+swingOffset-start)*stepSamples;
      const auto eps=ppqErrorInSamples+
        16.0L*std::numeric_limits<double>::epsilon()*
        std::max(1.0L,std::fabs(position));
