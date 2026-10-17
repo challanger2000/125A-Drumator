@@ -329,6 +329,33 @@ int main(int argc,char** argv) {
  require(kitCopy->terminate()==kResultOk,"Full-kit terminate");
  kitAudio->release();kitCopy->release();
  std::cout<<"M12 fresh-instance all-16-sample audio recall PASS\\n";
+ // M27: activate stereo stem for row 2 and verify output isolation.
+ require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,
+         "Activate row 2 stereo stem");
+ std::array<float,256> stemLeft{},stemRight{};
+ float* stemChannels[2]{stemLeft.data(),stemRight.data()};
+ AudioBusBuffers stemBus{};
+ stemBus.numChannels=2;stemBus.channelBuffers32=stemChannels;
+ AudioBusBuffers routedBuses[2]{bus,stemBus};
+ data.numOutputs=2;data.outputs=routedBuses;
+ for(int n=0;n<6;++n)run(-1);
+ run(37);
+ double mainSum=0,stemSum=0;
+ for(int n=50;n<190;++n) {
+    mainSum+=left[n];stemSum+=stemLeft[n];
+ }
+ require(std::abs(mainSum)<0.01&&std::abs(stemSum/140.-.125)<.02,
+         "M27 active stem leaked to main or produced wrong audio");
+ require(component->activateBus(kAudio,kOutput,1,false)==kResultOk,
+         "Deactivate row 2 stereo stem");
+ for(int n=0;n<6;++n)run(-1);
+ run(37);
+ mainSum=0;
+ for(int n=50;n<190;++n)mainSum+=left[n];
+ require(std::abs(mainSum/140.-.125)<.02,
+         "M27 inactive stem did not fall back to main stereo bus");
+ data.numOutputs=1;data.outputs=&bus;
+ std::cout<<"M27 active and inactive VST3 stereo stem routing PASS\\n";
  // A deterministic extended callback workload; this is NOT a paced,
  // real-time deadline or Studio One endurance test.
  for(int block=0;block<8192;++block) {
