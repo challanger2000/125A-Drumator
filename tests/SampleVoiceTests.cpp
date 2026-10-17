@@ -203,6 +203,68 @@ static void testBandlimiting() {
  require(powerLow>.5,"low-band tone incorrectly attenuated");
  require(powerHigh/powerLow<.02,"alias rejection for octave-up insufficient");
 }
+static void testStressAndRecovery() {
+ std::array<float,2048> sample{};sample.fill(.125f);
+ SincKernel kernel;require(kernel.prepare(1.),"stress kernel");
+ SampleVoiceEngine engine;require(engine.setOutputRate(48000),"stress rate");
+ RowSound row;row.sample={sample.data(),nullptr,sample.size()};
+ row.kernel=&kernel;row.pan=-1.f;
+ for(std::size_t i=0;i<kRows;++i)
+   require(engine.setRow(i,row),"stress row");
+ std::array<Trigger,128> hits{};
+ for(std::size_t i=0;i<hits.size();++i)
+   hits[i]={0,static_cast<std::uint8_t>(i%kRows),0,127,0};
+ std::array<float,256> l{},r{};
+ for(int round=0;round<6;++round) {
+   engine.reset();
+   auto result=engine.render(hits.data(),hits.size(),l.data(),r.data(),256);
+   require(result.status==RenderStatus::Ok&&result.accepted==64&&
+           result.rejectedCapacity==64&&result.activeVoices==64,
+           "dense triggers exceeded 64-voice budget");
+   for(int n=0;n<256;++n)
+     require(std::isfinite(l[n])&&std::isfinite(r[n]),
+             "nonfinite output under 128 simultaneous MIDI hits");
+   for(int tail=0;tail<9;++tail) {
+     result=engine.render(nullptr,0,l.data(),r.data(),256);
+     require(result.status==RenderStatus::Ok,"stress drain");
+   }
+   require(engine.active()==0,"exhausted voices not reclaimed");
+   const Trigger next{0,0,0,127,0};
+   require(engine.render(&next,1,l.data(),r.data(),256).accepted==1,
+           "voice pool cannot recover from overload");
+ }
+}
+static void testSimultaneousStereoStems() {
+ std::array<float,1024> sample{};sample.fill(.25f);
+ SincKernel kernel;require(kernel.prepare(1.),"stems kernel");
+ SampleVoiceEngine engine;require(engine.setOutputRate(48000),"stems rate");
+ RowSound row;row.sample={sample.data(),nullptr,sample.size()};
+ row.kernel=&kernel;
+ for(std::size_t i=0;i<3;++i)
+   require(engine.setRow(i,row),"stems row");
+ std::array<float,256> mainL{},mainR{},stem1L{},stem1R{},stem2L{},stem2R{};
+ std::array<float*,kRows> stemLeft{},stemRight{};
+ stemLeft[1]=stem1L.data();stemRight[1]=stem1R.data();
+ stemLeft[2]=stem2L.data();stemRight[2]=stem2R.data();
+ const std::array<Trigger,3> hits{{{0,0,0,127,0},
+                                   {0,1,0,127,0},
+                                   {0,2,0,127,0}}};
+ require(engine.render(hits.data(),hits.size(),mainL.data(),mainR.data(),256,
+                       stemLeft.data(),stemRight.data()).accepted==3,
+         "simultaneous stems launch");
+ near(mainL[120],.25,.001,"main gain isolated");
+ near(stem1L[120],.25,.001,"stem one left");
+ near(stem2L[120],.25,.001,"stem two left");
+ near(mainR[120],.25,.001,"main stereo");
+ near(stem1R[120],.25,.001,"stem one stereo");
+ near(stem2R[120],.25,.001,"stem two stereo");
+ stemLeft[2]=nullptr;stemRight[2]=nullptr;
+ require(engine.render(nullptr,0,mainL.data(),mainR.data(),256,
+                       stemLeft.data(),stemRight.data()).status==RenderStatus::Ok,
+         "stem dropout render");
+ near(mainL[120],.5,.001,"disabled stem should sum into main");
+ near(stem1L[120],.25,.001,"other stem must remain isolated");
+}
 int main() {
  try {
   {
@@ -221,7 +283,8 @@ int main() {
   }
   testMuteSoloPolicy();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testCapacityValidationAndAutomation();testBandlimiting();
-  std::cout<<"Drumator sample-voice regression: 8 groups PASS\n";
+  testStressAndRecovery();testSimultaneousStereoStems();
+  std::cout<<"Drumator sample-voice regression: 10 groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
   std::cerr<<"Drumator sample-voice regression FAIL: "<<ex.what()<<'\n';
