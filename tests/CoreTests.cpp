@@ -60,6 +60,28 @@ int main(){
         "swing boundary lost in split host block");
   check(get(swung,Clock{0,120,48000,100,true,0.75},
         ScheduleStatus::InvalidClock).empty(),"invalid swing accepted");
+  // Humanize must repeat exactly and survive host buffer partitioning.
+  auto human=get(swung,Clock{0,120,48000,24000,true,0.0,1.0});
+  auto repeat=get(swung,Clock{0,120,48000,24000,true,0.0,1.0});
+  check(human.size()==repeat.size(),"humanize changed event count");
+  for(std::size_t i=0;i<human.size();++i)
+    check(human[i].sampleOffset==repeat[i].sampleOffset&&
+          human[i].velocity==repeat[i].velocity,"humanize not deterministic");
+  std::vector<Trigger> splitHuman;
+  for(int start=0;start<24000;start+=1000) {
+    const auto ppq=static_cast<double>(start)*120/(60*48000);
+    for(auto hit:get(swung,Clock{ppq,120,48000,1000,true,0.0,1.0})) {
+      hit.sampleOffset+=static_cast<std::uint32_t>(start);
+      splitHuman.push_back(hit);
+    }
+  }
+  check(human.size()==splitHuman.size(),"humanize split event count");
+  for(std::size_t i=0;i<human.size();++i)
+    check(human[i].sampleOffset==splitHuman[i].sampleOffset&&
+          human[i].velocity==splitHuman[i].velocity,
+          "humanize changed with block size");
+  check(get(swung,Clock{0,120,48000,128,true,0,1.1},
+       ScheduleStatus::InvalidClock).empty(),"invalid humanize accepted");
   const auto snapshot=b.save();
   PatternBank restored;
   check(restored.load(snapshot.data(),snapshot.size()),"valid restore");
