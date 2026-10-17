@@ -16,14 +16,14 @@
 
 namespace drumator {
 namespace {
-constexpr double kLabelX=16.0,kGridX=266.0,kGridY=108.0;
-constexpr double kCellWidth=24.0,kRowHeight=29.0;
+constexpr double kLabelX=16.0,kGridX=560.0,kGridY=108.0;
+constexpr double kCellWidth=21.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
 constexpr double kMinHeight=300.0;
 double contentHeight(std::size_t rows) {
  return std::max(kMinHeight,kGridY+rows*kRowHeight+64.0);
 }
-constexpr double kHeaderY=38.0,kPatternX=252.0,kPatternWidth=70.0;
+constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
 const VSTGUI::CColor background{26,35,45,255};
 const VSTGUI::CColor panel{41,53,67,255};
 const VSTGUI::CColor border{73,94,114,255};
@@ -86,9 +86,9 @@ void DrumatorView::adjustEditorHeight() {
  const double height=contentHeight(controller_.visibleRows());
  const auto zoom=editor_.getZoomFactor();
  // The host owns its window; reject an unsupported host resize explicitly.
- editor_.requestResize({1100.0*zoom,height*zoom});
+ editor_.requestResize({1280.0*zoom,height*zoom});
  if(auto* container=getParentView()) {
-   container->setViewSize({0,0,1100,height});
+   container->setViewSize({0,0,1280,height});
  }
  setViewSize({0,0,1100,height});
  invalid();
@@ -101,33 +101,33 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
- c->drawRect({0,0,1100,contentHeight(controller_.visibleRows())},VSTGUI::kDrawFilled);
+ c->drawRect({0,0,1280,contentHeight(controller_.visibleRows())},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,18);
  c->setFontColor(letters);
- c->drawString("DRUMATOR   /   FUNKTIONSPROTOTYP",VSTGUI::CRect(16,8,790,32),
+ c->drawString("DRUMATOR   /   FUNKTIONSPROTOTYP",VSTGUI::CRect(16,8,1000,32),
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("PATTERN A-H | SHIFT+STEP: VELO",VSTGUI::CRect(16,47,250,67),
+ c->drawString("PATTERN A-H | SHIFT+STEP: VELO",VSTGUI::CRect(16,47,320,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+controller_.visibleRows()*kRowHeight+39.0;
- c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1050,footerY+21),
+ c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    const double x=kPatternX+pattern*kPatternWidth;
    c->setFillColor(pattern==controller_.currentPattern()?accent:panel);
-   c->drawRect({x,kHeaderY,x+58,kHeaderY+30},VSTGUI::kDrawFilled);
+   c->drawRect({x,kHeaderY,x+54,kHeaderY+30},VSTGUI::kDrawFilled);
    char label[2]={static_cast<char>('A'+pattern),0};
    c->setFontColor(pattern==controller_.currentPattern()?background:letters);
    c->drawString(label,VSTGUI::CRect(x,kHeaderY,x+58,kHeaderY+30));
  }
  c->setFillColor(panel);
- c->drawRect({880,39,937,69},VSTGUI::kDrawFilled);
- c->drawRect({946,39,1027,69},VSTGUI::kDrawFilled);
+ c->drawRect({1070,39,1127,69},VSTGUI::kDrawFilled);
+ c->drawRect({1136,39,1217,69},VSTGUI::kDrawFilled);
  c->setFontColor(letters);
- c->drawString("100%",VSTGUI::CRect(880,39,937,69));
- c->drawString("150%",VSTGUI::CRect(946,39,1027,69));
+ c->drawString("100%",VSTGUI::CRect(1070,39,1127,69));
+ c->drawString("150%",VSTGUI::CRect(1136,39,1217,69));
  char swingLabel[28]{};
  std::snprintf(swingLabel,sizeof(swingLabel),"SWING %u%%",controller_.swingPercent());
  c->setFontColor(accent);
@@ -142,48 +142,50 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  for(std::size_t row=0;row<controller_.visibleRows();++row) {
    const double y=kGridY+row*kRowHeight;
    c->setFillColor(row%2==0?panel:background);
-   c->drawRect({10,y,1070,y+kRowHeight-1},VSTGUI::kDrawFilled);
+   c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
    char number[8]{};
    std::snprintf(number,sizeof(number),"%02u",static_cast<unsigned>(row+1));
    c->drawString(number,VSTGUI::CRect(kLabelX,y,kLabelX+31,y+26),
                  VSTGUI::kLeftText);
    const auto& name=controller_.label(row);
-   c->drawString(name.c_str(),VSTGUI::CRect(kLabelX+36,y,143,y+26),
+   c->drawString(name.c_str(),VSTGUI::CRect(kLabelX+36,y,275,y+26),
                  VSTGUI::kLeftText);
-   char mixText[32]{};
-   std::snprintf(mixText,sizeof(mixText),"V%u P%+d T%+d",
-                 controller_.rowGain(row),controller_.rowPan(row),controller_.rowPitch(row));
+   char value[32]{};
    c->setFontColor(accent);
-   c->drawString(mixText,VSTGUI::CRect(145,y,194,y+26),VSTGUI::kLeftText);
-   // Ctrl+Shift+click on the row mix display adjusts pitch by one semitone.
+   std::snprintf(value,sizeof(value),"VOL %u",controller_.rowGain(row));
+   c->drawString(value,VSTGUI::CRect(280,y,345,y+26),VSTGUI::kLeftText);
+   std::snprintf(value,sizeof(value),"PAN %+d",controller_.rowPan(row));
+   c->drawString(value,VSTGUI::CRect(350,y,415,y+26),VSTGUI::kLeftText);
+   std::snprintf(value,sizeof(value),"P %+d",controller_.rowPitch(row));
+   c->drawString(value,VSTGUI::CRect(420,y,475,y+26),VSTGUI::kLeftText);
    c->setFillColor(controller_.isRowMuted(row)?on:off);
-   c->drawRect({195,y+3,218,y+24},VSTGUI::kDrawFilled);
+   c->drawRect({478,y+3,500,y+24},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
-   c->drawString("M",VSTGUI::CRect(195,y+3,218,y+24));
+   c->drawString("M",VSTGUI::CRect(478,y+3,500,y+24));
    c->setFillColor(controller_.isRowSolo(row)?accent:off);
-   c->drawRect({226,y+3,249,y+24},VSTGUI::kDrawFilled);
-   c->drawString("S",VSTGUI::CRect(226,y+3,249,y+24));
+   c->drawRect({507,y+3,529,y+24},VSTGUI::kDrawFilled);
+   c->drawString("S",VSTGUI::CRect(507,y+3,529,y+24));
    char chokeText[8]{};
    std::snprintf(chokeText,sizeof(chokeText),"%u",controller_.rowChoke(row));
    c->setFontColor(accent);
-   c->drawString(chokeText,VSTGUI::CRect(249,y+3,266,y+24));
+   c->drawString(chokeText,VSTGUI::CRect(535,y+3,558,y+24));
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
      c->setFillColor(v>=112?on:(v>=80?VSTGUI::CColor{195,126,73,255}:(v>0?VSTGUI::CColor{122,100,83,255}:off)));
-     c->drawRect({x+2,y+4,x+20,y+22},VSTGUI::kDrawFilled);
+     c->drawRect({x+2,y+4,x+18,y+22},VSTGUI::kDrawFilled);
      // Five-level step display: OFF has no bar; 32/64/96/127
      // increase the inset bar height. Preserve the surrounding grid.
      if(v>0) {
        const double barHeight=3.0+13.0*static_cast<double>(v)/127.0;
        c->setFillColor(VSTGUI::CColor{244,235,213,255});
-       c->drawRect({x+16,y+21-barHeight,x+18,y+21},
+       c->drawRect({x+14,y+21-barHeight,x+16,y+21},
                    VSTGUI::kDrawFilled);
      }
      if(step%4==0) {
        c->setFrameColor(border);
-       c->drawRect({x+1,y+3,x+21,y+23},VSTGUI::kDrawStroked);
+       c->drawRect({x+1,y+3,x+19,y+23},VSTGUI::kDrawStroked);
      }
    }
  }
@@ -278,8 +280,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      controller_.changePattern(index);invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=880&&x<=937) {editor_.setZoomFactor(1.0);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
-   if(x>=946&&x<=1027) {editor_.setZoomFactor(1.5);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
+   if(x>=1070&&x<=1127) {editor_.setZoomFactor(1.0);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
+   if(x>=1136&&x<=1217) {editor_.setZoomFactor(1.5);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
  }
  const double actionsY=kGridY+controller_.visibleRows()*kRowHeight+5.0;
  if(y>=actionsY&&y<actionsY+29) {
@@ -300,38 +302,38 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  if(y>=kGridY&&y<kGridY+controller_.visibleRows()*kRowHeight) {
    const auto row=static_cast<std::size_t>((y-kGridY)/kRowHeight);
-   if(x>=145&&x<194) {
-      const bool pitch=(buttons&VSTGUI::kShift)!=0 &&
-                       (buttons&VSTGUI::kControl)!=0;
+   if(x>=280&&x<475) {
+      const bool pitch=x>=420;
+      const bool pan=x>=350&&x<415;
+      const int delta=(buttons&VSTGUI::kControl)!=0?-1:1;
       if(pitch) {
-         const int pitchDelta=(buttons&VSTGUI::kAlt)!=0?-1:1;
-         if(!controller_.adjustRowPitch(row,pitchDelta))status_="PITCH NICHT UEBERNOMMEN";
-         invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+         if(!controller_.adjustRowPitch(row,delta))
+            status_="PITCH NICHT UEBERNOMMEN";
+      } else {
+         const int mixDelta=delta*10;
+         if(!controller_.adjustRowMix(row,pan,mixDelta))
+            status_="VOLUME/PAN NICHT UEBERNOMMEN";
       }
-      const bool pan=(buttons&VSTGUI::kShift)!=0;
-      const int direction=(buttons&VSTGUI::kControl)!=0?-10:10;
-      if(!controller_.adjustRowMix(row,pan,direction))
-         status_="VOLUME/PAN NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=195&&x<218) {
+   if(x>=478&&x<500) {
       if(!controller_.toggleRowGate(row,false))status_="MUTE NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=226&&x<249) {
+   if(x>=507&&x<529) {
       if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=249&&x<kGridX) {
+   if(x>=535&&x<558) {
       if(!controller_.cycleRowChoke(row))status_="CHOKE NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=kLabelX&&x<145&&(buttons&VSTGUI::kAlt)!=0) {
+   if(x>=kLabelX&&x<275&&(buttons&VSTGUI::kAlt)!=0) {
       if(controller_.clearSample(row))status_="SAMPLE ENTFERNT - STEPS BLEIBEN";
       else status_="SAMPLE KONNTE NICHT ENTFERNT WERDEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=kLabelX&&x<kGridX-12) {
+   if(x>=kLabelX&&x<275) {
       load(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kGridX&&x<kGridRight) {
