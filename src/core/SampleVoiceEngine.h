@@ -13,7 +13,7 @@
 namespace drumator {
 
 constexpr std::size_t kVoiceLimit=64;
-constexpr std::size_t kSincTaps=32;
+constexpr std::size_t kSincTaps=256; // maximum; actual CPU taps adapt to ratio
 constexpr std::size_t kSincPhases=1024;
 
 // Non-owning: backing PCM and the interpolation kernel must remain alive for
@@ -34,21 +34,22 @@ public:
         if (!std::isfinite(playbackRatio) || playbackRatio<=0.0) return false;
         constexpr double pi=3.141592653589793238462643383279502884;
         const double cutoff=std::min(1.0,1.0/playbackRatio);
+        taps_=playbackRatio>=8.0?256:(playbackRatio>=4.0?128:(playbackRatio>=2.0?64:32));
         for(std::size_t phase=0;phase<kSincPhases;++phase) {
             const double fraction=static_cast<double>(phase)/kSincPhases;
             double sum=0.0;
-            for(std::size_t i=0;i<kSincTaps;++i) {
-                const double x=static_cast<double>(i)-15.0-fraction;
+            for(std::size_t i=0;i<taps_;++i) {
+                const double x=static_cast<double>(i)-static_cast<double>(taps_/2-1)-fraction;
                 const double z=pi*cutoff*x;
                 const double sinc=std::abs(z)<1e-13?1.0:std::sin(z)/z;
-                const double t=2.0*pi*static_cast<double>(i)/(kSincTaps-1);
+                const double t=2.0*pi*static_cast<double>(i)/(taps_-1);
                 const double window=0.42-0.5*std::cos(t)+0.08*std::cos(2.0*t);
                 const double weight=cutoff*sinc*window;
                 coefficients_[phase*kSincTaps+i]=static_cast<float>(weight);
                 sum+=weight;
             }
             if(!std::isfinite(sum) || std::abs(sum)<1e-12) return false;
-            for(std::size_t i=0;i<kSincTaps;++i)
+            for(std::size_t i=0;i<taps_;++i)
                 coefficients_[phase*kSincTaps+i]=static_cast<float>(
                     coefficients_[phase*kSincTaps+i]/sum);
         }
@@ -57,6 +58,7 @@ public:
         return true;
     }
     double ratio() const noexcept {return ratio_;}
+    std::size_t taps() const noexcept {return taps_;}
     bool ready() const noexcept {return ready_;}
     const float* phase(std::size_t index) const noexcept {
         return coefficients_.data()+index*kSincTaps;
@@ -64,6 +66,7 @@ public:
 private:
     std::array<float,kSincPhases*kSincTaps> coefficients_{};
     double ratio_{0.0};
+    std::size_t taps_{32};
     bool ready_{false};
 };
 
@@ -193,8 +196,9 @@ public:
                     static_cast<std::size_t>(fractional*kSincPhases),kSincPhases-1);
                 const auto* coeff=voice.kernel->phase(phase);
                 double vl=0.0,vr=0.0;
-                for(std::size_t i=0;i<kSincTaps;++i) {
-                    const auto index=base+static_cast<std::int64_t>(i)-15;
+                for(std::size_t i=0;i<voice.kernel->taps();++i) {
+                    const auto index=base+static_cast<std::int64_t>(i)-
+                        static_cast<std::int64_t>(voice.kernel->taps()/2-1);
                     if(index<0||static_cast<std::size_t>(index)>=voice.sample.frames)
                         continue; // documented zero-padding at sample boundaries
                     const auto w=static_cast<double>(coeff[i]);
