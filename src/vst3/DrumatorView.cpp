@@ -91,7 +91,7 @@ bool DrumatorView::attached(VSTGUI::CView* parent) {
  if(result)adjustEditorHeight();
  return result;
 }
-void DrumatorView::adjustEditorHeight() {
+bool DrumatorView::adjustEditorHeight() {
  const double height=contentHeight(controller_.visibleRows());
  const auto zoom=editor_.getZoomFactor();
  // The host owns its window; reject an unsupported host resize explicitly.
@@ -100,13 +100,14 @@ void DrumatorView::adjustEditorHeight() {
  const auto effectiveScale=zoom;
  if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
    status_="HOST HAT FENSTERGROESSE ABGELEHNT";
-   invalid();return;
+   invalid();return false;
  }
  if(auto* container=getParentView()) {
    container->setViewSize({0,0,1280,height});
  }
  setViewSize({0,0,1280,height});
  invalid();
+ return true;
 }
 DrumatorView::DrumatorView(const VSTGUI::CRect& size,
                            Controller& controller,VSTGUI::VST3Editor& editor)
@@ -332,13 +333,21 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=16&&x<=213) {
      if(controller_.visibleRows()>=kRows)
        status_="MAXIMAL 16 ZEILEN";
-     else if(controller_.addRow())adjustEditorHeight();
+     else if(controller_.addRow()) {
+       if(!adjustEditorHeight()) {
+         if(!controller_.hideLastEmptyRow())status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
+       }
+     }
      else status_="INSTRUMENT KONNTE NICHT HINZUGEFUEGT WERDEN";
      invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=226&&x<=266) {
-     if(controller_.hideLastEmptyRow())adjustEditorHeight();
+     if(controller_.hideLastEmptyRow()) {
+       if(!adjustEditorHeight()) {
+         if(!controller_.addRow())status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
+       }
+     }
      else status_="ZEILE ENTHAELT STEPS/SAMPLE - NICHT ENTFERNBAR";
      invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;

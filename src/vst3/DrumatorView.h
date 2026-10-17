@@ -22,7 +22,7 @@ private:
  VSTGUI::VST3Editor& editor_;
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
  void load(std::size_t row);
- void adjustEditorHeight();
+ bool adjustEditorHeight();
  void loadPath(std::size_t row,const std::string& path);
 };
 }
