@@ -794,6 +794,33 @@ int main(int argc,char** argv) {
  require(flushedKit.selected==5,
          "F04 zero-frame automation lost the selected pattern");
  std::cout<<"F04 zero-frame host automation state PASS\\n";
+ // F08 integration: deactivate MAIN while a real auxiliary row stays active.
+ // Bus 1 is row 1 in the 125A fixed-row routing contract.
+ require(component->activateBus(kAudio,kOutput,0,false)==kResultOk,
+         "F08 disable MAIN");
+ require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,
+         "F08 activate auxiliary bus");
+ std::array<float,256> stemLeft{},stemRight{};
+ float* stemSamples[2]{stemLeft.data(),stemRight.data()};
+ std::array<AudioBusBuffers,2> stemBuses{};
+ stemBuses[0].numChannels=2;stemBuses[0].channelBuffers32=nullptr;
+ stemBuses[1].numChannels=2;stemBuses[1].channelBuffers32=stemSamples;
+ const auto priorOutputs=data.outputs;
+ const auto priorNumOutputs=data.numOutputs;
+ data.outputs=stemBuses.data();data.numOutputs=2;
+ context.state=0;
+ events.clear();
+ Event stemEvent{};stemEvent.type=Event::kNoteOnEvent;
+ stemEvent.sampleOffset=0;stemEvent.noteOn.pitch=37;
+ stemEvent.noteOn.velocity=1.f;stemEvent.noteOn.noteId=-1;
+ require(events.addEvent(stemEvent)==kResultOk,"F08 add row 1 MIDI trigger");
+ require(audio->process(data)==kResultOk,"F08 process with no MAIN buffers");
+ for(float v:stemLeft)require(std::isfinite(v),"F08 invalid stem L");
+ for(float v:stemRight)require(std::isfinite(v),"F08 invalid stem R");
+ data.outputs=priorOutputs;data.numOutputs=priorNumOutputs;
+ require(component->activateBus(kAudio,kOutput,0,true)==kResultOk,
+         "F08 reenable MAIN");
+ std::cout<<"F08 packaged auxiliary processing without MAIN PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
