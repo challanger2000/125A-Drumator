@@ -23,6 +23,7 @@ public:
                   const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
                   VSTGUI::VST3Editor*) override;
 
+ bool clearSample(std::size_t row);
  bool toggleRowGate(std::size_t row,bool solo);
  bool cycleRowChoke(std::size_t row);
  unsigned rowChoke(std::size_t row) const noexcept {return row<kRows?choke_[row]:0;}
