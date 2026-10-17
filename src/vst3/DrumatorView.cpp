@@ -138,6 +138,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);
  c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
  c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
+ c->setFontColor(letters);
+ c->drawString("VOL / PAN / P: KLICK + | STRG+KLICK -  •  ALT+SAMPLE: ENTFERNEN",
+               VSTGUI::CRect(545,74,1240,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=0;row<controller_.visibleRows();++row) {
    const double y=kGridY+row*kRowHeight;
