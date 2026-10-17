@@ -66,9 +66,11 @@ private:
        return false;
     std::string filename(static_cast<const char*>(bytes),size-1);
     if(filename.size()<4)return false;
-    auto ext=filename.substr(filename.size()-4);
+    const auto point=filename.find_last_of('.');
+    if(point==std::string::npos)return false;
+    auto ext=filename.substr(point);
     for(auto& c:ext)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return ext==".wav";
+    return ext==".wav"||ext==".flac";
  }
  DrumatorView& view_;
 };
@@ -214,9 +216,9 @@ void DrumatorView::loadPath(std::size_t row,const std::string& path) {
  case Controller::LoadStatus::TooLarge:
      status_="WAV GROESSER ALS 16 MiB - PROTOTYP-LIMIT";break;
  case Controller::LoadStatus::ReadError:
-     status_="WAV KONNTE NICHT GELESEN WERDEN";break;
+     status_="SAMPLE KONNTE NICHT GELESEN WERDEN";break;
  case Controller::LoadStatus::Unsupported:
-     status_="UNTERSTUETZT: PCM 8/16/24/32 UND FLOAT32, MONO/STEREO";break;
+     status_="UNTERSTUETZT: WAV PCM/FLOAT UND FLAC, MONO/STEREO";break;
  case Controller::LoadStatus::NoProcessorConnection:
      status_="HOST HAT CONTROLLER UND AUDIOPROZESSOR NICHT VERBUNDEN";break;
  case Controller::LoadStatus::Rejected:
@@ -247,7 +249,8 @@ void DrumatorView::load(std::size_t row) {
                                             VSTGUI::CNewFileSelector::kSelectFile);
  if(!picker) {status_="DATEIDIALOG NICHT VERFUEGBAR";invalid();return;}
  picker->addFileExtension(VSTGUI::CFileExtension("WAV PCM/FLOAT","wav","audio/wav"));
- picker->setTitle("125A Drumator - WAV-Sample auswaehlen");
+ picker->addFileExtension(VSTGUI::CFileExtension("FLAC","flac","audio/flac"));
+ picker->setTitle("125A Drumator - WAV/FLAC-Sample auswaehlen");
  const bool selected=picker->runModal();
  if(selected&&picker->getNumSelectedFiles()>0) {
    const auto* file=picker->getSelectedFile(0);
