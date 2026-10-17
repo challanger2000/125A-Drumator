@@ -323,6 +323,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       if(!controller_.cycleRowChoke(row))status_="CHOKE NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
+   if(x>=kLabelX&&x<145&&(buttons&VSTGUI::kAlt)!=0) {
+      if(controller_.clearSample(row))status_="SAMPLE ENTFERNT - STEPS BLEIBEN";
+      else status_="SAMPLE KONNTE NICHT ENTFERNT WERDEN";
+      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
    if(x>=kLabelX&&x<kGridX-12) {
       load(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
