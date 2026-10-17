@@ -72,11 +72,33 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.RowPitch")!=0&&
     std::strcmp(id,"Drumator.RowChoke")!=0&&
     std::strcmp(id,"Drumator.Swing")!=0&&
-    std::strcmp(id,"Drumator.Humanize")!=0)
+    std::strcmp(id,"Drumator.Humanize")!=0&&
+    std::strcmp(id,"Drumator.ClearSample")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.ClearSample")==0) {
+   Steinberg::int64 index=-1;
+   if(attrs->getInt("Row",index)!=Steinberg::kResultOk||
+      index<0||index>=static_cast<Steinberg::int64>(kRows))
+      return Steinberg::kInvalidArgument;
+   const auto rate=outputRate_.load(std::memory_order_acquire);
+   if(rate<=0.0||!std::isfinite(rate))return Steinberg::kResultFalse;
+   std::unique_ptr<PreparedSample> silent;
+   try {silent=PreparedSample::silence(rate);}
+   catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+   if(!silent)return Steinberg::kResultFalse;
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   for(;;){auto unused=exchange_.pollReclaim();if(!unused)break;}
+   auto old=exchange_.withdraw(static_cast<std::size_t>(index));
+   (void)old;
+   if(!exchange_.publish(static_cast<std::size_t>(index),silent))
+      return Steinberg::kResultFalse;
+   kit_.wav[static_cast<std::size_t>(index)].clear();
+   kit_.names[static_cast<std::size_t>(index)].clear();
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.Humanize")==0) {
    Steinberg::int64 percent=-1;
    if(attrs->getInt("Percent",percent)!=Steinberg::kResultOk||
