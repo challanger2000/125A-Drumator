@@ -356,6 +356,31 @@ int main(int argc,char** argv) {
          "M27 inactive stem did not fall back to main stereo bus");
  data.numOutputs=1;data.outputs=&bus;
  std::cout<<"M27 active and inactive VST3 stereo stem routing PASS\\n";
+ // Functional QA: control messages must update actual saved component state.
+ auto percentage=[&](const char* id,int number)->tresult {
+   HostMessage message;message.setMessageID(id);
+   auto* attrs=message.getAttributes();
+   require(attrs->setInt("Percent",number)==kResultOk,"Percent attribute");
+   return processorPoint->notify(&message);
+ };
+ require(percentage("Drumator.Swing",35)==kResultOk,"Swing 35 rejected");
+ require(percentage("Drumator.Humanize",70)==kResultOk,"Humanize 70 rejected");
+ require(percentage("Drumator.Swing",51)!=kResultOk,"Invalid swing accepted");
+ require(percentage("Drumator.Humanize",101)!=kResultOk,
+         "Invalid humanize accepted");
+ Steinberg::ResizableMemoryIBStream controlsSaved;
+ require(component->getState(&controlsSaved)==kResultOk,
+         "GetState after humanize and swing failed");
+ drumator::KitState controlsKit;
+ require(drumator::KitCodec::decode(
+         static_cast<const std::uint8_t*>(controlsSaved.getData()),
+         controlsSaved.getCursor(),controlsKit),
+         "Controls state failed to decode");
+ require(controlsKit.swing==35&&controlsKit.humanize==70,
+         "Swing/Humanize actual VST3 persistence mismatch");
+ require(percentage("Drumator.Swing",0)==kResultOk,"Swing reset failed");
+ require(percentage("Drumator.Humanize",0)==kResultOk,"Humanize reset failed");
+ std::cout<<"VST3 swing/humanize controls validation and persistence PASS\\n";
  // A deterministic extended callback workload; this is NOT a paced,
  // real-time deadline or Studio One endurance test.
  for(int block=0;block<8192;++block) {
