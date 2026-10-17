@@ -326,22 +326,6 @@ Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
  return 0; // no internal test-sound fixture; sample voice tails vary by file
 }
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
- // A single discrete pattern parameter is implemented at buffer granularity
- // during this integration milestone; accurate in-block program changes pending.
- if(data.inputParameterChanges) {
-   for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
-     auto* q=data.inputParameterChanges->getParameterData(i);
-     if(!q||q->getParameterId()!=kPatternParam||q->getPointCount()<=0)continue;
-     Steinberg::int32 sampleOffset=0;
-     Steinberg::Vst::ParamValue value=0;
-     if(q->getPoint(q->getPointCount()-1,sampleOffset,value)==Steinberg::kResultTrue&&
-        std::isfinite(value)) {
-       const auto clamped=std::clamp(value,0.0,1.0);
-       selected_.store(static_cast<std::uint32_t>(std::lround(clamped*7.0)),
-                       std::memory_order_relaxed);
-     }
-   }
- }
  if(data.numSamples<0)return Steinberg::kInvalidArgument;
  if(data.numSamples==0||data.numOutputs==0)return Steinberg::kResultOk;
  if(!prepared_||data.symbolicSampleSize!=Steinberg::Vst::kSample32||
@@ -361,22 +345,65 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  // Adopt only complete prepared assets, without deleting on audio.
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
  triggers_.clear();
- if(playing&&context) {
-   patterns_.select(selected_.load(std::memory_order_relaxed));
-   // Missing/invalid clock: no new steps, no invented fallback.
-   if((context->state & (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                        Steinberg::Vst::ProcessContext::kTempoValid))==
-                       (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                        Steinberg::Vst::ProcessContext::kTempoValid)) {
-     const Clock clock{context->projectTimeMusic,context->tempo,
-                       processSetup.sampleRate,data.numSamples,true,
-                       swingPercent_.load(std::memory_order_relaxed)/100.0,
-                       humanizePercent_.load(std::memory_order_relaxed)/100.0};
-     const auto scheduled=StepScheduler::run(patterns_,clock,[&](Trigger t){
-         triggers_.appendStep(t);
+ // Process program changes at their actual sample offset. Schedule each
+ // constant-pattern interval separately; no allocation in the audio callback.
+ if(playing&&context&&
+    (context->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                     Steinberg::Vst::ProcessContext::kTempoValid))==
+                    (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                     Steinberg::Vst::ProcessContext::kTempoValid)) {
+   const auto initialPpq=context->projectTimeMusic;
+   const auto tempo=context->tempo;
+   const auto rate=processSetup.sampleRate;
+   const auto swing=swingPercent_.load(std::memory_order_relaxed)/100.0;
+   const auto humanize=humanizePercent_.load(std::memory_order_relaxed)/100.0;
+   std::uint32_t activePattern=selected_.load(std::memory_order_relaxed);
+   std::int32_t cursor=0;
+   auto scheduleRange=[&](Steinberg::int32 finish) {
+     if(finish<=cursor)return;
+     patterns_.select(activePattern);
+     const Clock clock{initialPpq+static_cast<double>(cursor)*tempo/(60.0*rate),
+                       tempo,rate,finish-cursor,true,swing,humanize};
+     const auto scheduled=StepScheduler::run(patterns_,clock,[&](Trigger hit){
+       hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
+       triggers_.appendStep(hit);
      });
      if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
+     cursor=finish;
+   };
+   if(data.inputParameterChanges) {
+     for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
+       auto* queue=data.inputParameterChanges->getParameterData(i);
+       if(!queue||queue->getParameterId()!=kPatternParam)continue;
+       for(Steinberg::int32 j=0;j<queue->getPointCount();++j) {
+         Steinberg::int32 sampleOffset=0;
+         Steinberg::Vst::ParamValue value=0;
+         if(queue->getPoint(j,sampleOffset,value)!=Steinberg::kResultTrue||
+            !std::isfinite(value)||sampleOffset<0||
+            sampleOffset>=data.numSamples||sampleOffset<cursor)continue;
+         scheduleRange(sampleOffset);
+         activePattern=static_cast<std::uint32_t>(
+             std::lround(std::clamp(value,0.0,1.0)*7.0));
+       }
+     }
    }
+   scheduleRange(data.numSamples);
+   selected_.store(activePattern,std::memory_order_relaxed);
+ }else {
+   // Even without a valid transport clock the host may change the program.
+   if(data.inputParameterChanges)
+     for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
+       auto* queue=data.inputParameterChanges->getParameterData(i);
+       if(!queue||queue->getParameterId()!=kPatternParam)continue;
+       for(Steinberg::int32 j=0;j<queue->getPointCount();++j) {
+         Steinberg::int32 offset=0;Steinberg::Vst::ParamValue value=0;
+         if(queue->getPoint(j,offset,value)==Steinberg::kResultTrue&&
+            std::isfinite(value)&&offset>=0&&offset<data.numSamples)
+           selected_.store(static_cast<std::uint32_t>(
+             std::lround(std::clamp(value,0.0,1.0)*7.0)),
+             std::memory_order_relaxed);
+       }
+     }
  }
  // MIDI one-shot audition also works with stopped DAW transport.
  if(data.inputEvents) {
