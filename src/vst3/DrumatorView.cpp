@@ -131,6 +131,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);
  c->drawString(swingLabel,VSTGUI::CRect(16,74,182,98),VSTGUI::kLeftText);
  c->drawString("- / +",VSTGUI::CRect(185,74,244,98));
+ char humanLabel[32]{};
+ std::snprintf(humanLabel,sizeof(humanLabel),"HUMAN %u%%",controller_.humanizePercent());
+ c->setFontColor(accent);
+ c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
+ c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=0;row<controller_.visibleRows();++row) {
    const double y=kGridY+row*kRowHeight;
@@ -255,6 +260,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
+ if(y>=74&&y<98&&x>=448&&x<505) {
+   if(!controller_.adjustHumanize(x<477?-10:10))
+      status_="HUMANIZE NICHT UEBERNOMMEN";
+   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
  if(y>=74&&y<98&&x>=185&&x<244) {
    if(!controller_.adjustSwing(x<214?-5:5))status_="SWING NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
