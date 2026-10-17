@@ -11,6 +11,7 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "vst3/PluginIDs.h"
 #include "core/KitState.h"
+#include "core/AtomicPatternBank.h"
 #include "core/FlacImport.h"
 #include "public.sdk/source/vst/utility/memoryibstream.h"
 #include <windows.h>
@@ -447,8 +448,11 @@ int main(int argc,char** argv) {
    require(audio->setProcessing(false)==kResultOk,"Pattern stop processing");
    require(component->setActive(false)==kResultOk,"Pattern deactivate");
    Steinberg::ResizableMemoryIBStream stream;
-   require(stream.writeRaw(patternBytes.data(),static_cast<TSize>(patternBytes.size()))==
-           static_cast<TSize>(patternBytes.size()),"Pattern write stream");
+   Steinberg::int32 actualWritten=0;
+   require(stream.write(patternBytes.data(),static_cast<Steinberg::int32>(patternBytes.size()),
+                        &actualWritten)==kResultOk&&
+           actualWritten==static_cast<Steinberg::int32>(patternBytes.size()),
+           "Pattern write stream");
    stream.rewind();
    require(component->setState(&stream)==kResultOk,"Pattern recall");
    require(component->setActive(true)==kResultOk,"Pattern activate");
