@@ -248,6 +248,50 @@ static void testStressAndRecovery() {
            "voice pool cannot recover from overload");
  }
 }
+static void testHighRatio64VoiceStress() {
+ // Worst-case ratio 16x, 64 concurrently sounding voices, repeated blocks.
+ std::vector<float> sample(131072,0.125f);
+ SincKernel kernel;require(kernel.prepare(16.0),"16x stress kernel");
+ SampleVoiceEngine engine;require(engine.setOutputRate(48000),"16x rate");
+ RowSound row;row.sample={sample.data(),nullptr,sample.size()};
+ row.kernel=&kernel;row.pan=-1.f;
+ for(std::size_t i=0;i<kRows;++i)
+   require(engine.setRow(i,row),"16x stress row");
+ std::array<Trigger,64> hits{};
+ for(std::size_t i=0;i<hits.size();++i)
+   hits[i]={0,static_cast<std::uint8_t>(i%kRows),0,127,0};
+ std::array<float,256> l{},r{};
+ for(int cycle=0;cycle<5;++cycle) {
+   engine.reset();
+   auto result=engine.render(hits.data(),hits.size(),l.data(),r.data(),256);
+   require(result.status==RenderStatus::Ok&&result.accepted==64,
+           "16x maximum-polyphony launch");
+   for(int block=0;block<20;++block) {
+     for(float v:l)require(std::isfinite(v),"16x nonfinite left");
+     for(float v:r)require(std::isfinite(v),"16x nonfinite right");
+     result=engine.render(nullptr,0,l.data(),r.data(),256);
+     require(result.status==RenderStatus::Ok,"16x stress block");
+   }
+   require(engine.active()==0,"16x voice pool not reclaimed");
+ }
+}
+static void testStemWithoutMain() {
+ std::array<float,2048> source{};source.fill(.25f);
+ SincKernel kernel;require(kernel.prepare(1.0),"no MAIN kernel");
+ SampleVoiceEngine engine;require(engine.setOutputRate(48000),"no MAIN rate");
+ RowSound row;row.sample={source.data(),nullptr,source.size()};
+ row.kernel=&kernel;
+ require(engine.setRow(1,row),"no MAIN stem row");
+ std::array<float,128> l{},r{};
+ std::array<float*,kRows> ls{},rs{};
+ ls[1]=l.data();rs[1]=r.data();
+ const Trigger t{0,1,0,127,0};
+ const auto result=engine.render(&t,1,nullptr,nullptr,128,ls.data(),rs.data());
+ require(result.status==RenderStatus::Ok&&result.accepted==1,
+         "deactivated MAIN rejected stem render");
+ near(l[80],.25,.001,"stem silent without MAIN");
+ near(r[80],.25,.001,"stem right silent without MAIN");
+}
 static void testSimultaneousStereoStems() {
  std::array<float,1024> sample{};sample.fill(.25f);
  SincKernel kernel;require(kernel.prepare(1.),"stems kernel");
@@ -297,7 +341,7 @@ int main() {
   }
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testCapacityValidationAndAutomation();testBandlimiting();
-  testStressAndRecovery();testSimultaneousStereoStems();
+  testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();
   std::cout<<"Drumator sample-voice regression: 10 groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
