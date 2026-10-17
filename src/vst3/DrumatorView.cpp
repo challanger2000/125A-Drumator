@@ -104,11 +104,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawRect({0,0,1280,contentHeight(controller_.visibleRows())},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,18);
  c->setFontColor(letters);
- c->drawString("DRUMATOR   /   FUNKTIONSPROTOTYP",VSTGUI::CRect(16,8,1000,32),
+ c->drawString("125A  /  DRUMATOR",VSTGUI::CRect(16,8,1000,32),
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("PATTERN A-H | SHIFT+STEP: VELO",VSTGUI::CRect(16,47,320,67),
+ c->drawString("PATTERN A-H   |   SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,320,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+controller_.visibleRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
@@ -139,7 +139,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
  c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
  c->setFontColor(letters);
- c->drawString("VOL / PAN / P: KLICK + | STRG+KLICK -  |  ALT+SAMPLE: ENTFERNEN",
+ c->drawString("VOL / PAN / P: LINKS -  RECHTS +   |   ALT+SAMPLE: ENTFERNEN",
                VSTGUI::CRect(545,74,1240,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=0;row<controller_.visibleRows();++row) {
@@ -152,7 +152,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(number,VSTGUI::CRect(kLabelX,y,kLabelX+31,y+26),
                  VSTGUI::kLeftText);
    const auto& name=controller_.label(row);
-   c->drawString(name.c_str(),VSTGUI::CRect(kLabelX+36,y,275,y+26),
+   // Fit the filename in the fixed row area; preserve the extension where possible.
+   std::string visibleName=name;
+   if(visibleName.size()>27) {
+     visibleName=name.substr(0,17)+"..."+name.substr(name.size()-7);
+   }
+   c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,275,y+26),
                  VSTGUI::kLeftText);
    char value[32]{};
    c->setFontColor(accent);
@@ -219,7 +224,7 @@ void DrumatorView::loadPath(std::size_t row,const std::string& path) {
  case Controller::LoadStatus::NotFound:
      status_="DATEI NICHT GEFUNDEN";break;
  case Controller::LoadStatus::TooLarge:
-     status_="WAV GROESSER ALS 16 MiB - PROTOTYP-LIMIT";break;
+     status_="SAMPLE ZU GROSS (MAX. 16 MiB)";break;
  case Controller::LoadStatus::ReadError:
      status_="SAMPLE KONNTE NICHT GELESEN WERDEN";break;
  case Controller::LoadStatus::Unsupported:
@@ -308,7 +313,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=280&&x<475) {
       const bool pitch=x>=420;
       const bool pan=x>=350&&x<415;
-      const int delta=(buttons&VSTGUI::kControl)!=0?-1:1;
+      // Direct left/right half controls, modifier-free at the default zoom.
+      const double start=pitch?420.0:(pan?350.0:280.0);
+      const double width=pitch?55.0:65.0;
+      const int delta=x<start+width/2.0?-1:1;
       if(pitch) {
          if(!controller_.adjustRowPitch(row,delta))
             status_="PITCH NICHT UEBERNOMMEN";
