@@ -201,6 +201,17 @@ bool Controller::adjustSwing(int delta) {
  if(ok)swingPercent_=static_cast<std::uint8_t>(next);
  return ok;
 }
+bool Controller::clearSample(std::size_t row) {
+ if(row>=kRows)return false;
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.ClearSample");
+ auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
+ attrs->setInt("Row",static_cast<Steinberg::int64>(row));
+ const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok)labels_[row]="LEER - WAV LADEN";
+ return ok;
+}
 bool Controller::cycleRowChoke(std::size_t row) {
  if(row>=kRows)return false;
  const auto next=static_cast<std::uint8_t>((choke_[row]+1)%5);
