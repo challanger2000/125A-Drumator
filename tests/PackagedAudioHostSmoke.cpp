@@ -402,6 +402,33 @@ int main(int argc,char** argv) {
  require(percentage("Drumator.Swing",0)==kResultOk,"Swing reset failed");
  require(percentage("Drumator.Humanize",0)==kResultOk,"Humanize reset failed");
  std::cout<<"VST3 swing/humanize controls validation and persistence PASS\\n";
+ // Functional transport QA on the actual VST3 processor.
+ context.tempo=120.0;
+ context.projectTimeMusic=0.0;
+ context.state=ProcessContext::kPlaying|
+               ProcessContext::kProjectTimeMusicValid|
+               ProcessContext::kTempoValid;
+ run(-1);
+ double transportSound=0;
+ for(int i=50;i<190;++i)transportSound+=std::abs(left[i]);
+ require(transportSound>1.0,"Valid playing host clock did not trigger sequencer");
+ context.state=0;
+ run(-1);
+ for(int i=0;i<256;++i)
+   require(left[i]==0.f&&right[i]==0.f,
+           "Transport stop did not silence sequencer tails");
+ context.state=ProcessContext::kPlaying; // missing PPQ and tempo validity
+ run(-1);
+ for(int i=0;i<256;++i)
+   require(left[i]==0.f&&right[i]==0.f,
+           "Playing without valid tempo/PPQ invented sequencer events");
+ context.state=0;
+ run(36);
+ double auditionLevel=0;
+ for(int i=50;i<190;++i)auditionLevel+=std::abs(left[i]);
+ require(auditionLevel>1.0,
+         "MIDI audition stopped working while host transport is stopped");
+ std::cout<<"VST3 stop, invalid clock and stopped MIDI audition PASS\\n";
  // A deterministic extended callback workload; this is NOT a paced,
  // real-time deadline or Studio One endurance test.
  for(int block=0;block<8192;++block) {
