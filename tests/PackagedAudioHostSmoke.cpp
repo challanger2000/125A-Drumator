@@ -732,6 +732,18 @@ int main(int argc,char** argv) {
  std::vector<std::uint8_t> retainedImport=imported;
  require(!drumator::flacToWav(brokenFlac.data(),brokenFlac.size(),imported)&&
          imported==retainedImport,"Broken FLAC modified prior output");
+ // F13: compressed FLAC metadata can advertise an enormous decoded size.
+ // Reject before a large PCM allocation, preserving the previous output.
+ auto oversizedFlac=std::vector<std::uint8_t>(
+    flacFixture,flacFixture+sizeof(flacFixture));
+ // STREAMINFO's total-samples field occupies the low 36 bits in bytes 21-25.
+ oversizedFlac[21]=static_cast<std::uint8_t>(oversizedFlac[21]|0x0f);
+ oversizedFlac[22]=0xff;oversizedFlac[23]=0xff;
+ oversizedFlac[24]=0xff;oversizedFlac[25]=0xff;
+ require(!drumator::flacToWav(oversizedFlac.data(),oversizedFlac.size(),imported)&&
+         imported==retainedImport,
+         "F13 oversized FLAC metadata allocated or changed output");
+ std::cout<<"F13 oversized compressed FLAC guard PASS\\n";
  require(send(retainedImport,0)==kResultOk,
          "FLAC-derived WAV rejected by packaged VST3");
  for(int i=0;i<7;++i)run(-1);
