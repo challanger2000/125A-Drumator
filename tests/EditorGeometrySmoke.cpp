@@ -49,8 +49,8 @@ int main(int argc,char** argv) {
         fail("Editor getSize failed");
     std::cout << "Actual editor size: "
               <<rect.right-rect.left<<" x "<<rect.bottom-rect.top<<"\n";
-    if(rect.left!=0||rect.top!=0||rect.right!=1100||rect.bottom!=300)
-        fail("GUI resource or template was not loaded as 1100 x 300");
+    if(rect.left!=0||rect.top!=0||rect.right!=1280||rect.bottom!=300)
+        fail("GUI resource or template was not loaded as 1280 x 300");
     editor->release();
     controller->terminate();
     controller->release();
