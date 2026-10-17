@@ -62,9 +62,11 @@ private:
     VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
     const auto size=data.drag->getData(0,bytes,type);
     if(!bytes||type!=VSTGUI::IDataPackage::kFilePath||size<5||
-       size>32768||static_cast<const char*>(bytes)[size-1]!='\0')
+       size>32768)
        return false;
-    std::string filename(static_cast<const char*>(bytes),size-1);
+    std::string filename(static_cast<const char*>(bytes),size);
+    if(!filename.empty()&&filename.back()=='\0')filename.pop_back();
+    if(filename.find('\0')!=std::string::npos)return false;
     if(filename.size()<4)return false;
     const auto point=filename.find_last_of('.');
     if(point==std::string::npos)return false;
@@ -90,7 +92,7 @@ void DrumatorView::adjustEditorHeight() {
  if(auto* container=getParentView()) {
    container->setViewSize({0,0,1280,height});
  }
- setViewSize({0,0,1100,height});
+ setViewSize({0,0,1280,height});
  invalid();
 }
 DrumatorView::DrumatorView(const VSTGUI::CRect& size,
@@ -120,7 +122,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({x,kHeaderY,x+54,kHeaderY+30},VSTGUI::kDrawFilled);
    char label[2]={static_cast<char>('A'+pattern),0};
    c->setFontColor(pattern==controller_.currentPattern()?background:letters);
-   c->drawString(label,VSTGUI::CRect(x,kHeaderY,x+58,kHeaderY+30));
+   c->drawString(label,VSTGUI::CRect(x,kHeaderY,x+54,kHeaderY+30));
  }
  c->setFillColor(panel);
  c->drawRect({1070,39,1127,69},VSTGUI::kDrawFilled);
@@ -247,9 +249,11 @@ bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
  VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
  const auto size=data.drag->getData(0,bytes,type);
  if(!bytes||type!=VSTGUI::IDataPackage::kFilePath||
-    size==0||size>32768||
-    static_cast<const char*>(bytes)[size-1]!='\0')return false;
- loadPath(row,std::string(static_cast<const char*>(bytes),size-1));
+    size==0||size>32768)return false;
+ std::string path(static_cast<const char*>(bytes),size);
+ if(!path.empty()&&path.back()=='\0')path.pop_back();
+ if(path.empty()||path.find('\0')!=std::string::npos)return false;
+ loadPath(row,path);
  return true; // drop handled; status displays actual acceptance/rejection
 }
 void DrumatorView::load(std::size_t row) {
@@ -282,9 +286,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(!controller_.adjustSwing(x<214?-5:5))status_="SWING NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
- if(y>=kHeaderY&&y<kHeaderY+30) {
+ if(y>=kHeaderY&&y<kHeaderY+31) {
    if(x>=kPatternX&&x<kPatternX+8*kPatternWidth) {
      const auto index=static_cast<std::size_t>((x-kPatternX)/kPatternWidth);
+     if(x>=kPatternX+index*kPatternWidth+54.0)
+       return VSTGUI::kMouseEventNotHandled;
      controller_.changePattern(index);invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
@@ -310,7 +316,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  if(y>=kGridY&&y<kGridY+controller_.visibleRows()*kRowHeight) {
    const auto row=static_cast<std::size_t>((y-kGridY)/kRowHeight);
-   if(x>=280&&x<475) {
+   if((x>=280&&x<345)||(x>=350&&x<415)||(x>=420&&x<475)) {
       const bool pitch=x>=420;
       const bool pan=x>=350&&x<415;
       // Direct left/right half controls, modifier-free at the default zoom.
