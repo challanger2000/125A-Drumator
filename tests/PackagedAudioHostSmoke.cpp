@@ -800,8 +800,8 @@ int main(int argc,char** argv) {
          "F08 disable MAIN");
  require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,
          "F08 activate auxiliary bus");
- std::array<float,256> stemLeft{},stemRight{};
- float* stemSamples[2]{stemLeft.data(),stemRight.data()};
+ std::array<float,256> f08StemLeft{},f08StemRight{};
+ float* stemSamples[2]{f08StemLeft.data(),f08StemRight.data()};
  std::array<AudioBusBuffers,2> stemBuses{};
  stemBuses[0].numChannels=2;stemBuses[0].channelBuffers32=nullptr;
  stemBuses[1].numChannels=2;stemBuses[1].channelBuffers32=stemSamples;
@@ -815,8 +815,8 @@ int main(int argc,char** argv) {
  stemEvent.noteOn.velocity=1.f;stemEvent.noteOn.noteId=-1;
  require(events.addEvent(stemEvent)==kResultOk,"F08 add row 1 MIDI trigger");
  require(audio->process(data)==kResultOk,"F08 process with no MAIN buffers");
- for(float v:stemLeft)require(std::isfinite(v),"F08 invalid stem L");
- for(float v:stemRight)require(std::isfinite(v),"F08 invalid stem R");
+ for(float v:f08StemLeft)require(std::isfinite(v),"F08 invalid stem L");
+ for(float v:f08StemRight)require(std::isfinite(v),"F08 invalid stem R");
  data.outputs=priorOutputs;data.numOutputs=priorNumOutputs;
  require(component->activateBus(kAudio,kOutput,0,true)==kResultOk,
          "F08 reenable MAIN");
