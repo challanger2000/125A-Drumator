@@ -107,6 +107,8 @@ int main(int argc,char** argv) {
  setup.sampleRate=48000;setup.maxSamplesPerBlock=256;
  setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
  require(audio->setupProcessing(setup)==kResultOk,"setupProcessing 48 kHz");
+ require(audio->getTailSamples()==kInfiniteTail,
+         "Internal drum sequencer must request continuous host processing");
  require(component->setActive(true)==kResultOk,"setActive true");
  require(audio->setProcessing(true)==kResultOk,"setProcessing true");
  std::array<float,256> left{},right{};
@@ -735,6 +737,8 @@ int main(int argc,char** argv) {
  setup.sampleRate=44100;
  require(audio->setupProcessing(setup)==kResultOk,
          "Host sample rate 48k to 44.1k setup");
+ require(audio->getTailSamples()==kInfiniteTail,
+         "Generator tail changed after host sample-rate switch");
  require(component->setActive(true)==kResultOk,"Rate switch activate");
  require(audio->setProcessing(true)==kResultOk,"Rate switch resume");
  context.state=0;

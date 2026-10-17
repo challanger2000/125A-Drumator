@@ -323,7 +323,10 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  return Steinberg::kResultOk;
 }
 Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
- return 0; // no internal test-sound fixture; sample voice tails vary by file
+ // Internal sequencer can generate sound without MIDI or audio input.
+ // The host must continue processing during transport; individual sample
+ // duration cannot represent this generator's ongoing output.
+ return Steinberg::Vst::kInfiniteTail;
 }
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
  if(data.numSamples<0)return Steinberg::kInvalidArgument;
