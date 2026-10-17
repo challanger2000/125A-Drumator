@@ -162,9 +162,11 @@ if(DRUMATOR_BUILD_VST3)
     ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
     ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/eventlist.cpp)
   target_link_libraries(drumator_host_fixture PRIVATE sdk)
-  add_executable(drumator_audio_host_smoke tests/PackagedAudioHostSmoke.cpp)
+  add_executable(drumator_audio_host_smoke tests/PackagedAudioHostSmoke.cpp
+      src/vst3/FlacImport.cpp)
   target_link_libraries(drumator_audio_host_smoke PRIVATE
       sdk drumator_core drumator_host_fixture)
+  target_include_directories(drumator_audio_host_smoke PRIVATE "${_drflac_dir}")
   target_compile_features(drumator_audio_host_smoke PRIVATE cxx_std_17)
   if(MSVC)
     target_compile_options(drumator_audio_host_smoke PRIVATE /W4 /WX)
