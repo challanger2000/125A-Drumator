@@ -358,6 +358,50 @@ int main(int argc,char** argv) {
          "M27 inactive stem did not fall back to main stereo bus");
  data.numOutputs=1;data.outputs=&bus;
  std::cout<<"M27 active and inactive VST3 stereo stem routing PASS\\n";
+ // M30: two active stems simultaneously, plus an inactive row on MAIN.
+ require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,"Stem 2 activate");
+ require(component->activateBus(kAudio,kOutput,2,true)==kResultOk,"Stem 3 activate");
+ std::array<float,256> secondL{},secondR{};
+ float* secondChannels[2]{secondL.data(),secondR.data()};
+ AudioBusBuffers secondBus{};
+ secondBus.numChannels=2;secondBus.channelBuffers32=secondChannels;
+ AudioBusBuffers threeBuses[3]{bus,stemBus,secondBus};
+ data.numOutputs=3;data.outputs=threeBuses;
+ for(int n=0;n<7;++n)run(-1);
+ events.clear();
+ for(int pitch : {36,37,38}) {
+   Event note{};note.type=Event::kNoteOnEvent;note.busIndex=0;
+   note.sampleOffset=0;note.noteOn.pitch=static_cast<int16>(pitch);
+   note.noteOn.velocity=1.f;note.noteOn.noteId=-1;
+   require(events.addEvent(note)==kResultOk,"Simultaneous MIDI event");
+ }
+ left.fill(0);right.fill(0);stemLeft.fill(0);stemRight.fill(0);
+ secondL.fill(0);secondR.fill(0);
+ require(audio->process(data)==kResultOk,"Three-bus render");
+ auto average=[](const std::array<float,256>& a) {
+   double v=0;for(int n=50;n<190;++n)v+=a[n];return v/140.;
+ };
+ require(std::abs(average(left)-.10)<.02&&
+         std::abs(average(stemLeft)-.125)<.02&&
+         std::abs(average(secondL)-.15)<.02,
+         "Simultaneous main/stem levels or isolation incorrect");
+ require(std::abs(average(right)-.10)<.02&&
+         std::abs(average(stemRight)-.125)<.02&&
+         std::abs(average(secondR)-.15)<.02,
+         "Simultaneous stereo outputs mismatch");
+ events.clear();
+ require(component->activateBus(kAudio,kOutput,2,false)==kResultOk,
+         "Stem 3 deactivate");
+ for(int n=0;n<7;++n)run(-1);
+ run(38);
+ require(std::abs(average(left)-.15)<.02&&
+         std::abs(average(stemLeft))<.01,
+         "Disabled stem 3 did not return exclusively to MAIN");
+ require(component->activateBus(kAudio,kOutput,1,false)==kResultOk,
+         "Stem 2 deactivate");
+ data.numOutputs=1;data.outputs=&bus;
+ for(int n=0;n<7;++n)run(-1);
+ std::cout<<"M30 simultaneous three-instrument multi-out routing PASS\\n";
  // Invalid MIDI pitches and zero velocity must not trigger audio.
  for(int n=0;n<7;++n)run(-1);
  for(int pitch : {20,35,52,127}) {
