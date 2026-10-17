@@ -29,6 +29,20 @@ static void testMuteSoloPolicy() {
  gate.solo.fill(false);
  require(gate.audible(0)&&!gate.audible(1),"releasing solo must restore nonmuted rows");
 }
+static void testHighRatioSincRejection() {
+ SincKernel kernel;
+ require(kernel.prepare(1.0)&&kernel.taps()==32,"normal-rate tap count");
+ require(kernel.prepare(16.0)&&kernel.taps()==256,"high-ratio tap count");
+ const auto* h=kernel.phase(0);
+ double re=0.0,im=0.0;
+ constexpr double pi=3.14159265358979323846;
+ for(std::size_t i=0;i<kernel.taps();++i) {
+   const double angle=2.0*pi*0.04*
+       (static_cast<double>(i)-static_cast<double>(kernel.taps()/2-1));
+   re+=h[i]*std::cos(angle);im-=h[i]*std::sin(angle);
+ }
+ require(std::hypot(re,im)<0.01,"ratio-16 alias suppression below 40 dB");
+}
 static void testKernel() {
  SincKernel kernel;
  require(!kernel.prepare(0.0)&&!kernel.prepare(-1.0),"invalid ratio accepted");
@@ -281,7 +295,7 @@ int main() {
     for(std::size_t i=0;i<left.size();++i)
       require(left[i]==0.f&&right[i]==0.f,"empty sampler produced sound");
   }
-  testMuteSoloPolicy();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
+  testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testCapacityValidationAndAutomation();testBandlimiting();
   testStressAndRecovery();testSimultaneousStereoStems();
   std::cout<<"Drumator sample-voice regression: 10 groups PASS\n";
