@@ -429,6 +429,49 @@ int main(int argc,char** argv) {
  require(auditionLevel>1.0,
          "MIDI audition stopped working while host transport is stopped");
  std::cout<<"VST3 stop, invalid clock and stopped MIDI audition PASS\\n";
+ // Pattern-bank QA: real host playback after project recall of two patterns.
+ // A contains a hit at step zero; B has no hits at any step.
+ drumator::KitState patternKit=controlsKit;
+ patternKit.selected=0;
+ for(std::size_t row=0;row<drumator::kRows;++row)
+   for(std::size_t step=0;step<drumator::kSteps;++step) {
+     patternKit.grid[drumator::AtomicPatternBank::index(0,row,step)]=0;
+     patternKit.grid[drumator::AtomicPatternBank::index(1,row,step)]=0;
+   }
+ patternKit.grid[drumator::AtomicPatternBank::index(0,0,0)]=127;
+ std::vector<std::uint8_t> patternBytes;
+ require(drumator::KitCodec::encode(patternKit,patternBytes),"Pattern kit encode");
+ auto loadPattern=[&](std::uint8_t selected){
+   patternKit.selected=selected;
+   require(drumator::KitCodec::encode(patternKit,patternBytes),"Pattern encode");
+   require(audio->setProcessing(false)==kResultOk,"Pattern stop processing");
+   require(component->setActive(false)==kResultOk,"Pattern deactivate");
+   Steinberg::ResizableMemoryIBStream stream;
+   require(stream.writeRaw(patternBytes.data(),static_cast<TSize>(patternBytes.size()))==
+           static_cast<TSize>(patternBytes.size()),"Pattern write stream");
+   stream.rewind();
+   require(component->setState(&stream)==kResultOk,"Pattern recall");
+   require(component->setActive(true)==kResultOk,"Pattern activate");
+   require(audio->setProcessing(true)==kResultOk,"Pattern resume");
+ };
+ loadPattern(0);
+ context.tempo=120.;
+ context.projectTimeMusic=0.;
+ context.state=ProcessContext::kPlaying|
+               ProcessContext::kProjectTimeMusicValid|
+               ProcessContext::kTempoValid;
+ run(-1);
+ double aEnergy=0;
+ for(int n=50;n<190;++n)aEnergy+=std::abs(left[n]);
+ require(aEnergy>1.0,"Pattern A recall did not produce step 1 audio");
+ loadPattern(1);
+ context.projectTimeMusic=0.;
+ run(-1);
+ for(int n=0;n<256;++n)
+   require(left[n]==0.f&&right[n]==0.f,
+           "Pattern B silent grid unexpectedly produced audio");
+ context.state=0;
+ std::cout<<"VST3 distinct pattern recall and rendered playback PASS\\n";
  // A deterministic extended callback workload; this is NOT a paced,
  // real-time deadline or Studio One endurance test.
  for(int block=0;block<8192;++block) {
