@@ -795,6 +795,20 @@ int main(int argc,char** argv) {
  require(std::abs(ctrl->getParamNormalized(drumator::kPatternParam)-
                   static_cast<double>(controllerRecallKit.selected)/7.0)<1e-9,
          "F03 controller parameter not synchronized after recall");
+ // F03: create/destroy editor views around host-driven parameter updates
+ // and state recall. Checks controller/editor lifetime without a native HWND.
+ for(int repeat=0;repeat<3;++repeat) {
+   auto* view=ctrl->createView(ViewType::kEditor);
+   require(view!=nullptr,"F03 editor reopen returned null");
+   ViewRect bounds{};
+   require(view->getSize(&bounds)==kResultOk&&
+           bounds.right-bounds.left==1280,
+           "F03 reopened editor geometry");
+   require(ctrl->setParamNormalized(drumator::kPatternParam,
+            static_cast<double>(repeat)/7.0)==kResultOk,
+           "F03 parameter update with live editor object");
+   view->release();
+ }
  std::cout<<"F03 host controller state and parameter recall PASS\\n";
  // F04: hosts flush automation using zero sample frames and no output bus.
  // The saved component state must reflect the last flushed pattern.
