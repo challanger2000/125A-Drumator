@@ -603,6 +603,30 @@ int main(int argc,char** argv) {
  double returnedHit=0;
  for(int n=50;n<190;++n)returnedHit+=std::abs(left[n]);
  require(returnedHit>1.0,"Playing pattern A resume did not sound");
+ // M36: a program change at sample 64 must affect a step at sample 128
+ // without retroactively changing the first half of the audio block.
+ patternKit.grid[drumator::AtomicPatternBank::index(0,0,0)]=0;
+ patternKit.grid[drumator::AtomicPatternBank::index(1,0,1)]=127;
+ loadPattern(0);
+ context.tempo=5625.;
+ context.projectTimeMusic=0.;
+ patternChanges.clearQueue();
+ {
+   int32 index=0,point=0;
+   auto* queue=patternChanges.addParameterData(drumator::kPatternParam,index);
+   require(queue!=nullptr&&queue->addPoint(64,1./7.,point)==kResultOk,
+           "Mid-block pattern change event");
+ }
+ run(-1);
+ for(int n=0;n<128;++n)
+   require(left[n]==0.f&&right[n]==0.f,
+           "Mid-block pattern B was applied before scheduled step 1");
+ double midBlockHit=0.;
+ for(int n=180;n<240;++n)midBlockHit+=std::abs(left[n]);
+ require(midBlockHit>1.,"Mid-block program change missed step at sample 128");
+ patternChanges.clearQueue();
+ context.tempo=120.;
+ std::cout<<"M36 sample-offset pattern switch within host block PASS\\n";
  data.inputParameterChanges=nullptr;
  context.state=0;
  std::cout<<"VST3 distinct pattern recall and rendered playback PASS\\n";
