@@ -99,6 +99,17 @@ int main(int argc,char** argv) {
  HostApplication host;
  require(component->initialize(&host)==kResultOk,"Processor initialize");
  require(ctrl->initialize(&host)==kResultOk,"Controller initialize");
+ // F16: the host must see semantic A-H pattern names, not normalized decimals.
+ for(int i=0;i<8;++i) {
+   String128 label{};
+   require(ctrl->getParamStringByValue(
+       drumator::kPatternParam,static_cast<double>(i)/7.0,label)==kResultOk,
+       "Host pattern parameter string conversion failed");
+   require(label[0]==static_cast<TChar>('A'+i)&&label[1]==0,
+       "Host must display pattern letter A-H");
+ }
+ std::cout<<"F16 host pattern labels A-H PASS\\n";
+
  require(controlPoint->connect(processorPoint)==kResultOk,"Controller connection");
  require(processorPoint->connect(controlPoint)==kResultOk,"Processor connection");
  SpeakerArrangement stereo=SpeakerArr::kStereo;
@@ -753,6 +764,36 @@ int main(int argc,char** argv) {
  require(std::abs(rateChangedAudio/70.-.25)<.025,
          "Previously loaded sample failed after host rate switch");
  std::cout<<"M35 VST3 48k to 44.1k host rate switch playback PASS\\n";
+ // F04: hosts flush automation using zero sample frames and no output bus.
+ // The saved component state must reflect the last flushed pattern.
+ ParameterChanges flushChanges;
+ int32 flushQueueIndex=0;
+ auto* flushQueue=flushChanges.addParameterData(
+     drumator::kPatternParam,flushQueueIndex);
+ require(flushQueue!=nullptr,"F04 flush queue");
+ int32 flushPointIndex=0;
+ require(flushQueue->addPoint(0,5.0/7.0,flushPointIndex)==kResultOk,
+         "F04 flush point");
+ ProcessData flushData{};
+ flushData.numSamples=0;
+ flushData.numOutputs=0;
+ flushData.outputs=nullptr;
+ flushData.inputParameterChanges=&flushChanges;
+ flushData.symbolicSampleSize=kSample32;
+ flushData.processMode=kRealtime;
+ require(audio->process(flushData)==kResultOk,
+         "F04 host zero-frame automation flush");
+ Steinberg::ResizableMemoryIBStream flushedState;
+ require(component->getState(&flushedState)==kResultOk,
+         "F04 post-flush state");
+ drumator::KitState flushedKit;
+ require(drumator::KitCodec::decode(
+             static_cast<const std::uint8_t*>(flushedState.getData()),
+             flushedState.getCursor(),flushedKit),
+         "F04 state decode");
+ require(flushedKit.selected==5,
+         "F04 zero-frame automation lost the selected pattern");
+ std::cout<<"F04 zero-frame host automation state PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
