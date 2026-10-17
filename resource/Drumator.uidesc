@@ -11,12 +11,12 @@
         "attributes": {
           "class": "CViewContainer",
           "origin": "0, 0",
-          "size": "1100, 300",
+          "size": "1280, 300",
           "transparent": "false",
           "mouse-enabled": "true",
           "background-color": "~ BlackCColor",
-          "minSize": "1100, 300",
-          "maxSize": "1100, 650"
+          "minSize": "1280, 300",
+          "maxSize": "1280, 650"
         },
         "children": {
           "CView": {
@@ -24,7 +24,7 @@
               "class": "CView",
               "custom-view-name": "DrumatorStepGrid",
               "origin": "0, 0",
-              "size": "1100, 300",
+              "size": "1280, 300",
               "mouse-enabled": "true",
               "transparent": "false"
             }
