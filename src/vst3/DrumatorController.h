@@ -54,6 +54,7 @@ public:
  std::size_t currentPattern() noexcept;
  const std::string& label(std::size_t row) const noexcept;
 private:
+ Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
  std::array<std::string,kRows> labels_{};
  std::array<bool,kRows> muted_{};

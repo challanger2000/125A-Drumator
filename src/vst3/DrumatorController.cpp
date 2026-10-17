@@ -17,6 +17,12 @@
 #include <vector>
 
 namespace drumator {
+Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
+ const auto result=sendMessage(message);
+ if(result==Steinberg::kResultOk&&componentHandler2)
+   componentHandler2->setDirty(true);
+ return result;
+}
 namespace {
 constexpr Steinberg::uint32 kOldState=0x31524D44u;
 constexpr Steinberg::uint32 kNewState=0x32524D44u;
@@ -153,7 +159,7 @@ bool Controller::addRow() {
  auto* attrs=message->getAttributes();
  if(!attrs){message->release();return false;}
  attrs->setInt("Count",static_cast<Steinberg::int64>(visibleRows_+1));
- const auto good=sendMessage(message)==Steinberg::kResultOk;
+ const auto good=sendEditMessage(message)==Steinberg::kResultOk;
  message->release();
  if(good)++visibleRows_;
  return good;
@@ -166,7 +172,7 @@ bool Controller::hideLastEmptyRow() {
  auto* attrs=message->getAttributes();
  if(!attrs){message->release();return false;}
  attrs->setInt("Count",static_cast<Steinberg::int64>(visibleRows_-1));
- const auto good=sendMessage(message)==Steinberg::kResultOk;
+ const auto good=sendEditMessage(message)==Steinberg::kResultOk;
  message->release();
  if(good)--visibleRows_;
  return good;
@@ -184,7 +190,7 @@ bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  attr->setInt("Row",static_cast<Steinberg::int64>(r));
  attr->setInt("Step",static_cast<Steinberg::int64>(s));
  attr->setInt("Velocity",static_cast<Steinberg::int64>(next));
- const auto ok=sendMessage(msg)==Steinberg::kResultOk;
+ const auto ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
  return ok;
@@ -195,7 +201,7 @@ bool Controller::adjustHumanize(int delta) {
  msg->setMessageID("Drumator.Humanize");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
  attrs->setInt("Percent",next);
- const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();if(ok)humanizePercent_=static_cast<std::uint8_t>(next);
  return ok;
 }
@@ -205,7 +211,7 @@ bool Controller::adjustSwing(int delta) {
  msg->setMessageID("Drumator.Swing");
  auto* attr=msg->getAttributes();if(!attr){msg->release();return false;}
  attr->setInt("Percent",next);
- const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)swingPercent_=static_cast<std::uint8_t>(next);
  return ok;
@@ -216,7 +222,7 @@ bool Controller::clearSample(std::size_t row) {
  msg->setMessageID("Drumator.ClearSample");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
- const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)labels_[row]="LEER - WAV LADEN";
  return ok;
@@ -229,7 +235,7 @@ bool Controller::cycleRowChoke(std::size_t row) {
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  attrs->setInt("Group",next);
- const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)choke_[row]=next;
  return ok;
@@ -242,7 +248,7 @@ bool Controller::adjustRowPitch(std::size_t row,int delta) {
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  attrs->setInt("Semitones",proposed-24);
- const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)pitch_[row]=static_cast<std::uint8_t>(proposed);
  return ok;
@@ -257,7 +263,7 @@ bool Controller::adjustRowMix(std::size_t row,bool adjustPan,int delta) {
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  attrs->setInt("Gain",adjustPan?gain_[row]:proposed);
  attrs->setInt("Pan",adjustPan?proposed-100:static_cast<int>(pan_[row])-100);
- const bool accepted=sendMessage(msg)==Steinberg::kResultOk;
+ const bool accepted=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();if(accepted)values[row]=static_cast<std::uint8_t>(proposed);
  return accepted;
 }
@@ -273,7 +279,7 @@ bool Controller::toggleRowGate(std::size_t row,bool solo) {
  attr->setInt("Row",static_cast<Steinberg::int64>(row));
  attr->setInt("Solo",solo?1:0);
  attr->setInt("On",next?1:0);
- const bool ok=sendMessage(msg)==Steinberg::kResultOk;
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)gates[row]=next;
  return ok;
@@ -290,7 +296,7 @@ bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  attr->setInt("Row",static_cast<Steinberg::int64>(r));
  attr->setInt("Step",static_cast<Steinberg::int64>(s));
  attr->setInt("Velocity",static_cast<Steinberg::int64>(next));
- const auto ok=sendMessage(msg)==Steinberg::kResultOk;
+ const auto ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok)grid_[(p*kRows+r)*kSteps+s]=static_cast<std::uint8_t>(next);
  return ok;
@@ -350,7 +356,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
                     static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk) {
      msg->release();return LoadStatus::Rejected;
  }
- const bool accepted=sendMessage(msg)==Steinberg::kResultOk;
+ const bool accepted=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(!accepted)return LoadStatus::Rejected;
  // Success means the processor accepted the immutable asset for the
