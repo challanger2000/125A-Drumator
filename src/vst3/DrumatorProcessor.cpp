@@ -330,7 +330,25 @@ Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
 }
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
  if(data.numSamples<0)return Steinberg::kInvalidArgument;
- if(data.numSamples==0||data.numOutputs==0)return Steinberg::kResultOk;
+ // Hosts may flush discrete automation without providing any audio buffers.
+ if(data.numSamples==0||data.numOutputs==0) {
+   if(data.inputParameterChanges) {
+     for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
+       auto* queue=data.inputParameterChanges->getParameterData(i);
+       if(!queue||queue->getParameterId()!=kPatternParam)continue;
+       for(Steinberg::int32 j=0;j<queue->getPointCount();++j) {
+         Steinberg::int32 offset=0;
+         Steinberg::Vst::ParamValue value=0;
+         if(queue->getPoint(j,offset,value)==Steinberg::kResultTrue&&
+            offset>=0&&std::isfinite(value))
+           selected_.store(static_cast<std::uint32_t>(
+               std::lround(std::clamp(value,0.0,1.0)*7.0)),
+               std::memory_order_relaxed);
+       }
+     }
+   }
+   return Steinberg::kResultOk;
+ }
  if(!prepared_||data.symbolicSampleSize!=Steinberg::Vst::kSample32||
     !data.outputs||data.outputs[0].numChannels!=2||
     !data.outputs[0].channelBuffers32||

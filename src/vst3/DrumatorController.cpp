@@ -82,10 +82,17 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
    for(auto& step:candidate)
        if(!stream.readInt8u(step)||step>127)return Steinberg::kResultFalse;
    grid_=candidate;
- }else if(magic!=kOldState)return Steinberg::kResultFalse;
+ }else if(magic==kOldState) {
+   // DMR1 contains no grid; restore the identical factory pattern used by
+   // the processor instead of retaining edits from the preceding project.
+   grid_.fill(0);
+   for(std::size_t p=0;p<kPatterns;++p)
+     for(std::size_t step=0;step<kSteps;step+=4)
+       grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
+ }else return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
- gain_.fill(100);pan_.fill(100);
+ gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(auto& name:labels_)name="LEER - WAV LADEN";
  return setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
 }
@@ -129,7 +136,7 @@ bool Controller::changePattern(std::size_t pattern) {
 bool Controller::canHideLast() const noexcept {
  if(visibleRows_<=1||visibleRows_>kRows)return false;
  const auto row=static_cast<std::size_t>(visibleRows_-1);
- if(labels_[row]!="LEER - WAV LADEN")return false;
+ if(labels_[row]!="LEER - WAV LADEN"||solo_[row])return false;
  struct GridView {
   const Controller& ctrl;
   std::uint8_t get(std::size_t p,std::size_t r,std::size_t s) const noexcept {
