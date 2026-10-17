@@ -645,6 +645,37 @@ int main(int argc,char** argv) {
          clearedKit.wav[4]==makeWav(32,true,.20f),
          "Removed WAV persisted or unaffected row vanished");
  std::cout<<"M25 actual VST3 sample removal/audio/state QA PASS\\n";
+ // M34: transactional project recall through the actual VST3 component.
+ Steinberg::ResizableMemoryIBStream goodState;
+ require(component->getState(&goodState)==kResultOk,
+         "Save before malicious host state");
+ const auto* savedData=static_cast<const std::uint8_t*>(goodState.getData());
+ const auto savedCount=static_cast<std::size_t>(goodState.getCursor());
+ require(savedCount>100,"Saved kit unexpectedly short");
+ const std::vector<std::uint8_t> originalState(savedData,savedData+savedCount);
+ for(int fault=0;fault<3;++fault) {
+   auto damaged=originalState;
+   if(fault==0)damaged[90]^=0x40;
+   if(fault==1)damaged.back()^=0x20;
+   if(fault==2)damaged.resize(25);
+   Steinberg::ResizableMemoryIBStream corrupted;
+   Steinberg::int32 written=0;
+   require(corrupted.write(damaged.data(),static_cast<Steinberg::int32>(damaged.size()),
+                           &written)==kResultOk&&
+           written==static_cast<Steinberg::int32>(damaged.size()),
+           "Write corrupt state");
+   corrupted.rewind();
+   require(component->setState(&corrupted)!=kResultOk,
+           "Invalid project state accepted by VST3");
+   Steinberg::ResizableMemoryIBStream afterFailure;
+   require(component->getState(&afterFailure)==kResultOk,
+           "Save after failed recall");
+   require(static_cast<std::size_t>(afterFailure.getCursor())==originalState.size()&&
+           std::memcmp(afterFailure.getData(),originalState.data(),
+                       originalState.size())==0,
+           "Failed VST3 recall changed the active kit");
+ }
+ std::cout<<"M34 VST3 corrupt/truncated state rejection and rollback PASS\\n";
  // M26: real FLAC fixture, 128 frames of 0.25 PCM16 at 48 kHz.
  const std::uint8_t flacFixture[]{0x66,0x4c,0x61,0x43,0x00,0x00,0x00,0x22,0x10,0x00,0x10,0x00,0x00,0x00,0x0c,0x00,0x00,0x0c,0x0b,0xb8,0x00,0xf0,0x00,0x00,0x00,0x80,0xb1,0x44,0xc4,0xb3,0x94,0xfd,0x9c,0xff,0xe7,0x8c,0x33,0xf1,0x9d,0x64,0xa1,0x61,0x84,0x00,0x00,0x28,0x20,0x00,0x00,0x00,0x72,0x65,0x66,0x65,0x72,0x65,0x6e,0x63,0x65,0x20,0x6c,0x69,0x62,0x46,0x4c,0x41,0x43,0x20,0x31,0x2e,0x34,0x2e,0x33,0x20,0x32,0x30,0x32,0x33,0x30,0x36,0x32,0x33,0x00,0x00,0x00,0x00,0xff,0xf8,0x6a,0x08,0x00,0x7f,0x5d,0x01,0x00,0x09,0x04,0x3a};
  std::vector<std::uint8_t> imported;
