@@ -27,6 +27,8 @@ public:
  Steinberg::tresult PLUGIN_API setupProcessing(Steinberg::Vst::ProcessSetup&) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setBusArrangements(Steinberg::Vst::SpeakerArrangement*,
      Steinberg::int32,Steinberg::Vst::SpeakerArrangement*,Steinberg::int32) SMTG_OVERRIDE;
+ Steinberg::tresult PLUGIN_API activateBus(Steinberg::Vst::MediaType,
+     Steinberg::Vst::BusDirection,Steinberg::int32,Steinberg::TBool) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API canProcessSampleSize(Steinberg::int32) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API process(Steinberg::Vst::ProcessData&) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream*) SMTG_OVERRIDE;
@@ -52,6 +54,7 @@ private:
  std::array<std::atomic<std::uint8_t>,kRows> rowChoke_{};
  std::atomic<std::uint8_t> swingPercent_{0};
  std::atomic<std::uint8_t> humanizePercent_{0};
+ std::atomic<std::uint32_t> activeStemMask_{0};
  bool prepared_{false};
 };
 }
