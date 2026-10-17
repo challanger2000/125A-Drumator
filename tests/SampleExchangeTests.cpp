@@ -146,6 +146,23 @@ int main() {
     try {
         exerciseTransferAndOwnership();
         exerciseRejectAndWithdraw();
+        // M32: reject a sequence of defective replacements without touching
+        // the last successfully prepared sound or its ownership.
+        {
+          auto stable=makeAsset(pcm16(4096));
+          const auto* identity=stable.get();
+          auto bad=pcm16(4096);
+          for(int attempt=0;attempt<12;++attempt) {
+            bad[static_cast<std::size_t>(attempt%4)]^=0x40;
+            require(PreparedSample::fromWav(bad.data(),bad.size(),48000,
+                         0,1,0,0,false,stable)==PrepareStatus::InvalidWav,
+                    "corrupt sample replacement accepted");
+            require(stable.get()==identity,
+                    "failed sample replacement discarded valid sound");
+            bad=pcm16(4096);
+          }
+        }
+        std::cout<<"M32 repeated invalid sample replacement rollback PASS\\n";
         exerciseFailedPreparationIsTransactional();
         std::cout<<"Drumator WAV-to-voice exchange: 3 groups PASS\n";
         return 0;

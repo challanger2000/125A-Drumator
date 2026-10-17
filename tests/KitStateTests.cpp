@@ -192,6 +192,31 @@ int main() {
           "Full 16-row kit decode failed");
     check(copy.names==full.names&&copy.wav==full.wav&&copy.grid==full.grid,
           "Full 16-row kit did not roundtrip");
+    // M32: malformed projects must fail atomically without losing the current kit.
+    const auto valid16=encoded;
+    for(std::size_t index : {std::size_t{0},std::size_t{4},std::size_t{8},
+                              std::size_t{40},std::size_t{80},
+                              valid16.size()/2,valid16.size()-1}) {
+      auto corrupted=valid16;
+      corrupted[index]^=0x5a;
+      KitState preserved=copy;
+      check(!KitCodec::decode(corrupted.data(),corrupted.size(),copy),
+            "Corrupted 16-row project unexpectedly accepted");
+      check(copy.wav==preserved.wav&&copy.names==preserved.names&&
+            copy.grid==preserved.grid&&copy.selected==preserved.selected,
+            "Failed 16-row recall changed the active project");
+    }
+    for(std::size_t length : {std::size_t{0},std::size_t{1},
+                               std::size_t{7},std::size_t{64},
+                               valid16.size()-1}) {
+      KitState preserved=copy;
+      check(!KitCodec::decode(valid16.data(),length,copy),
+            "Truncated project unexpectedly accepted");
+      check(copy.wav==preserved.wav&&copy.names==preserved.names&&
+            copy.grid==preserved.grid,
+            "Truncated project changed active kit");
+    }
+    std::cout<<"M32 corrupt and truncated 16-row project rollback PASS\\n";
     // Both independent caps must reject, without modifying an earlier result.
     const auto previous=encoded;
     full.wav[0].resize(kMaxSingleWav+1,0);
