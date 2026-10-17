@@ -1,5 +1,6 @@
 #include "DrumatorController.h"
 #include "DrumatorView.h"
+#include "DrumatorEditor.h"
 #include "PluginIDs.h"
 #include "core/WavPcm16Decoder.h"
 #include "core/FlacImport.h"
@@ -127,7 +128,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
 }
 Steinberg::IPlugView* PLUGIN_API Controller::createView(Steinberg::FIDString name) {
  if(name&&std::strcmp(name,Steinberg::Vst::ViewType::kEditor)==0) {
-    auto* editor=new VSTGUI::VST3Editor(this,"DrumatorView","Drumator.uidesc");
+    auto* editor=new DrumatorEditor(this,"DrumatorView","Drumator.uidesc");
     editor->setAllowedZoomFactors({1.0,1.5});
     return editor;
  }

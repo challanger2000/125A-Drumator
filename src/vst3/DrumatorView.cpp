@@ -1,4 +1,5 @@
 #include "DrumatorView.h"
+#include "DrumatorEditor.h"
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "vstgui/lib/cdrawcontext.h"
@@ -93,11 +94,9 @@ bool DrumatorView::attached(VSTGUI::CView* parent) {
 }
 bool DrumatorView::adjustEditorHeight() {
  const double height=contentHeight(controller_.visibleRows());
- const auto zoom=editor_.getZoomFactor();
  // The host owns its window; reject an unsupported host resize explicitly.
- // getAbsScaleFactor() is protected in the pinned VSTGUI build.
- // Use supported public zoom here; HiDPI integration remains open.
- const auto effectiveScale=zoom;
+ // The editor combines user zoom with host content scaling.
+ const auto effectiveScale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
    status_="HOST HAT FENSTERGROESSE ABGELEHNT";
    invalid();return false;
