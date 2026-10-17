@@ -497,10 +497,18 @@ int main(int argc,char** argv) {
  require(firstHit>1.0,"Playing pattern A initial hit missing");
  context.projectTimeMusic=.25;
  switchPattern(1);
+ // Switching patterns must not cut an already ringing one-shot.
+ // The sound loaded in row 1 has 1024 frames; drain it while B remains
+ // selected and the host clock advances continuously.
  run(-1);
+ for(int block=1;block<=6;++block) {
+   context.projectTimeMusic=.25+
+      static_cast<double>(block*256)*context.tempo/(60.0*48000.0);
+   run(-1);
+ }
  for(int n=0;n<256;++n)
    require(left[n]==0.f&&right[n]==0.f,
-           "Playing silent B leaked voices or previous A steps");
+           "Silent pattern B emitted new events after previous voice decayed");
  context.projectTimeMusic=0.;
  switchPattern(0);
  run(-1);
