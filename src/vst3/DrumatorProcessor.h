@@ -51,6 +51,7 @@ private:
  std::array<std::atomic<float>,kRows> rowPan_{};
  std::array<std::atomic<std::uint8_t>,kRows> rowChoke_{};
  std::atomic<std::uint8_t> swingPercent_{0};
+ std::atomic<std::uint8_t> humanizePercent_{0};
  bool prepared_{false};
 };
 }
