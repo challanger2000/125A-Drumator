@@ -704,6 +704,27 @@ int main(int argc,char** argv) {
  require(std::abs(fromFlac/70.-.25)<.015,
          "FLAC-derived sample played at wrong amplitude");
  std::cout<<"M26 real FLAC decoder and packaged VST3 playback PASS\\n";
+ // M35: a host changes sample rate after samples are already loaded.
+ // The processor must rebuild prepared sample assets and resume audition.
+ require(audio->setProcessing(false)==kResultOk,"Rate switch stop");
+ require(component->setActive(false)==kResultOk,"Rate switch deactivate");
+ setup.sampleRate=44100;
+ require(audio->setupProcessing(setup)==kResultOk,
+         "Host sample rate 48k to 44.1k setup");
+ require(component->setActive(true)==kResultOk,"Rate switch activate");
+ require(audio->setProcessing(true)==kResultOk,"Rate switch resume");
+ context.state=0;
+ for(int n=0;n<9;++n)run(-1);
+ run(36);
+ double rateChangedAudio=0;
+ for(int n=30;n<100;++n) {
+   require(std::isfinite(left[n])&&std::isfinite(right[n]),
+           "Rate switch produced invalid audio");
+   rateChangedAudio+=left[n];
+ }
+ require(std::abs(rateChangedAudio/70.-.25)<.025,
+         "Previously loaded sample failed after host rate switch");
+ std::cout<<"M35 VST3 48k to 44.1k host rate switch playback PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
