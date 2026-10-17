@@ -1,7 +1,16 @@
 #include "core/FlacImport.h"
 #include "core/WavPcm16Decoder.h"
+// A warning in pinned upstream dr_flac 6575 is not actionable in our wrapper.
+// Suppress precisely its MSVC size_t narrowing warning, not project warnings.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4267)
+#endif
 #define DR_FLAC_IMPLEMENTATION
 #include <dr_flac.h>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 #include <cmath>
 #include <cstring>
 #include <limits>
