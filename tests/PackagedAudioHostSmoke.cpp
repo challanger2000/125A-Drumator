@@ -776,6 +776,26 @@ int main(int argc,char** argv) {
  require(std::abs(rateChangedAudio/70.-.25)<.025,
          "Previously loaded sample failed after host rate switch");
  std::cout<<"M35 VST3 48k to 44.1k host rate switch playback PASS\\n";
+ // F03: verify the public host parameter/recall path on the live controller.
+ require(ctrl->setParamNormalized(drumator::kPatternParam,3.0/7.0)==kResultOk,
+         "F03 host-driven parameter update rejected");
+ require(std::abs(ctrl->getParamNormalized(drumator::kPatternParam)-3.0/7.0)<1e-9,
+         "F03 controller lost host pattern update");
+ Steinberg::ResizableMemoryIBStream controllerRecallState;
+ require(component->getState(&controllerRecallState)==kResultOk,
+         "F03 state snapshot");
+ controllerRecallState.rewind();
+ require(ctrl->setComponentState(&controllerRecallState)==kResultOk,
+         "F03 controller state recall");
+ drumator::KitState controllerRecallKit;
+ require(drumator::KitCodec::decode(
+           static_cast<const std::uint8_t*>(controllerRecallState.getData()),
+           controllerRecallState.getCursor(),controllerRecallKit),
+         "F03 recalled kit decode");
+ require(std::abs(ctrl->getParamNormalized(drumator::kPatternParam)-
+                  static_cast<double>(controllerRecallKit.selected)/7.0)<1e-9,
+         "F03 controller parameter not synchronized after recall");
+ std::cout<<"F03 host controller state and parameter recall PASS\\n";
  // F04: hosts flush automation using zero sample frames and no output bus.
  // The saved component state must reflect the last flushed pattern.
  ParameterChanges flushChanges;
