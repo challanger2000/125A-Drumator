@@ -148,15 +148,15 @@ int main(){
     constexpr std::uint32_t totalFrames=96000;
     const auto reference=get(dense,Clock{0,tempo,rate,96000,true,.5,1.});
     std::vector<Trigger> split;
-    std::uint32_t cursor=0;
-    while(cursor<totalFrames) {
-      const auto count=std::min(std::uint32_t{127},totalFrames-cursor);
-      const auto ppq=static_cast<double>(cursor)*tempo/(60*rate);
+    std::uint32_t swingFrameCursor=0;
+    while(swingFrameCursor<totalFrames) {
+      const auto count=std::min(std::uint32_t{127},totalFrames-swingFrameCursor);
+      const auto ppq=static_cast<double>(swingFrameCursor)*tempo/(60*rate);
       for(auto hit:get(dense,Clock{ppq,tempo,rate,static_cast<int>(count),true,.5,1.})) {
-        hit.sampleOffset+=cursor;
+        hit.sampleOffset+=swingFrameCursor;
         split.push_back(hit);
       }
-      cursor+=count;
+      swingFrameCursor+=count;
     }
     check(reference.size()==split.size(),"swing/humanize partition event count");
     for(std::size_t i=0;i<reference.size();++i)
