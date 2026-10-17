@@ -95,7 +95,12 @@ void DrumatorView::adjustEditorHeight() {
  const double height=contentHeight(controller_.visibleRows());
  const auto zoom=editor_.getZoomFactor();
  // The host owns its window; reject an unsupported host resize explicitly.
- editor_.requestResize({1280.0*zoom,height*zoom});
+ const auto scale=editor_.getAbsScaleFactor();
+ const auto effectiveScale=scale>0.0?scale:zoom;
+ if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
+   status_="HOST HAT FENSTERGROESSE ABGELEHNT";
+   invalid();return;
+ }
  if(auto* container=getParentView()) {
    container->setViewSize({0,0,1280,height});
  }

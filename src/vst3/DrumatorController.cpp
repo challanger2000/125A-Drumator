@@ -46,8 +46,12 @@ constexpr auto kRowsState=kStateMagicV3;
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
  const auto result=EditController::initialize(context);
  if(result!=Steinberg::kResultOk)return result;
- parameters.addParameter(STR16("Pattern"),nullptr,7,0.0,
-                         Steinberg::Vst::ParameterInfo::kCanAutomate,kPatternParam);
+ auto* patterns=new Steinberg::Vst::StringListParameter(STR16("Pattern"),kPatternParam);
+ patterns->appendString(STR16("A"));patterns->appendString(STR16("B"));
+ patterns->appendString(STR16("C"));patterns->appendString(STR16("D"));
+ patterns->appendString(STR16("E"));patterns->appendString(STR16("F"));
+ patterns->appendString(STR16("G"));patterns->appendString(STR16("H"));
+ parameters.addParameter(patterns);
  // Provisional processor factory rhythm on row one for integration tests.
  for(std::size_t p=0;p<kPatterns;++p)
    for(std::size_t step=0;step<kSteps;step+=4)
