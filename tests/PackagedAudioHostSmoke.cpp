@@ -423,6 +423,29 @@ int main(int argc,char** argv) {
    require(left[i]==0.f&&right[i]==0.f,
            "Zero velocity MIDI note produced sound");
  events.clear();
+ // MIDI event offset must be sample-accurate in the packaged VST3.
+ // An offset of 128 frames must not create audio earlier in this block.
+ for(int tail=0;tail<7;++tail)run(-1);
+ events.clear();
+ Event offsetNote{};
+ offsetNote.type=Event::kNoteOnEvent;
+ offsetNote.busIndex=0;
+ offsetNote.sampleOffset=128;
+ offsetNote.noteOn.pitch=36;
+ offsetNote.noteOn.velocity=1.f;
+ offsetNote.noteOn.noteId=-1;
+ require(events.addEvent(offsetNote)==kResultOk,"Offset note add");
+ left.fill(-99.f);right.fill(-99.f);
+ require(audio->process(data)==kResultOk,"Offset MIDI process");
+ for(int n=0;n<128;++n)
+    require(left[n]==0.f&&right[n]==0.f,
+            "MIDI onset rendered before its sample offset");
+ double delayedEnergy=0;
+ for(int n=178;n<244;++n)delayedEnergy+=std::abs(left[n]);
+ require(delayedEnergy>1.0,"MIDI onset missing at specified sample offset");
+ events.clear();
+ for(int tail=0;tail<7;++tail)run(-1);
+ std::cout<<"MIDI 128-frame sample-accurate onset PASS\\n";
  // Functional QA: control messages must update actual saved component state.
  auto percentage=[&](const char* id,int number)->tresult {
    HostMessage message;message.setMessageID(id);
