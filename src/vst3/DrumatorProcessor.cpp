@@ -61,6 +61,20 @@ Steinberg::tresult PLUGIN_API Processor::setBusArrangements(
  // Fixed stereo arrangements; optional stem buses are activated by host.
  return Steinberg::kResultTrue;
 }
+Steinberg::tresult PLUGIN_API Processor::activateBus(
+ Steinberg::Vst::MediaType type,Steinberg::Vst::BusDirection dir,
+ Steinberg::int32 index,Steinberg::TBool state) {
+ const auto result=AudioEffect::activateBus(type,dir,index,state);
+ if(result!=Steinberg::kResultOk)return result;
+ if(type==Steinberg::Vst::MediaTypes::kAudio&&
+    dir==Steinberg::Vst::BusDirections::kOutput&&
+    index>0&&index<static_cast<Steinberg::int32>(kRows)) {
+    const auto bit=std::uint32_t{1}<<static_cast<unsigned>(index);
+    if(state)activeStemMask_.fetch_or(bit,std::memory_order_relaxed);
+    else activeStemMask_.fetch_and(~bit,std::memory_order_relaxed);
+ }
+ return result;
+}
 Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 size) {
  return size==Steinberg::Vst::kSample32?Steinberg::kResultTrue:Steinberg::kResultFalse;
 }
@@ -387,7 +401,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  for(Steinberg::int32 bus=1;bus<data.numOutputs&&
                          bus<static_cast<Steinberg::int32>(kRows);++bus) {
    const auto& stem=data.outputs[bus];
-   if(stem.numChannels==2&&stem.channelBuffers32&&
+   if((activeStemMask_.load(std::memory_order_relaxed)&
+       (std::uint32_t{1}<<static_cast<unsigned>(bus)))&&
+      stem.numChannels==2&&stem.channelBuffers32&&
       stem.channelBuffers32[0]&&stem.channelBuffers32[1]) {
      stemsL[static_cast<std::size_t>(bus)]=stem.channelBuffers32[0];
      stemsR[static_cast<std::size_t>(bus)]=stem.channelBuffers32[1];
