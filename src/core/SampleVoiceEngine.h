@@ -146,7 +146,9 @@ public:
     }
 
     RenderResult render(const Trigger* triggers,std::size_t triggerCount,
-                        float* left,float* right,std::uint32_t frames) noexcept {
+                        float* left,float* right,std::uint32_t frames,
+                        float* const* stemLeft=nullptr,
+                        float* const* stemRight=nullptr) noexcept {
         if(!left||!right||(triggerCount&&!triggers))return {RenderStatus::InvalidInput};
         // Reject malformed event arrays atomically, before modifying voice
         // state or buffers. No event reordering/allocations in audio callback.
@@ -162,6 +164,12 @@ public:
         }
         std::fill_n(left,frames,0.f);
         std::fill_n(right,frames,0.f);
+        if(stemLeft&&stemRight)for(std::size_t bus=1;bus<kRows;++bus) {
+           if(stemLeft[bus]&&stemRight[bus]) {
+             std::fill_n(stemLeft[bus],frames,0.f);
+             std::fill_n(stemRight[bus],frames,0.f);
+           }
+        }
         RenderResult result{};
         std::size_t event=0;
         for(std::uint32_t f=0;f<frames;++f) {
@@ -200,8 +208,15 @@ public:
                              static_cast<double>(voice.releaseTotal);
                     --voice.releaseLeft;
                 }
-                l+=vl*voice.gainL*envelope;
-                r+=vr*voice.gainR*envelope;
+                const auto a=static_cast<float>(vl*voice.gainL*envelope);
+                const auto b=static_cast<float>(vr*voice.gainR*envelope);
+                if(stemLeft&&stemRight&&voice.row>0&&
+                   stemLeft[voice.row]&&stemRight[voice.row]) {
+                   stemLeft[voice.row][f]+=a;
+                   stemRight[voice.row][f]+=b;
+                }else {
+                   l+=a;r+=b;
+                }
                 voice.position+=voice.kernel->ratio();
                 if((voice.releaseTotal>0&&voice.releaseLeft==0)||
                    voice.position>=static_cast<double>(voice.sample.frames))
@@ -221,6 +236,7 @@ private:
         double gainL{0.0},gainR{0.0};
         std::uint32_t releaseLeft{0},releaseTotal{0};
         std::uint8_t group{0};
+        std::uint8_t row{0};
         const void* ownerToken{nullptr};
         bool active{false};
     };
@@ -253,6 +269,7 @@ private:
             v.gainR=static_cast<double>(row.gain)*velocity*
                     (pan>=0.0?1.0:std::cos(-pan*pi/2.0));
             v.group=row.chokeGroup;
+            v.row=event.row;
             v.ownerToken=row.ownerToken;
             v.releaseTotal=0;
             v.releaseLeft=0;
