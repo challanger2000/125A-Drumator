@@ -337,6 +337,36 @@ int main(int argc,char** argv) {
              "Extended processing encountered nonfinite output");
  }
  std::cout<<"M11 full 16-row packaged audio and 8192-block finite-output PASS\n";
+ // M25: exercise M24 sample removal through the actual packaged VST3.
+ // Prior one-shots are drained; all other rows must remain playable.
+ HostMessage clear;
+ clear.setMessageID("Drumator.ClearSample");
+ require(clear.getAttributes()->setInt("Row",3)==kResultOk,
+         "Clear row attribute");
+ require(processorPoint->notify(&clear)==kResultOk,
+         "Remove sample from row 4 failed");
+ for(int i=0;i<5;++i)run(-1);
+ run(39);
+ for(int n=0;n<256;++n)
+   require(left[n]==0.f&&right[n]==0.f,
+           "Removed sample row still emitted audio");
+ run(40);
+ double neighbor=0.0;
+ for(int n=50;n<190;++n)neighbor+=left[n];
+ require(std::abs(neighbor/140.-0.20)<0.02,
+         "Removing row 4 damaged neighboring row 5");
+ Steinberg::ResizableMemoryIBStream clearedState;
+ require(component->getState(&clearedState)==kResultOk,
+         "Save after clearing sample failed");
+ drumator::KitState clearedKit;
+ require(drumator::KitCodec::decode(
+            static_cast<const std::uint8_t*>(clearedState.getData()),
+            clearedState.getCursor(),clearedKit),
+         "Cleared kit failed state decode");
+ require(clearedKit.wav[3].empty()&&clearedKit.names[3].empty()&&
+         clearedKit.wav[4]==makeWav(32,true,.20f),
+         "Removed WAV persisted or unaffected row vanished");
+ std::cout<<"M25 actual VST3 sample removal/audio/state QA PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
