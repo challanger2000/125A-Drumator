@@ -7,6 +7,8 @@ namespace drumator {
 class Controller;
 class DrumatorView final : public VSTGUI::CView {
 public:
+ ~DrumatorView() override;
+ void refreshFromHost(bool relayout);
  DrumatorView(const VSTGUI::CRect& size,Controller& controller,
               VSTGUI::VST3Editor& editor);
  void draw(VSTGUI::CDrawContext* context) override;

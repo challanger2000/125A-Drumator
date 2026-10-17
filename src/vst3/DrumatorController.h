@@ -8,8 +8,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace drumator {
+class DrumatorView;
 class Controller final : public Steinberg::Vst::EditController,
                          public VSTGUI::VST3EditorDelegate {
 public:
@@ -18,6 +20,9 @@ public:
  }
  Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream*) SMTG_OVERRIDE;
+ Steinberg::tresult PLUGIN_API setParamNormalized(Steinberg::Vst::ParamID,Steinberg::Vst::ParamValue) SMTG_OVERRIDE;
+ void registerView(DrumatorView* view);
+ void unregisterView(DrumatorView* view);
  Steinberg::IPlugView* PLUGIN_API createView(Steinberg::FIDString name) SMTG_OVERRIDE;
  VSTGUI::CView* createCustomView(VSTGUI::UTF8StringPtr name,
                   const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
@@ -54,6 +59,8 @@ public:
  std::size_t currentPattern() noexcept;
  const std::string& label(std::size_t row) const noexcept;
 private:
+ void notifyViews(bool relayout);
+ std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
  std::array<std::string,kRows> labels_{};

@@ -79,6 +79,13 @@ private:
 std::size_t DrumatorView::visibleRowsForHit() const noexcept {
  return controller_.visibleRows();
 }
+DrumatorView::~DrumatorView() {
+ controller_.unregisterView(this);
+}
+void DrumatorView::refreshFromHost(bool relayout) {
+ if(relayout&&getParentView())adjustEditorHeight();
+ else invalid();
+}
 bool DrumatorView::attached(VSTGUI::CView* parent) {
  const auto result=CView::attached(parent);
  if(result)adjustEditorHeight();
@@ -100,6 +107,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  : CView(size),controller_(controller),editor_(editor) {
  setMouseEnabled(true);
  setDropTarget(VSTGUI::makeOwned<DrumatorDropTarget>(*this));
+ controller_.registerView(this);
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);

@@ -17,6 +17,21 @@
 #include <vector>
 
 namespace drumator {
+void Controller::registerView(DrumatorView* view) {
+ if(view)views_.push_back(view);
+}
+void Controller::unregisterView(DrumatorView* view) {
+ views_.erase(std::remove(views_.begin(),views_.end(),view),views_.end());
+}
+void Controller::notifyViews(bool relayout) {
+ for(auto* view:views_)if(view)view->refreshFromHost(relayout);
+}
+Steinberg::tresult PLUGIN_API Controller::setParamNormalized(
+    Steinberg::Vst::ParamID id,Steinberg::Vst::ParamValue value) {
+ const auto result=EditController::setParamNormalized(id,value);
+ if(result==Steinberg::kResultOk&&id==kPatternParam)notifyViews(false);
+ return result;
+}
 Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
  const auto result=sendMessage(message);
  if(result==Steinberg::kResultOk&&componentHandler2)
@@ -73,8 +88,10 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        for(std::size_t row=0;row<kRows;++row)
           labels_[row]=candidate.names[row].empty()
                         ?"LEER - WAV LADEN":candidate.names[row];
-       return setParamNormalized(kPatternParam,
+       const auto result=setParamNormalized(kPatternParam,
                   static_cast<double>(candidate.selected)/7.0);
+       if(result==Steinberg::kResultOk)notifyViews(true);
+       return result;
     }catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
  }
  if(next>=kPatterns)return Steinberg::kResultFalse;
@@ -100,7 +117,9 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(auto& name:labels_)name="LEER - WAV LADEN";
- return setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
+ const auto result=setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
+ if(result==Steinberg::kResultOk)notifyViews(true);
+ return result;
 }
 Steinberg::IPlugView* PLUGIN_API Controller::createView(Steinberg::FIDString name) {
  if(name&&std::strcmp(name,Steinberg::Vst::ViewType::kEditor)==0) {
