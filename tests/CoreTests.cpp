@@ -142,6 +142,28 @@ int main(){
     }
     check(unsplit==split,"partition mismatch at alternate rate/tempo");
   }
+  // Combined swing/humanize must not depend on host buffer partitioning.
+  for(double rate : {44100.,48000.}) {
+    const double tempo=123.;
+    constexpr std::uint32_t totalFrames=96000;
+    const auto reference=get(dense,Clock{0,tempo,rate,96000,true,.5,1.});
+    std::vector<Trigger> split;
+    std::uint32_t cursor=0;
+    while(cursor<totalFrames) {
+      const auto count=std::min(std::uint32_t{127},totalFrames-cursor);
+      const auto ppq=static_cast<double>(cursor)*tempo/(60*rate);
+      for(auto hit:get(dense,Clock{ppq,tempo,rate,static_cast<int>(count),true,.5,1.})) {
+        hit.sampleOffset+=cursor;
+        split.push_back(hit);
+      }
+      cursor+=count;
+    }
+    check(reference.size()==split.size(),"swing/humanize partition event count");
+    for(std::size_t i=0;i<reference.size();++i)
+      check(reference[i].sampleOffset==split[i].sampleOffset&&
+            reference[i].velocity==split[i].velocity,
+            "swing/humanize changed under split blocks");
+  }
   std::cout<<"Drumator step core: all test groups PASS\n";
   return 0;
  } catch(const std::exception& ex){
