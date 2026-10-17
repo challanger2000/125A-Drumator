@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/core/**'
       - 'src/vst3/**'
+      - 'resource/**'
       - 'tests/**'
       - 'CMakeLists.txt'
       - '.github/workflows/core-ci.yml'
