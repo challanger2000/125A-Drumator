@@ -37,6 +37,8 @@ public:
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
  bool adjustSwing(int delta);
+ bool adjustHumanize(int delta);
+ unsigned humanizePercent() const noexcept {return humanizePercent_;}
  unsigned swingPercent() const noexcept {return swingPercent_;}
  bool addRow();
  bool hideLastEmptyRow();
@@ -61,5 +63,6 @@ private:
  std::array<std::uint8_t,kRows> choke_{};
  std::uint8_t visibleRows_{kDefaultVisibleRows};
  std::uint8_t swingPercent_{0};
+ std::uint8_t humanizePercent_{0};
 };
 }
