@@ -95,8 +95,9 @@ void DrumatorView::adjustEditorHeight() {
  const double height=contentHeight(controller_.visibleRows());
  const auto zoom=editor_.getZoomFactor();
  // The host owns its window; reject an unsupported host resize explicitly.
- const auto scale=editor_.getAbsScaleFactor();
- const auto effectiveScale=scale>0.0?scale:zoom;
+ // getAbsScaleFactor() is protected in the pinned VSTGUI build.
+ // Use supported public zoom here; HiDPI integration remains open.
+ const auto effectiveScale=zoom;
  if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
    status_="HOST HAT FENSTERGROESSE ABGELEHNT";
    invalid();return;
