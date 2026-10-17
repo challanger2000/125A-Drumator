@@ -39,7 +39,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -55,6 +55,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        grid_=candidate.grid;
        visibleRows_=candidate.visible;
        swingPercent_=candidate.swing;
+       humanizePercent_=candidate.humanize;
        for(std::size_t row=0;row<kRows;++row) {
           muted_[row]=(candidate.muted&(1u<<row))!=0;
           solo_[row]=(candidate.solo&(1u<<row))!=0;
@@ -81,7 +82,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
    grid_=candidate;
  }else if(magic!=kOldState)return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
- muted_.fill(false);solo_.fill(false);swingPercent_=0;
+ muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  gain_.fill(100);pan_.fill(100);
  for(auto& name:labels_)name="LEER - WAV LADEN";
  return setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
