@@ -266,7 +266,9 @@ static void testHighRatio64VoiceStress() {
    auto result=engine.render(hits.data(),hits.size(),l.data(),r.data(),256);
    require(result.status==RenderStatus::Ok&&result.accepted==64,
            "16x maximum-polyphony launch");
-   for(int block=0;block<20;++block) {
+   // 131072 source frames / 16x = 8192 output frames;
+   // drain beyond that full duration before asserting voice reclamation.
+   for(int block=0;block<35;++block) {
      for(float v:l)require(std::isfinite(v),"16x nonfinite left");
      for(float v:r)require(std::isfinite(v),"16x nonfinite right");
      result=engine.render(nullptr,0,l.data(),r.data(),256);
