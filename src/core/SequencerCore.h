@@ -48,6 +48,7 @@ struct Clock {
  std::int32_t frames{0};
  bool playing{false};
  double swing{0.0}; // 0..0.5 of a 16th step, delayed odd steps
+ double humanize{0.0}; // 0..1 deterministic timing and velocity
 };
 struct Trigger {
  std::uint32_t sampleOffset;
@@ -65,7 +66,8 @@ public:
  static ScheduleResult run(const Bank& b,const Clock& c,Callback&& emit) noexcept {
    if(!std::isfinite(c.ppq)||!std::isfinite(c.bpm)||!std::isfinite(c.rate)||
       c.bpm<=0||c.rate<=0||c.frames<0||
-      !std::isfinite(c.swing)||c.swing<0.0||c.swing>0.5)return {ScheduleStatus::InvalidClock,0};
+      !std::isfinite(c.swing)||c.swing<0.0||c.swing>0.5||
+      !std::isfinite(c.humanize)||c.humanize<0.0||c.humanize>1.0)return {ScheduleStatus::InvalidClock,0};
    if(!c.playing||!c.frames)return {};
    const long double start=static_cast<long double>(c.ppq)*4.0L;
    const long double stepSamples=15.0L*static_cast<long double>(c.rate)/
@@ -74,7 +76,7 @@ public:
    const long double end=start+static_cast<long double>(c.frames)/stepSamples;
    const auto tol=8.0L*std::numeric_limits<double>::epsilon()*
        std::max(1.0L,std::max(std::fabs(start),std::fabs(end)));
-   const auto beginFloat=std::ceil(start-(c.swing>0.0?1.0L:0.0L)-tol),endFloat=std::ceil(end-tol);
+   const auto beginFloat=std::ceil(start-1.0L-tol),endFloat=std::ceil(end-tol);
    const auto minIndex=static_cast<long double>(std::numeric_limits<std::int64_t>::min()+1);
    const auto maxIndex=static_cast<long double>(std::numeric_limits<std::int64_t>::max()-1);
    if(!std::isfinite(beginFloat)||!std::isfinite(endFloat)||
@@ -93,7 +95,14 @@ public:
    const auto last=static_cast<std::int64_t>(endFloat);
    for(auto absolute=first;absolute<last;++absolute){
      const auto swingOffset=(absolute%2!=0)?static_cast<long double>(c.swing):0.0L;
-     const auto position=(static_cast<long double>(absolute)+swingOffset-start)*stepSamples;
+     const auto seed=static_cast<std::uint64_t>(absolute);
+     const auto mixed=(seed^(seed>>30))*0xbf58476d1ce4e5b9ULL;
+     const auto mixed2=(mixed^(mixed>>27))*0x94d049bb133111ebULL;
+     const auto bits=mixed2^(mixed2>>31);
+     // Delay only: bounded to 10% of one step, never reorders steps.
+     const auto jitter=static_cast<long double>(c.humanize)*
+                       static_cast<long double>(bits&0xffffu)/65535.0L*0.1L;
+     const auto position=(static_cast<long double>(absolute)+swingOffset+jitter-start)*stepSamples;
      const auto eps=ppqErrorInSamples+
        16.0L*std::numeric_limits<double>::epsilon()*
        std::max(1.0L,std::fabs(position));
@@ -106,9 +115,14 @@ public:
      for(std::size_t row=0;row<kRows;++row){
        const auto velocity=b.get(p,row,index);
        if(velocity){
+         const auto rowSeed=bits^(static_cast<std::uint64_t>(row)+1)*0x9e3779b97f4a7c15ULL;
+         const int deviation=static_cast<int>((rowSeed>>24)%25)-12;
+         const int varied=std::clamp(static_cast<int>(velocity)+
+                       static_cast<int>(std::lround(deviation*c.humanize)),1,127);
          emit(Trigger{static_cast<std::uint32_t>(frame),
                       static_cast<std::uint8_t>(row),
-                      static_cast<std::uint8_t>(index),velocity,p});
+                      static_cast<std::uint8_t>(index),
+                      static_cast<std::uint8_t>(varied),p});
          ++result.count;
        }
      }
