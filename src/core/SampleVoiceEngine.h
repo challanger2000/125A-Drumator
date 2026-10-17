@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <vector>
+#include <new>
 
 namespace drumator {
 
@@ -35,6 +37,9 @@ public:
         constexpr double pi=3.141592653589793238462643383279502884;
         const double cutoff=std::min(1.0,1.0/playbackRatio);
         taps_=playbackRatio>=8.0?256:(playbackRatio>=4.0?128:(playbackRatio>=2.0?64:32));
+        // Allocate on the control thread, not on the stack or audio thread.
+        try { coefficients_.resize(kSincPhases*kSincTaps); }
+        catch(const std::bad_alloc&) { ready_=false;return false; }
         for(std::size_t phase=0;phase<kSincPhases;++phase) {
             const double fraction=static_cast<double>(phase)/kSincPhases;
             double sum=0.0;
@@ -64,7 +69,7 @@ public:
         return coefficients_.data()+index*kSincTaps;
     }
 private:
-    std::array<float,kSincPhases*kSincTaps> coefficients_{};
+    std::vector<float> coefficients_{};
     double ratio_{0.0};
     std::size_t taps_{32};
     bool ready_{false};
