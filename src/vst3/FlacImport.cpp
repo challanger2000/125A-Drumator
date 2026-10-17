@@ -1,5 +1,6 @@
 #include "core/FlacImport.h"
 #include "core/WavPcm16Decoder.h"
+#define DR_FLAC_IMPLEMENTATION
 #include <dr_flac.h>
 #include <cmath>
 #include <cstring>
