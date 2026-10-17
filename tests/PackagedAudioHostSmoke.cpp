@@ -378,6 +378,27 @@ int main(int argc,char** argv) {
          "Controls state failed to decode");
  require(controlsKit.swing==35&&controlsKit.humanize==70,
          "Swing/Humanize actual VST3 persistence mismatch");
+ // Test recall through a distinct VST3 processor instance, not only codec.
+ IComponent* controlCopy=nullptr;
+ require(factory->createInstance(drumator::kProcessorCID.toTUID(),
+           IComponent::iid,reinterpret_cast<void**>(&controlCopy))==kResultOk&&controlCopy,
+         "Control recall fresh processor factory");
+ require(controlCopy->initialize(&host)==kResultOk,"Control recall initialize");
+ controlsSaved.rewind();
+ require(controlCopy->setState(&controlsSaved)==kResultOk,
+         "Control recall fresh processor setState");
+ Steinberg::ResizableMemoryIBStream roundtripControls;
+ require(controlCopy->getState(&roundtripControls)==kResultOk,
+         "Control recall fresh processor getState");
+ drumator::KitState roundtripKit;
+ require(drumator::KitCodec::decode(
+         static_cast<const std::uint8_t*>(roundtripControls.getData()),
+         roundtripControls.getCursor(),roundtripKit),
+         "Control recall serialized state invalid");
+ require(roundtripKit.swing==35&&roundtripKit.humanize==70,
+         "Swing/humanize changed after fresh processor restoration");
+ require(controlCopy->terminate()==kResultOk,"Control recall terminate");
+ controlCopy->release();
  require(percentage("Drumator.Swing",0)==kResultOk,"Swing reset failed");
  require(percentage("Drumator.Humanize",0)==kResultOk,"Humanize reset failed");
  std::cout<<"VST3 swing/humanize controls validation and persistence PASS\\n";
