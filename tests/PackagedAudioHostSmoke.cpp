@@ -358,6 +358,27 @@ int main(int argc,char** argv) {
          "M27 inactive stem did not fall back to main stereo bus");
  data.numOutputs=1;data.outputs=&bus;
  std::cout<<"M27 active and inactive VST3 stereo stem routing PASS\\n";
+ // Invalid MIDI pitches and zero velocity must not trigger audio.
+ for(int n=0;n<7;++n)run(-1);
+ for(int pitch : {20,35,52,127}) {
+   run(pitch);
+   for(int i=0;i<256;++i)
+     require(left[i]==0.f&&right[i]==0.f,
+             "Out-of-range MIDI note produced sound");
+ }
+ events.clear();
+ Event zero{};
+ zero.type=Event::kNoteOnEvent;
+ zero.noteOn.pitch=36;
+ zero.noteOn.velocity=0.f;
+ zero.noteOn.noteId=-1;
+ require(events.addEvent(zero)==kResultOk,"Zero velocity MIDI event");
+ left.fill(9.f);right.fill(9.f);
+ require(audio->process(data)==kResultOk,"Process zero velocity");
+ for(int i=0;i<256;++i)
+   require(left[i]==0.f&&right[i]==0.f,
+           "Zero velocity MIDI note produced sound");
+ events.clear();
  // Functional QA: control messages must update actual saved component state.
  auto percentage=[&](const char* id,int number)->tresult {
    HostMessage message;message.setMessageID(id);
