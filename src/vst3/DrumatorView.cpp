@@ -298,12 +298,16 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
  if(y>=74&&y<98&&x>=448&&x<505) {
-   if(!controller_.adjustHumanize(x<477?-10:10))
+   if(!controller_.adjustHumanize((buttons&VSTGUI::kControl)?
+                                   -static_cast<int>(controller_.humanizePercent()):
+                                   (x<477?-10:10)))
       status_="HUMANIZE NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
  if(y>=74&&y<98&&x>=185&&x<244) {
-   if(!controller_.adjustSwing(x<214?-5:5))status_="SWING NICHT UEBERNOMMEN";
+   if(!controller_.adjustSwing((buttons&VSTGUI::kControl)?
+                                 -static_cast<int>(controller_.swingPercent()):
+                                 (x<214?-5:5)))status_="SWING NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
  if(y>=kHeaderY&&y<kHeaderY+31) {
@@ -344,10 +348,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       const double width=pitch?55.0:65.0;
       const int delta=x<start+width/2.0?-1:1;
       if(pitch) {
-         if(!controller_.adjustRowPitch(row,delta))
+         if(!controller_.adjustRowPitch(row,(buttons&VSTGUI::kControl)?
+                                            -controller_.rowPitch(row):delta))
             status_="PITCH NICHT UEBERNOMMEN";
       } else {
-         const int mixDelta=delta*10;
+         const int mixDelta=(buttons&VSTGUI::kControl)?
+            (pan?-controller_.rowPan(row):100-static_cast<int>(controller_.rowGain(row))):
+            delta*10;
          if(!controller_.adjustRowMix(row,pan,mixDelta))
             status_="VOLUME/PAN NICHT UEBERNOMMEN";
       }
