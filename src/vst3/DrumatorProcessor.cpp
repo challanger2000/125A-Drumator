@@ -34,6 +34,18 @@ Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context
  const auto result=AudioEffect::initialize(context);
  if(result!=Steinberg::kResultOk)return result;
  addAudioOutput(STR16("MAIN"),Steinberg::Vst::SpeakerArr::kStereo);
+ // Rows 2-16 are optional mono-instrument stereo stems, disabled by default.
+ // Existing hosts using only the main bus retain their stereo drum mix.
+ for(int row=1;row<static_cast<int>(kRows);++row) {
+   Steinberg::Vst::String128 name{};
+   const auto* prefix=STR16("DRUM ");
+   for(int n=0;n<5;++n)name[n]=prefix[n];
+   const int number=row+1;
+   name[5]=static_cast<Steinberg::char16>('0'+number/10);
+   name[6]=static_cast<Steinberg::char16>('0'+number%10);
+   addAudioOutput(name,Steinberg::Vst::SpeakerArr::kStereo,
+                  Steinberg::Vst::BusTypes::kAux,0);
+ }
  addEventInput(STR16("MIDI Input"),16);
  processContextRequirements.needProjectTimeMusic().needTempo().needTransportState();
  return Steinberg::kResultOk;
@@ -41,9 +53,13 @@ Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context
 Steinberg::tresult PLUGIN_API Processor::setBusArrangements(
  Steinberg::Vst::SpeakerArrangement* inputs,Steinberg::int32 numIns,
  Steinberg::Vst::SpeakerArrangement* outputs,Steinberg::int32 numOuts) {
- if(numIns!=0||numOuts!=1||!outputs||
-    outputs[0]!=Steinberg::Vst::SpeakerArr::kStereo)return Steinberg::kResultFalse;
- return AudioEffect::setBusArrangements(inputs,numIns,outputs,numOuts);
+ if(numIns!=0||numOuts<1||numOuts>static_cast<Steinberg::int32>(kRows)||
+    !outputs)return Steinberg::kResultFalse;
+ for(Steinberg::int32 i=0;i<numOuts;++i)
+   if(outputs[i]!=Steinberg::Vst::SpeakerArr::kStereo)
+      return Steinberg::kResultFalse;
+ // Fixed stereo arrangements; optional stem buses are activated by host.
+ return Steinberg::kResultTrue;
 }
 Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 size) {
  return size==Steinberg::Vst::kSample32?Steinberg::kResultTrue:Steinberg::kResultFalse;
@@ -367,13 +383,26 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  triggers_.applyMuteSolo(muteMask_.load(std::memory_order_relaxed),
                          soloMask_.load(std::memory_order_relaxed));
  triggers_.sort();
+ std::array<float*,kRows> stemsL{},stemsR{};
+ for(Steinberg::int32 bus=1;bus<data.numOutputs&&
+                         bus<static_cast<Steinberg::int32>(kRows);++bus) {
+   const auto& stem=data.outputs[bus];
+   if(stem.numChannels==2&&stem.channelBuffers32&&
+      stem.channelBuffers32[0]&&stem.channelBuffers32[1]) {
+     stemsL[static_cast<std::size_t>(bus)]=stem.channelBuffers32[0];
+     stemsR[static_cast<std::size_t>(bus)]=stem.channelBuffers32[1];
+   }
+ }
  const auto rendered=voices_.render(triggers_.data(),triggers_.size(),left,right,
-                                   static_cast<std::uint32_t>(data.numSamples));
+                                   static_cast<std::uint32_t>(data.numSamples),
+                                   stemsL.data(),stemsR.data());
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
  // Conservative: do not claim silence just because a short sound ended within
  // the current block. The host can determine silence independently.
  output.silenceFlags=0;
+ for(Steinberg::int32 bus=1;bus<data.numOutputs;++bus)
+   data.outputs[bus].silenceFlags=0;
  return Steinberg::kResultOk;
 }
 // The host/control actor owns serialized sound. The audio thread never reads
