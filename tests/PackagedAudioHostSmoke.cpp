@@ -11,6 +11,7 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "vst3/PluginIDs.h"
 #include "core/KitState.h"
+#include "core/FlacImport.h"
 #include "public.sdk/source/vst/utility/memoryibstream.h"
 #include <windows.h>
 #include <array>
@@ -367,6 +368,34 @@ int main(int argc,char** argv) {
          clearedKit.wav[4]==makeWav(32,true,.20f),
          "Removed WAV persisted or unaffected row vanished");
  std::cout<<"M25 actual VST3 sample removal/audio/state QA PASS\\n";
+ // M26: real FLAC fixture, 128 frames of 0.25 PCM16 at 48 kHz.
+ const std::uint8_t flacFixture[]{0x66,0x4c,0x61,0x43,0x00,0x00,0x00,0x22,0x10,0x00,0x10,0x00,0x00,0x00,0x0c,0x00,0x00,0x0c,0x0b,0xb8,0x00,0xf0,0x00,0x00,0x00,0x80,0xb1,0x44,0xc4,0xb3,0x94,0xfd,0x9c,0xff,0xe7,0x8c,0x33,0xf1,0x9d,0x64,0xa1,0x61,0x84,0x00,0x00,0x28,0x20,0x00,0x00,0x00,0x72,0x65,0x66,0x65,0x72,0x65,0x6e,0x63,0x65,0x20,0x6c,0x69,0x62,0x46,0x4c,0x41,0x43,0x20,0x31,0x2e,0x34,0x2e,0x33,0x20,0x32,0x30,0x32,0x33,0x30,0x36,0x32,0x33,0x00,0x00,0x00,0x00,0xff,0xf8,0x6a,0x08,0x00,0x7f,0x5d,0x01,0x00,0x09,0x04,0x3a};
+ std::vector<std::uint8_t> imported;
+ require(drumator::flacToWav(flacFixture,sizeof(flacFixture),imported),
+         "Real FLAC fixture refused by import decoder");
+ drumator::DecodedWav flacDecoded;
+ require(drumator::WavPcm16Decoder::decode(imported.data(),imported.size(),
+                                         flacDecoded)==drumator::WavError::Ok,
+         "FLAC-to-WAV conversion produced invalid WAV");
+ require(flacDecoded.sampleRate==48000&&flacDecoded.channels==1&&
+         flacDecoded.left.size()==128&&
+         std::abs(flacDecoded.left[64]-.25f)<.001f,
+         "FLAC decode sample amplitude or metadata mismatch");
+ auto brokenFlac=std::vector<std::uint8_t>(
+    flacFixture,flacFixture+sizeof(flacFixture));
+ brokenFlac[0]=0;
+ std::vector<std::uint8_t> retainedImport=imported;
+ require(!drumator::flacToWav(brokenFlac.data(),brokenFlac.size(),imported)&&
+         imported==retainedImport,"Broken FLAC modified prior output");
+ require(send(retainedImport,0)==kResultOk,
+         "FLAC-derived WAV rejected by packaged VST3");
+ for(int i=0;i<7;++i)run(-1);
+ run(36);
+ double fromFlac=0;
+ for(int i=30;i<100;++i)fromFlac+=left[i];
+ require(std::abs(fromFlac/70.-.25)<.015,
+         "FLAC-derived sample played at wrong amplitude");
+ std::cout<<"M26 real FLAC decoder and packaged VST3 playback PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
