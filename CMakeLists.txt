@@ -105,6 +105,17 @@ if(DRUMATOR_BUILD_VST3)
   # cmake macro interpolates source paths into a CMake parse expression;
   # normalize the official SDK source location first.
   file(TO_CMAKE_PATH "${VST3_SDK_ROOT}" _DrumatorSdkRoot)
+  # Decoder pinned to an immutable upstream commit, used only at import time.
+  set(_drflac_dir "${CMAKE_BINARY_DIR}/third_party")
+  file(MAKE_DIRECTORY "${_drflac_dir}")
+  file(DOWNLOAD
+    "https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_flac.h"
+    "${_drflac_dir}/dr_flac.h"
+    STATUS _drflac_status TLS_VERIFY ON)
+  list(GET _drflac_status 0 _drflac_code)
+  if(NOT _drflac_code EQUAL 0)
+    message(FATAL_ERROR "Failed to obtain pinned dr_flac decoder: ${_drflac_status}")
+  endif()
   smtg_add_vst3plugin(Drumator
     ${_DrumatorSdkRoot}/public.sdk/source/main/dllmain.cpp
     src/vst3/PluginIDs.h
@@ -112,6 +123,8 @@ if(DRUMATOR_BUILD_VST3)
     src/vst3/DrumatorProcessor.cpp
     src/vst3/DrumatorController.h
     src/vst3/DrumatorController.cpp
+    src/vst3/FlacImport.cpp
+    src/core/FlacImport.h
     src/vst3/DrumatorView.h
     src/vst3/DrumatorView.cpp
     src/core/AtomicPatternBank.h
@@ -126,6 +139,7 @@ if(DRUMATOR_BUILD_VST3)
     src/core/WavPcm16Decoder.h
   )
   target_link_libraries(Drumator PRIVATE sdk drumator_core vstgui_support)
+  target_include_directories(Drumator PRIVATE "${_drflac_dir}")
   smtg_target_add_plugin_resources(Drumator
       RESOURCES resource/Drumator.uidesc)
   # Steinberg official Win32 bundle resource setup, even though CI assembles
