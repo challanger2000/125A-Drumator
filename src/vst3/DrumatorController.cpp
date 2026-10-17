@@ -101,7 +101,7 @@ VSTGUI::CView* Controller::createCustomView(VSTGUI::UTF8StringPtr name,
           const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
           VSTGUI::VST3Editor* editor) {
  if(!name||std::strcmp(name,"DrumatorStepGrid")!=0)return nullptr;
- return new DrumatorView(VSTGUI::CRect(0,0,1100,300),*this,*editor);
+ return new DrumatorView(VSTGUI::CRect(0,0,1280,300),*this,*editor);
 }
 std::uint8_t Controller::velocity(std::size_t p,std::size_t r,std::size_t s) const noexcept {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return 0;
