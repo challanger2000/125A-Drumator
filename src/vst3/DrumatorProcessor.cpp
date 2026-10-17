@@ -350,14 +350,14 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    return Steinberg::kResultOk;
  }
  if(!prepared_||data.symbolicSampleSize!=Steinberg::Vst::kSample32||
-    !data.outputs||data.outputs[0].numChannels!=2||
-    !data.outputs[0].channelBuffers32||
-    !data.outputs[0].channelBuffers32[0]||
-    !data.outputs[0].channelBuffers32[1])
+    !data.outputs||data.outputs[0].numChannels!=2)
    return Steinberg::kResultFalse;
  auto& output=data.outputs[0];
- auto* left=output.channelBuffers32[0];
- auto* right=output.channelBuffers32[1];
+ auto* left=output.channelBuffers32 ? output.channelBuffers32[0] : nullptr;
+ auto* right=output.channelBuffers32 ? output.channelBuffers32[1] : nullptr;
+ // An inactive MAIN bus may legally omit audio buffers while aux buses run.
+ const bool mainReady=left&&right;
+ if(!mainReady&&((left!=nullptr)!=(right!=nullptr)))return Steinberg::kResultFalse;
  const auto* context=data.processContext;
  const bool playing=context&&
      ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);

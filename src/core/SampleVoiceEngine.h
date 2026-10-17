@@ -149,7 +149,7 @@ public:
                         float* left,float* right,std::uint32_t frames,
                         float* const* stemLeft=nullptr,
                         float* const* stemRight=nullptr) noexcept {
-        if(!left||!right||(triggerCount&&!triggers))return {RenderStatus::InvalidInput};
+        if((left==nullptr)!=(right==nullptr)||(triggerCount&&!triggers))return {RenderStatus::InvalidInput};
         // Reject malformed event arrays atomically, before modifying voice
         // state or buffers. No event reordering/allocations in audio callback.
         if(triggerCount>static_cast<std::size_t>(kRows)*
@@ -162,8 +162,10 @@ public:
                (n>0&&e.sampleOffset<triggers[n-1].sampleOffset))
                 return {RenderStatus::InvalidEvents};
         }
-        std::fill_n(left,frames,0.f);
-        std::fill_n(right,frames,0.f);
+        if(left) {
+            std::fill_n(left,frames,0.f);
+            std::fill_n(right,frames,0.f);
+        }
         if(stemLeft&&stemRight)for(std::size_t bus=1;bus<kRows;++bus) {
            if(stemLeft[bus]&&stemRight[bus]) {
              std::fill_n(stemLeft[bus],frames,0.f);
@@ -222,8 +224,10 @@ public:
                    voice.position>=static_cast<double>(voice.sample.frames))
                     voice.active=false;
             }
-            left[f]=static_cast<float>(l);
-            right[f]=static_cast<float>(r);
+            if(left) {
+                left[f]=static_cast<float>(l);
+                right[f]=static_cast<float>(r);
+            }
         }
         result.activeVoices=active();
         return result;
