@@ -160,7 +160,8 @@ if(DRUMATOR_BUILD_VST3)
   add_library(drumator_host_fixture STATIC
     ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/hostclasses.cpp
     ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/pluginterfacesupport.cpp
-    ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/eventlist.cpp)
+    ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/eventlist.cpp
+    ${_DrumatorSdkRoot}/public.sdk/source/vst/hosting/parameterchanges.cpp)
   target_link_libraries(drumator_host_fixture PRIVATE sdk)
   add_executable(drumator_audio_host_smoke tests/PackagedAudioHostSmoke.cpp
       src/vst3/FlacImport.cpp)
