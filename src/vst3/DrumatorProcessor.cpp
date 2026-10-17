@@ -71,11 +71,19 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.RowMix")!=0&&
     std::strcmp(id,"Drumator.RowPitch")!=0&&
     std::strcmp(id,"Drumator.RowChoke")!=0&&
-    std::strcmp(id,"Drumator.Swing")!=0)
+    std::strcmp(id,"Drumator.Swing")!=0&&
+    std::strcmp(id,"Drumator.Humanize")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.Humanize")==0) {
+   Steinberg::int64 percent=-1;
+   if(attrs->getInt("Percent",percent)!=Steinberg::kResultOk||
+      percent<0||percent>100)return Steinberg::kInvalidArgument;
+   humanizePercent_.store(static_cast<std::uint8_t>(percent),std::memory_order_relaxed);
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.Swing")==0) {
    Steinberg::int64 percent=-1;
    if(attrs->getInt("Percent",percent)!=Steinberg::kResultOk||
@@ -310,7 +318,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                         Steinberg::Vst::ProcessContext::kTempoValid)) {
      const Clock clock{context->projectTimeMusic,context->tempo,
                        processSetup.sampleRate,data.numSamples,true,
-                       swingPercent_.load(std::memory_order_relaxed)/100.0};
+                       swingPercent_.load(std::memory_order_relaxed)/100.0,
+                       humanizePercent_.load(std::memory_order_relaxed)/100.0};
      const auto scheduled=StepScheduler::run(patterns_,clock,[&](Trigger t){
          triggers_.appendStep(t);
      });
