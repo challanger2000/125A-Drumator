@@ -2,6 +2,7 @@
 #include "DrumatorView.h"
 #include "PluginIDs.h"
 #include "core/WavPcm16Decoder.h"
+#include "core/FlacImport.h"
 #include "core/StepVelocity.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -9,6 +10,7 @@
 #include "vstgui/lib/cstring.h"
 #include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -289,6 +291,13 @@ bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
 Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& path) {
  if(row>=kRows)return LoadStatus::InvalidRow;
  if(path.empty())return LoadStatus::NotFound;
+ const auto suffix=std::filesystem::u8path(path).extension().u8string();
+ std::string ext=suffix;
+ std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char ch){
+    return static_cast<char>(std::tolower(ch));
+ });
+ const bool isFlac=ext==".flac";
+ if(!isFlac&&ext!=".wav")return LoadStatus::Unsupported;
  constexpr std::uintmax_t kMessageMax=16u*1024u*1024u;
  std::vector<std::uint8_t> data;
  try {
@@ -296,7 +305,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
    if(!std::filesystem::is_regular_file(file))return LoadStatus::NotFound;
    const auto length=std::filesystem::file_size(file);
    if(length>kMessageMax)return LoadStatus::TooLarge;
-   if(length<44)return LoadStatus::Unsupported;
+   if(length<(isFlac?16u:44u))return LoadStatus::Unsupported;
    std::ifstream f(file,std::ios::binary);
    if(!f)return LoadStatus::ReadError;
    data.resize(static_cast<std::size_t>(length));
@@ -304,6 +313,12 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
               static_cast<std::streamsize>(data.size())))return LoadStatus::ReadError;
  }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
   catch(const std::exception&) {return LoadStatus::ReadError;}
+ if(isFlac) {
+    std::vector<std::uint8_t> converted;
+    if(!flacToWav(data.data(),data.size(),converted))
+      return LoadStatus::Unsupported;
+    data.swap(converted);
+ }
  DecodedWav preflight;
  if(WavPcm16Decoder::decode(data.data(),data.size(),preflight)!=WavError::Ok)
     return LoadStatus::Unsupported;
