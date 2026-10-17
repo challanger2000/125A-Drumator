@@ -3,6 +3,7 @@
 // but doesn't render a real decoded sample on its real output bus.
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
+#include "public.sdk/source/vst/hosting/parameterchanges.h"
 #include "pluginterfaces/base/ipluginbase.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
@@ -474,6 +475,39 @@ int main(int argc,char** argv) {
  for(int n=0;n<256;++n)
    require(left[n]==0.f&&right[n]==0.f,
            "Pattern B silent grid unexpectedly produced audio");
+ // Switch patterns during playback without stopping/activating the processor.
+ // Use the host's real parameter-change queue at successive step boundaries.
+ loadPattern(0);
+ ParameterChanges patternChanges;
+ data.inputParameterChanges=&patternChanges;
+ auto switchPattern=[&](int pattern) {
+   patternChanges.clearQueue();
+   int32 index=0;
+   auto* queue=patternChanges.addParameterData(drumator::kPatternParam,index);
+   require(queue!=nullptr,"Pattern parameter queue creation");
+   int32 point=0;
+   require(queue->addPoint(0,static_cast<double>(pattern)/7.,point)==kResultOk,
+           "Pattern automation event");
+ };
+ context.projectTimeMusic=0.;
+ switchPattern(0);
+ run(-1);
+ double firstHit=0;
+ for(int n=50;n<190;++n)firstHit+=std::abs(left[n]);
+ require(firstHit>1.0,"Playing pattern A initial hit missing");
+ context.projectTimeMusic=.25;
+ switchPattern(1);
+ run(-1);
+ for(int n=0;n<256;++n)
+   require(left[n]==0.f&&right[n]==0.f,
+           "Playing silent B leaked voices or previous A steps");
+ context.projectTimeMusic=0.;
+ switchPattern(0);
+ run(-1);
+ double returnedHit=0;
+ for(int n=50;n<190;++n)returnedHit+=std::abs(left[n]);
+ require(returnedHit>1.0,"Playing pattern A resume did not sound");
+ data.inputParameterChanges=nullptr;
  context.state=0;
  std::cout<<"VST3 distinct pattern recall and rendered playback PASS\\n";
  // A deterministic extended callback workload; this is NOT a paced,
