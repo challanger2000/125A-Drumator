@@ -132,11 +132,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(pattern==controller_.currentPattern()?background:letters);
    c->drawString(label,VSTGUI::CRect(x,kHeaderY,x+54,kHeaderY+30));
  }
- c->setFillColor(panel);
+ const bool zoom150=editor_.getZoomFactor()>1.25;
+ c->setFillColor(zoom150?panel:accent);
  c->drawRect({1070,39,1127,69},VSTGUI::kDrawFilled);
+ c->setFillColor(zoom150?accent:panel);
  c->drawRect({1136,39,1217,69},VSTGUI::kDrawFilled);
- c->setFontColor(letters);
+ c->setFontColor(zoom150?letters:background);
  c->drawString("100%",VSTGUI::CRect(1070,39,1127,69));
+ c->setFontColor(zoom150?background:letters);
  c->drawString("150%",VSTGUI::CRect(1136,39,1217,69));
  char swingLabel[28]{};
  std::snprintf(swingLabel,sizeof(swingLabel),"SWING %u%%",controller_.swingPercent());
@@ -165,7 +168,16 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Fit the filename in the fixed row area; preserve the extension where possible.
    std::string visibleName=name;
    if(visibleName.size()>27) {
-     visibleName=name.substr(0,17)+"..."+name.substr(name.size()-7);
+     // Truncate on UTF-8 codepoint boundaries, never inside a character.
+     auto prefixEnd=std::min<std::size_t>(17,name.size());
+     while(prefixEnd>0&&prefixEnd<name.size()&&
+           (static_cast<unsigned char>(name[prefixEnd])&0xC0u)==0x80u)
+       --prefixEnd;
+     auto suffixBegin=name.size()-7;
+     while(suffixBegin<name.size()&&
+           (static_cast<unsigned char>(name[suffixBegin])&0xC0u)==0x80u)
+       ++suffixBegin;
+     visibleName=name.substr(0,prefixEnd)+"..."+name.substr(suffixBegin);
    }
    c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,275,y+26),
                  VSTGUI::kLeftText);
@@ -302,8 +314,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      controller_.changePattern(index);invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=1070&&x<=1127) {editor_.setZoomFactor(1.0);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
-   if(x>=1136&&x<=1217) {editor_.setZoomFactor(1.5);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
+   if(x>=1070&&x<=1127) {editor_.setZoomFactor(1.0);invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
+   if(x>=1136&&x<=1217) {editor_.setZoomFactor(1.5);invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
  }
  const double actionsY=kGridY+controller_.visibleRows()*kRowHeight+5.0;
  if(y>=actionsY&&y<actionsY+29) {
