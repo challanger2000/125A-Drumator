@@ -463,7 +463,14 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      // Read exactly one generation; a concurrently replaced pattern is
      // deferred to a later block rather than rendered in a mixed state.
      std::array<std::uint8_t,kRows*kSteps> consistent{};
-     if(!patterns_.coherentPattern(activePattern,consistent)) {
+     if(patterns_.coherentPattern(activePattern,consistent)) {
+       audioPatternCache_[activePattern]=consistent;
+       audioPatternValid_[activePattern]=true;
+     }else if(audioPatternValid_[activePattern]) {
+       // A controller-side edit must not mute an otherwise valid audio block.
+       consistent=audioPatternCache_[activePattern];
+     }else {
+       // No previously validated generation exists; never render a partial edit.
        cursor=finish;return;
      }
      struct CoherentView {
