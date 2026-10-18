@@ -18,6 +18,8 @@
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <filesystem>
+#include <system_error>
 
 namespace drumator {
 namespace {
@@ -64,77 +66,152 @@ private:
     return extractSamplePath(data.drag,path);
  }
  public:
- static bool extractSamplePath(VSTGUI::IDataPackage* drag,std::string& result) {
-   if(!drag)return false;
-   for(std::uint32_t i=0;i<drag->getCount();++i) {
-     const auto advertised=drag->getDataType(i);
-     if(advertised!=VSTGUI::IDataPackage::kFilePath&&
-        advertised!=VSTGUI::IDataPackage::kText)continue;
-     const void* bytes=nullptr;
-     VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
-     const auto size=drag->getData(i,bytes,type);
-     if(!bytes||!size||size>32768||
-        (type!=VSTGUI::IDataPackage::kFilePath&&
-         type!=VSTGUI::IDataPackage::kText))continue;
-     const std::string raw(static_cast<const char*>(bytes),size);
-     std::size_t start=0;
-     while(start<raw.size()) {
-       const auto end=raw.find_first_of(std::string("\r\n\0",3),start);
-       auto path=raw.substr(start,end==std::string::npos?
-                                      std::string::npos:end-start);
-       const auto first=path.find_first_not_of(" \t");
-       if(first!=std::string::npos) {
-         const auto last=path.find_last_not_of(" \t");
-         path=path.substr(first,last-first+1);
-         if(path.size()>1&&((path.front()=='"'&&path.back()=='"')||
-                            (path.front()=='\''&&path.back()=='\'')))
-           path=path.substr(1,path.size()-2);
-         constexpr std::string_view prefix="file:///";
-         if(path.size()>=prefix.size()) {
-           bool matches=true;
-           for(std::size_t n=0;n<prefix.size();++n)
-             if(std::tolower(static_cast<unsigned char>(path[n]))!=prefix[n])
-               matches=false;
-           if(matches) {
-             path.erase(0,prefix.size());
-             std::replace(path.begin(),path.end(),'/','\\');
-             std::string decoded;
-             for(std::size_t n=0;n<path.size();++n) {
-               if(path[n]=='%'&&n+2<path.size()) {
-                 auto hex=[](char c)->int {
-                   if(c>='0'&&c<='9')return c-'0';
-                   if(c>='a'&&c<='f')return c-'a'+10;
-                   if(c>='A'&&c<='F')return c-'A'+10;
-                   return -1;
-                 };
-                 const int hi=hex(path[n+1]),lo=hex(path[n+2]);
-                 if(hi>=0&&lo>=0) {
-                   decoded.push_back(static_cast<char>((hi<<4)|lo));
-                   n+=2;continue;
-                 }
-               }
-               decoded.push_back(path[n]);
-             }
-             path=std::move(decoded);
-           }
-         }
-         const auto dot=path.find_last_of('.');
-         if(dot!=std::string::npos) {
-           auto ext=path.substr(dot);
-           for(auto& c:ext)c=static_cast<char>(
-             std::tolower(static_cast<unsigned char>(c)));
-           if(ext==".wav"||ext==".flac") {
-             result=std::move(path);return true;
-           }
-         }
-       }
-       if(end==std::string::npos)break;
-       start=end+1;
-     }
-   }
-   return false;
- }
+ static bool extractSamplePath(VSTGUI::IDataPackage* drag,
+                                     std::string& path) {
+    if (!drag)
+        return false;
 
+    const auto normalizeCandidate = [](std::string candidate) -> std::string {
+        while (!candidate.empty() &&
+               (candidate.back() == '\0' ||
+                candidate.back() == '\r' ||
+                candidate.back() == '\n')) {
+            candidate.pop_back();
+        }
+
+        const auto first = candidate.find_first_not_of(" \t\r\n");
+        const auto last = candidate.find_last_not_of(" \t\r\n");
+        if (first == std::string::npos)
+            return {};
+        candidate = candidate.substr(first, last - first + 1u);
+
+        if (candidate.size() >= 2u &&
+            ((candidate.front() == '"' && candidate.back() == '"') ||
+             (candidate.front() == '\'' && candidate.back() == '\''))) {
+            candidate = candidate.substr(1u, candidate.size() - 2u);
+        }
+
+        constexpr std::string_view filePrefix = "file:///";
+        if (candidate.size() >= filePrefix.size()) {
+            bool hasFilePrefix = true;
+            for (std::size_t i = 0; i < filePrefix.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(candidate[i])) !=
+                    filePrefix[i]) {
+                    hasFilePrefix = false;
+                    break;
+                }
+            }
+
+            if (hasFilePrefix) {
+                candidate.erase(0u, filePrefix.size());
+                std::replace(candidate.begin(), candidate.end(), '/', '\\');
+
+                // Decode the small set of URL escapes commonly produced by
+                // Windows/host browser file URLs. Unknown escapes are kept.
+                std::string decoded;
+                decoded.reserve(candidate.size());
+
+                const auto hexValue = [](char ch) noexcept -> int {
+                    if (ch >= '0' && ch <= '9') return ch - '0';
+                    if (ch >= 'a' && ch <= 'f') return 10 + ch - 'a';
+                    if (ch >= 'A' && ch <= 'F') return 10 + ch - 'A';
+                    return -1;
+                };
+
+                for (std::size_t i = 0; i < candidate.size(); ++i) {
+                    if (candidate[i] == '%' && i + 2u < candidate.size()) {
+                        const int hi = hexValue(candidate[i + 1u]);
+                        const int lo = hexValue(candidate[i + 2u]);
+                        if (hi >= 0 && lo >= 0) {
+                            decoded.push_back(
+                                static_cast<char>((hi << 4) | lo));
+                            i += 2u;
+                            continue;
+                        }
+                    }
+                    decoded.push_back(candidate[i]);
+                }
+
+                candidate = std::move(decoded);
+            }
+        }
+
+        return candidate;
+    };
+
+    const auto isWavePath = [](const std::string& candidate) {
+        if (candidate.empty())
+            return false;
+
+        std::string lower = candidate;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](unsigned char ch) {
+                           return static_cast<char>(std::tolower(ch));
+                       });
+
+        if (lower.size() < 5u ||
+            (lower.compare(lower.size() - 4u, 4u, ".wav") != 0 && lower.compare(lower.size() - 5u, 5u, ".flac") != 0)) {
+            return false;
+        }
+
+        std::error_code ec;
+        const auto fsPath = std::filesystem::u8path(candidate);
+        return std::filesystem::is_regular_file(fsPath, ec) && !ec;
+    };
+
+    const auto count = drag->getCount();
+    for (std::uint32_t i = 0; i < count; ++i) {
+        const auto advertisedType = drag->getDataType(i);
+        if (advertisedType != VSTGUI::IDataPackage::kFilePath &&
+            advertisedType != VSTGUI::IDataPackage::kText) {
+            continue;
+        }
+
+        const void* buffer = nullptr;
+        VSTGUI::IDataPackage::Type type {};
+        const auto size = drag->getData(i, buffer, type);
+        if (size == 0 || buffer == nullptr)
+            continue;
+
+        if (type != VSTGUI::IDataPackage::kFilePath &&
+            type != VSTGUI::IDataPackage::kText) {
+            continue;
+        }
+
+        std::string raw(
+            reinterpret_cast<const char*>(buffer),
+            static_cast<std::size_t>(size));
+
+        // Some hosts expose CF_UNICODETEXT before CF_HDROP. VSTGUI maps that
+        // to kText, so consider each text line as a possible file path instead
+        // of rejecting the package solely because it is not kFilePath.
+        std::size_t start = 0u;
+        while (start <= raw.size()) {
+            const auto end = raw.find_first_of("\r\n", start);
+            auto candidate = normalizeCandidate(
+                raw.substr(start,
+                           end == std::string::npos
+                               ? std::string::npos
+                               : end - start));
+
+            if (isWavePath(candidate)) {
+                path = std::move(candidate);
+                return true;
+            }
+
+            if (end == std::string::npos)
+                break;
+
+            start = end + 1u;
+            while (start < raw.size() &&
+                   (raw[start] == '\r' || raw[start] == '\n')) {
+                ++start;
+            }
+        }
+    }
+
+    return false;
+}
  DrumatorView& view_;
 };
 VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
