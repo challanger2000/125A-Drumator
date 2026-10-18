@@ -7,7 +7,7 @@
 #include "core/SampleExchange.h"
 #include "core/TriggerBatch.h"
 #include "core/KitRestoreGate.h"
-#include "core/PatternRestoreLatch.h"
+#include "core/AtomicPatternSelection.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include <array>
 #include <atomic>
@@ -43,8 +43,7 @@ private:
  // The audio callback never waits; only control-side setState waits for a block.
  KitRestoreGate restoreGate_{};
  std::atomic<std::uint32_t> kitRevision_{0};
- // Bounded lock-free handoff of host automation arriving during state recall.
- PatternRestoreLatch restorePatternLatch_{};
+ // Version and selected program share one atomic CAS arbitration word.
  std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
  AtomicPatternBank patterns_;
@@ -54,7 +53,7 @@ private:
  TriggerBatch triggers_{};
  std::atomic<double> outputRate_{0.0};
  bool wasPlaying_{false};
- std::atomic<std::uint32_t> selected_{0};
+ AtomicPatternSelection selected_{};
  std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
  std::atomic<std::uint32_t> muteMask_{0};
  std::atomic<std::uint32_t> soloMask_{0};

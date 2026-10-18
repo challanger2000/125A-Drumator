@@ -345,7 +345,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          if(q->getPoint(j,offset,v)!=Steinberg::kResultTrue||
             offset<0||!std::isfinite(v))continue;
          const auto pattern=patternFromNormalized(v);
-         restorePatternLatch_.submit(pattern,selected_);
+         selected_.hostSubmit(pattern);
        }
      }
    }
@@ -605,7 +605,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  const auto rate=outputRate_.load(std::memory_order_acquire);
  {
     std::lock_guard<std::mutex> guard(kitMutex_);
-    const auto overrideAtStart=restorePatternLatch_.revision();
+    const auto selectionAtStart=selected_.snapshot();
     ControlRestoreEntry restoreGate(restoreGate_);
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
@@ -615,7 +615,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
       for(std::size_t s=0;s<kSteps;++s)
        patterns_.set(p,r,s,
           kit_.grid[AtomicPatternBank::index(p,r,s)]);
-    selected_.store(kit_.selected,std::memory_order_relaxed);
+    selected_.restoreIfUnchanged(selectionAtStart,kit_.selected);
     patterns_.select(kit_.selected);
     visibleRows_.store(kit_.visible,std::memory_order_relaxed);
     muteMask_.store(kit_.muted,std::memory_order_relaxed);
@@ -627,9 +627,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
       rowGain_[row].store(kit_.gain[row]/100.f,std::memory_order_relaxed);
       rowPan_[row].store((static_cast<int>(kit_.pan[row])-100)/100.f,std::memory_order_relaxed);
     }
-    // Commit kit selection first; then replay any automation received while
-    // restore was busy. No further kit selection writes after this replay.
-    restorePatternLatch_.finish(overrideAtStart,selected_);
+    // Kit selection CAS above cannot overwrite newer host automation.
     kitRevision_.fetch_add(1,std::memory_order_release);
  }
  return Steinberg::kResultOk;
