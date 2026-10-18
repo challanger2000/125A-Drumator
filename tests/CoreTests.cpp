@@ -31,6 +31,14 @@ int main(){
   e=get(b,Clock{7.75,120,48000,12000,true});
   check(e.size()==2&&e[0].step==31&&e[1].step==0&&
         e[1].sampleOffset==6000,"32-step wrap");
+  // Starting playback at DAW bar 2 (PPQ 4) must begin at step 1,
+  // not at the previous absolute 16th index 17.
+  e=get(b,Clock{4,120,48000,12001,true,0,0,16});
+  check(e.size()==3&&e[0].step==0&&e[0].sampleOffset==0&&
+        e[1].step==1&&e[2].step==2,"bar 2 start origin");
+  e=get(b,Clock{4.25,120,48000,6001,true,0,0,16});
+  check(e.size()==2&&e[0].step==1&&e[1].step==2,
+        "transport origin lost on continuous block");
   e=get(b,Clock{-0.25,120,48000,12000,true});
   check(e.size()==2&&e[0].step==31&&e[1].step==0,"negative PPQ");
   check(get(b,Clock{0.10,120,48000,3600,true}).empty(),"midstep onset");

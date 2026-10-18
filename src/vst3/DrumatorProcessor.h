@@ -53,6 +53,9 @@ private:
  TriggerBatch triggers_{};
  std::atomic<double> outputRate_{0.0};
  bool wasPlaying_{false};
+ std::int64_t phaseOriginStep_{0};
+ double expectedNextPpq_{0.0};
+ bool haveExpectedPpq_{false};
  AtomicPatternSelection selected_{};
  std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
  std::atomic<std::uint32_t> muteMask_{0};

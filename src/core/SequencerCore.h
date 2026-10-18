@@ -49,6 +49,7 @@ struct Clock {
  bool playing{false};
  double swing{0.0}; // 0..0.5 of a 16th step, delayed odd steps
  double humanize{0.0}; // 0..1 deterministic timing and velocity
+ std::int64_t phaseOriginStep{0}; // musical cycle reset at host transport start
 };
 struct Trigger {
  std::uint32_t sampleOffset;
@@ -109,7 +110,7 @@ public:
      const auto frame=std::ceil(position-eps);
      if(frame<0||frame>=c.frames)continue;
      const auto index=static_cast<std::size_t>(
-       (absolute%static_cast<std::int64_t>(kSteps)+
+       ((absolute-c.phaseOriginStep)%static_cast<std::int64_t>(kSteps)+
         static_cast<std::int64_t>(kSteps))%static_cast<std::int64_t>(kSteps));
      const auto p=b.selected();
      for(std::size_t row=0;row<kRows;++row){

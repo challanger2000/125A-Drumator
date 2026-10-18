@@ -421,6 +421,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  const bool playing=context&&
      ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);
  if(wasPlaying_&&!playing)voices_.reset(); // stop old sequencer tails once
+ if(!playing)haveExpectedPpq_=false;
  wasPlaying_=playing;
  // The first full block after a kit commit starts with no old-kit voices.
  const auto revision=kitRevision_.load(std::memory_order_acquire);
@@ -439,6 +440,20 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                     (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
                      Steinberg::Vst::ProcessContext::kTempoValid)) {
    const auto initialPpq=context->projectTimeMusic;
+   // A new transport run or a locate/loop jump starts at pattern step 1.
+   // Normal continuous blocks keep the same origin; switching A-H does not reset it.
+   const double rateForClock=processSetup.sampleRate;
+   const double expectedTolerance=std::max(1e-7,4.0*context->tempo/(60.0*rateForClock));
+   if(!haveExpectedPpq_||std::abs(initialPpq-expectedNextPpq_)>expectedTolerance) {
+      const double initialStep=std::floor(initialPpq*4.0+1e-8);
+      phaseOriginStep_=std::isfinite(initialStep)&&
+         initialStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
+         initialStep<=static_cast<double>(std::numeric_limits<std::int64_t>::max()/2)
+         ?static_cast<std::int64_t>(initialStep):0;
+   }
+   expectedNextPpq_=initialPpq+static_cast<double>(data.numSamples)*
+       context->tempo/(60.0*rateForClock);
+   haveExpectedPpq_=true;
    const auto tempo=context->tempo;
    const auto rate=processSetup.sampleRate;
    const auto swing=swingPercent_.load(std::memory_order_relaxed)/100.0;
@@ -449,7 +464,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      if(finish<=cursor)return;
      patterns_.select(activePattern);
      const Clock clock{initialPpq+static_cast<double>(cursor)*tempo/(60.0*rate),
-                       tempo,rate,finish-cursor,true,swing,humanize};
+                       tempo,rate,finish-cursor,true,swing,humanize,phaseOriginStep_};
      const auto scheduled=StepScheduler::run(patterns_,clock,[&](Trigger hit){
        hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
        triggers_.appendStep(hit);
