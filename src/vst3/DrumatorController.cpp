@@ -163,6 +163,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  samplePaths_.fill({});
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
+ for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
  for(auto& name:labels_)name="LEER - WAV LADEN";
  const auto result=setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
  if(result==Steinberg::kResultOk)notifyViews(true);
