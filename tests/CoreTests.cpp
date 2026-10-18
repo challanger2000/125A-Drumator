@@ -1,5 +1,6 @@
 #include "core/SequencerCore.h"
 #include "core/SampleFolderNavigation.h"
+#include "core/CompactRowViewport.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -18,6 +19,32 @@ static std::vector<Trigger> get(const PatternBank& b,Clock t,
 }
 int main(){
  try {
+  // B04: every instrument remains reachable when the host rejects resize.
+  for(std::size_t total=1;total<=16;++total) {
+    std::array<bool,16> visited{};
+    std::size_t first=0;
+    for(std::size_t page=0;page<16;++page) {
+      const auto n=CompactRowViewport::count(total,first);
+      check(n>=1&&n<=4,"invalid fallback page size");
+      for(std::size_t i=0;i<n;++i) {
+        const auto row=CompactRowViewport::row(total,first,i);
+        check(row<total,"fallback hit maps outside instrument count");
+        visited[row]=true;
+      }
+      const auto next=CompactRowViewport::next(total,first);
+      if(next==first)break;
+      check(next>first,"fallback pagination must advance");
+      first=next;
+    }
+    for(std::size_t row=0;row<total;++row)
+      check(visited[row],"inaccessible instrument after rejected resize");
+    while(first>0)first=CompactRowViewport::previous(total,first);
+    check(first==0,"fallback cannot return to first page");
+  }
+  check(CompactRowViewport::count(0,0)==0&&
+        CompactRowViewport::next(0,0)==0&&
+        CompactRowViewport::row(0,0,0)==0,
+        "fallback empty-state bounds");
   // Sample navigation: sorted, cyclic, unchanged on invalid requests.
   const std::vector<std::string> files{"D.wav","A.wav","B.flac"};
   std::string selected="keep";
