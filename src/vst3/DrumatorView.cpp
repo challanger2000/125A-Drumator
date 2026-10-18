@@ -80,7 +80,11 @@ private:
  DrumatorView& view_;
 };
 std::size_t DrumatorView::visibleRowsForHit() const noexcept {
- return controller_.visibleRows();
+ return displayedRows();
+}
+std::size_t DrumatorView::displayedRows() const noexcept {
+ return compactViewport_?std::min<std::size_t>(4,controller_.visibleRows()-std::min(firstRow_,controller_.visibleRows()-1)):
+                         controller_.visibleRows();
 }
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
@@ -100,9 +104,13 @@ bool DrumatorView::adjustEditorHeight() {
  // The editor combines user zoom with host content scaling.
  const auto effectiveScale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
-   status_="HOST HAT FENSTERGROESSE ABGELEHNT";
+   compactViewport_=true;
+   firstRow_=std::min(firstRow_,controller_.visibleRows()-1);
+   fillMenuRow_=-1;
+   status_="HOST-RESIZE ABGELEHNT: ZEILEN MIT < > WECHSELN";
    invalid();return false;
  }
+ compactViewport_=false;firstRow_=0;
  if(auto* container=getParentView()) {
    container->setViewSize({0,0,1280,height});
  }
@@ -128,7 +136,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);
  c->drawString("PATTERN A-H   |   NR=FILL   SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,320,67),
                VSTGUI::kLeftText);
- const double footerY=kGridY+controller_.visibleRows()*kRowHeight+39.0;
+ const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
@@ -139,6 +147,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    char label[2]={static_cast<char>('A'+pattern),0};
    c->setFontColor(pattern==controller_.currentPattern()?background:letters);
    c->drawString(label,VSTGUI::CRect(x,kHeaderY,x+54,kHeaderY+30));
+ }
+ if(compactViewport_){
+   c->setFontColor(accent);
+   char page[64]{};
+   std::snprintf(page,sizeof(page),"ZEILEN %u-%u / %u",static_cast<unsigned>(firstRow_+1),
+                 static_cast<unsigned>(firstRow_+displayedRows()),static_cast<unsigned>(controller_.visibleRows()));
+   c->drawString(page,VSTGUI::CRect(820,39,1030,69));
+   c->drawString("<",VSTGUI::CRect(1005,39,1030,69));
+   c->drawString(">",VSTGUI::CRect(1033,39,1060,69));
  }
  const bool zoom150=editor_.getZoomFactor()>1.25;
  c->setFillColor(zoom150?panel:accent);
@@ -163,8 +180,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString("VOL/PAN/P: - LINKS, + RECHTS, STRG+KLICK RESET | ALT+SAMPLE ENTFERNEN",
                VSTGUI::CRect(545,74,1240,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
- for(std::size_t row=0;row<controller_.visibleRows();++row) {
-   const double y=kGridY+row*kRowHeight;
+ for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
+   const double y=kGridY+(row-firstRow_)*kRowHeight;
    c->setFillColor(row%2==0?panel:background);
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
@@ -245,7 +262,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }
    }
  }
- const double buttonsY=kGridY+controller_.visibleRows()*kRowHeight+5.0;
+ const double buttonsY=kGridY+displayedRows()*kRowHeight+5.0;
  c->setFillColor(controller_.visibleRows()<kRows?accent:panel);
  c->drawRect({16,buttonsY,213,buttonsY+29},VSTGUI::kDrawFilled);
  c->setFontColor(background);
@@ -267,7 +284,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(letters);c->drawString(actions[i],VSTGUI::CRect(x,buttonsY,x+109,buttonsY+29));
  }
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-    const double top=std::max(0.0,std::min(kGridY+fillMenuRow_*kRowHeight,getViewSize().getHeight()-125.0));
+    const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-125.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","FILL ALL","CLEAR"};
     for(int i=0;i<5;++i) {
       const double y=top+i*25.;
@@ -341,7 +358,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
  if(fillMenuRow_>=0) {
-   const double top=std::max(0.0,std::min(kGridY+fillMenuRow_*kRowHeight,getViewSize().getHeight()-125.0));
+   const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-125.0));
    const int row=fillMenuRow_;
    fillMenuRow_=-1;
    if(x>=650&&x<755&&y>=top&&y<top+125) {
@@ -355,6 +372,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
 
+ if(compactViewport_&&y>=39&&y<69&&x>=1005&&x<1060) {
+   if(x<1032)firstRow_=firstRow_>=4?firstRow_-4:0;
+   else if(firstRow_+4<controller_.visibleRows())firstRow_+=4;
+   fillMenuRow_=-1;invalid();
+   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
  if(y>=74&&y<98&&x>=448&&x<505) {
    if(!controller_.adjustHumanize((buttons&VSTGUI::kControl)?
                                    -static_cast<int>(controller_.humanizePercent()):
@@ -389,7 +412,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
  }
- const double actionsY=kGridY+controller_.visibleRows()*kRowHeight+5.0;
+ const double actionsY=kGridY+displayedRows()*kRowHeight+5.0;
  if(y>=actionsY&&y<actionsY+29) {
    if(x>=480&&x<940) {
      const int action=static_cast<int>((x-480)/115.);
@@ -434,8 +457,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
  }
- if(y>=kGridY&&y<kGridY+controller_.visibleRows()*kRowHeight) {
-   const auto row=static_cast<std::size_t>((y-kGridY)/kRowHeight);
+ if(y>=kGridY&&y<kGridY+displayedRows()*kRowHeight) {
+   const auto row=firstRow_+static_cast<std::size_t>((y-kGridY)/kRowHeight);
    if(x>=16&&x<48) {
      fillMenuRow_=static_cast<int>(row);
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
