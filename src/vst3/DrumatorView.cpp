@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <string>
+#include <string_view>
 
 namespace drumator {
 namespace {
@@ -55,29 +56,85 @@ public:
  }
 private:
  bool allowed(VSTGUI::DragEventData data) const {
-    if(!data.drag||data.drag->getCount()!=1||
-       data.drag->getDataType(0)!=VSTGUI::IDataPackage::kFilePath)
-       return false;
     auto local=data.pos;
     view_.frameToLocal(local);
     if(local.y<kGridY||local.y>=kGridY+view_.visibleRowsForHit()*kRowHeight||
        local.x<kLabelX||local.x>kGridRight)return false;
-    const void* bytes=nullptr;
-    VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
-    const auto size=data.drag->getData(0,bytes,type);
-    if(!bytes||type!=VSTGUI::IDataPackage::kFilePath||size<5||
-       size>32768)
-       return false;
-    std::string filename(static_cast<const char*>(bytes),size);
-    if(!filename.empty()&&filename.back()=='\0')filename.pop_back();
-    if(filename.find('\0')!=std::string::npos)return false;
-    if(filename.size()<4)return false;
-    const auto point=filename.find_last_of('.');
-    if(point==std::string::npos)return false;
-    auto ext=filename.substr(point);
-    for(auto& c:ext)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return ext==".wav"||ext==".flac";
+    std::string path;
+    return extractSamplePath(data.drag,path);
  }
+ public:
+ static bool extractSamplePath(VSTGUI::IDataPackage* drag,std::string& result) {
+   if(!drag)return false;
+   for(std::uint32_t i=0;i<drag->getCount();++i) {
+     const auto advertised=drag->getDataType(i);
+     if(advertised!=VSTGUI::IDataPackage::kFilePath&&
+        advertised!=VSTGUI::IDataPackage::kText)continue;
+     const void* bytes=nullptr;
+     VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
+     const auto size=drag->getData(i,bytes,type);
+     if(!bytes||!size||size>32768||
+        (type!=VSTGUI::IDataPackage::kFilePath&&
+         type!=VSTGUI::IDataPackage::kText))continue;
+     const std::string raw(static_cast<const char*>(bytes),size);
+     std::size_t start=0;
+     while(start<raw.size()) {
+       const auto end=raw.find_first_of("\r\n\0",start);
+       auto path=raw.substr(start,end==std::string::npos?
+                                      std::string::npos:end-start);
+       const auto first=path.find_first_not_of(" \t");
+       if(first!=std::string::npos) {
+         const auto last=path.find_last_not_of(" \t");
+         path=path.substr(first,last-first+1);
+         if(path.size()>1&&((path.front()=='"'&&path.back()=='"')||
+                            (path.front()=='\''&&path.back()=='\'')))
+           path=path.substr(1,path.size()-2);
+         constexpr std::string_view prefix="file:///";
+         if(path.size()>=prefix.size()) {
+           bool matches=true;
+           for(std::size_t n=0;n<prefix.size();++n)
+             if(std::tolower(static_cast<unsigned char>(path[n]))!=prefix[n])
+               matches=false;
+           if(matches) {
+             path.erase(0,prefix.size());
+             std::replace(path.begin(),path.end(),'/','\\');
+             std::string decoded;
+             for(std::size_t n=0;n<path.size();++n) {
+               if(path[n]=='%'&&n+2<path.size()) {
+                 auto hex=[](char c)->int {
+                   if(c>='0'&&c<='9')return c-'0';
+                   if(c>='a'&&c<='f')return c-'a'+10;
+                   if(c>='A'&&c<='F')return c-'A'+10;
+                   return -1;
+                 };
+                 const int hi=hex(path[n+1]),lo=hex(path[n+2]);
+                 if(hi>=0&&lo>=0) {
+                   decoded.push_back(static_cast<char>((hi<<4)|lo));
+                   n+=2;continue;
+                 }
+               }
+               decoded.push_back(path[n]);
+             }
+             path=std::move(decoded);
+           }
+         }
+         const auto dot=path.find_last_of('.');
+         if(dot!=std::string::npos) {
+           auto ext=path.substr(dot);
+           for(auto& c:ext)c=static_cast<char>(
+             std::tolower(static_cast<unsigned char>(c)));
+           if(ext==".wav"||ext==".flac") {
+             result=std::move(path);return true;
+           }
+         }
+       }
+       if(end==std::string::npos)break;
+       start=end+1;
+     }
+   }
+   return false;
+ }
+
  DrumatorView& view_;
 };
 std::size_t DrumatorView::visibleRowsForHit() const noexcept {
@@ -319,23 +376,20 @@ void DrumatorView::loadPath(std::size_t row,const std::string& path) {
  invalid();
 }
 bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
- if(!data.drag||data.drag->getCount()!=1)return false;
+ if(!data.drag)return false;
  auto position=data.pos;
  frameToLocal(position);
- if(position.y<kGridY||position.y>=kGridY+displayedRows()*kRowHeight)return false;
+ if(position.x<kLabelX||position.x>kGridRight||
+    position.y<kGridY||position.y>=kGridY+displayedRows()*kRowHeight)
+    return false;
  const auto row=firstRow_+static_cast<std::size_t>((position.y-kGridY)/kRowHeight);
  if(row>=kRows)return false;
- const void* bytes=nullptr;
- VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
- const auto size=data.drag->getData(0,bytes,type);
- if(!bytes||type!=VSTGUI::IDataPackage::kFilePath||
-    size==0||size>32768)return false;
- std::string path(static_cast<const char*>(bytes),size);
- if(!path.empty()&&path.back()=='\0')path.pop_back();
- if(path.empty()||path.find('\0')!=std::string::npos)return false;
+ std::string path;
+ if(!DrumatorDropTarget::extractSamplePath(data.drag,path))return false;
  loadPath(row,path);
- return true; // drop handled; status displays actual acceptance/rejection
+ return true; // The actual import result is displayed in the status text.
 }
+
 void DrumatorView::load(std::size_t row) {
  auto* frame=getFrame();
  if(!frame)return;
