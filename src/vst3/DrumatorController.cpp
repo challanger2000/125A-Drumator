@@ -5,6 +5,7 @@
 #include "core/WavPcm16Decoder.h"
 #include "core/FlacImport.h"
 #include "core/StepVelocity.h"
+#include "core/HostEditDirty.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstattributes.h"
@@ -35,8 +36,9 @@ Steinberg::tresult PLUGIN_API Controller::setParamNormalized(
 }
 Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
  const auto result=sendMessage(message);
- if(result==Steinberg::kResultOk&&componentHandler2)
-   componentHandler2->setDirty(true);
+ markSuccessfulHostEdit(result==Steinberg::kResultOk,[&](){
+   if(componentHandler2)componentHandler2->setDirty(true);
+ });
  return result;
 }
 namespace {

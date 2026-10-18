@@ -1,5 +1,6 @@
 #include "core/VisibleRows.h"
 #include "core/RowResizeTransaction.h"
+#include "core/HostEditDirty.h"
 #include "core/AtomicPatternBank.h"
 #include <iostream>
 #include <stdexcept>
@@ -41,6 +42,12 @@ int main(){
    check(tryRowResizeTransaction([]{return false;},[]{return true;},[]{return true;})==
          RowResizeResult::EditRejected,"F10 edit rejection not preserved");
    std::cout<<"F10 resize reject/rollback regression PASS\\n";
+   int dirtyCalls=0;
+   markSuccessfulHostEdit(false,[&](){++dirtyCalls;});
+   check(dirtyCalls==0,"F05 rejected edit dirtied host project");
+   markSuccessfulHostEdit(true,[&](){++dirtyCalls;});
+   check(dirtyCalls==1,"F05 accepted edit did not dirty host project");
+   std::cout<<"F05 successful-edit dirty notification policy PASS\\n";
    std::cout<<"Visible-row UX preservation checks PASS\n";
    return 0;
  } catch(const std::exception& e){
