@@ -226,7 +226,8 @@ bool Controller::copyCurrentPattern() {
  clipboardValid_=true;return true;
 }
 bool Controller::pasteCurrentPattern(){return clipboardValid_&&replacePattern(currentPattern(),clipboard_);}
-bool Controller::duplicateCurrentPattern(){
+bool Controller::duplicateCurrentPattern(bool* selectedCopy){
+ if(selectedCopy)*selectedCopy=false;
  const auto source=currentPattern();
  PatternSteps data{};
  std::copy_n(grid_.begin()+source*kRows*kSteps,data.size(),data.begin());
@@ -237,7 +238,10 @@ bool Controller::duplicateCurrentPattern(){
    return data;
  });
  if(destination>=kPatterns)return false; // never replace an occupied beat
- return replacePattern(destination,data)&&changePattern(destination);
+ if(!replacePattern(destination,data))return false;
+ const bool switched=changePattern(destination);
+ if(selectedCopy)*selectedCopy=switched;
+ return true; // the copy exists even if host refuses selecting it
 }
 bool Controller::clearCurrentPattern(){return replacePattern(currentPattern(),{});}
 bool Controller::fillRow(std::size_t row,RowFill mode){
