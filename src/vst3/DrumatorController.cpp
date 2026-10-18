@@ -366,9 +366,9 @@ bool Controller::cycleRowOutput(std::size_t row) {
  msg->release();if(accepted)output_[row]=bus;
  return accepted;
 }
-bool Controller::cycleRowChoke(std::size_t row) {
- if(row>=kRows)return false;
- const auto next=static_cast<std::uint8_t>((choke_[row]+1)%5);
+bool Controller::cycleRowChoke(std::size_t row,int direction) {
+ if(row>=kRows||(direction!=1&&direction!=-1))return false;
+ const auto next=static_cast<std::uint8_t>((static_cast<int>(choke_[row])+5+direction)%5);
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.RowChoke");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}

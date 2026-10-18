@@ -33,7 +33,7 @@ public:
 
  bool clearSample(std::size_t row);
  bool toggleRowGate(std::size_t row,bool solo);
- bool cycleRowChoke(std::size_t row);
+ bool cycleRowChoke(std::size_t row,int direction=1);
  bool cycleRowOutput(std::size_t row);
  unsigned rowOutput(std::size_t row) const noexcept {return row<kRows?output_[row]:0;}
  unsigned rowChoke(std::size_t row) const noexcept {return row<kRows?choke_[row]:0;}

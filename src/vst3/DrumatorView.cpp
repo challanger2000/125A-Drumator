@@ -285,7 +285,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("PATTERN A-H   |   NR=FILL   SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,320,67),
+ c->drawString("PATTERN A-H   |   NR=FILL   SHIFT+STEP: VELOCITY   SHIFT+CHOKE: ZURUECK",VSTGUI::CRect(16,47,320,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
@@ -647,7 +647,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=535&&x<558) {
-      if(!controller_.cycleRowChoke(row))status_="CHOKE NICHT UEBERNOMMEN";
+      if(!controller_.cycleRowChoke(row,(buttons&VSTGUI::kShift)?-1:1))status_="CHOKE NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=203&&x<230&&(buttons&VSTGUI::kAlt)==0) {
