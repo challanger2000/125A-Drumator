@@ -59,6 +59,23 @@ int main() {
     std::vector<std::uint8_t> again;
     check(KitCodec::encode(copy,again)&&encoded==again,
           "Roundtrip must produce deterministic DMR4");
+    // DM11 rejects out-of-range bus assignments without replacing saved state.
+    KitState invalidBus=original;
+    invalidBus.output[3]=16;
+    std::vector<std::uint8_t> invalidBusBytes;
+    check(!KitCodec::encode(invalidBus,invalidBusBytes),
+          "invalid output bus was serialized");
+    auto tamperedBus=encoded;
+    tamperedBus[78+3]=16;
+    const auto correctedCrc=KitCodec::hash(tamperedBus.data()+8,tamperedBus.size()-12);
+    for(int i=0;i<4;++i)
+      tamperedBus[tamperedBus.size()-4+static_cast<std::size_t>(i)]=
+          static_cast<std::uint8_t>(correctedCrc>>(8*i));
+    KitState preserved=copy;
+    check(!KitCodec::decode(tamperedBus.data(),tamperedBus.size(),copy),
+          "out-of-range DM11 bus accepted despite valid checksum");
+    check(copy.output==preserved.output&&copy.grid==preserved.grid,
+          "rejected bus changed previously loaded kit");
     // Remove the DM11 output table to create a legitimate DM10 fixture.
     auto legacyBase=encoded;
     legacyBase.erase(legacyBase.begin()+78,legacyBase.begin()+94);

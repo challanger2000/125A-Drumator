@@ -350,6 +350,22 @@ static void testAssignableOutput() {
  require(e.render(&hit,1,mainL.data(),mainR.data(),128,stemsL.data(),stemsR.data()).accepted==1,"fallback render");
  near(mainL[70],.5,.001,"disabled stem did not fall back MAIN");
 }
+static void testTwoRowsOneBus() {
+ std::array<float,512> sample{};sample.fill(.25f);
+ SincKernel kernel;require(kernel.prepare(1.),"shared bus kernel");
+ SampleVoiceEngine e;require(e.setOutputRate(48000),"shared bus rate");
+ RowSound row;row.sample={sample.data(),nullptr,sample.size()};row.kernel=&kernel;
+ require(e.setRow(0,row)&&e.setRow(1,row),"shared bus samples");
+ require(e.setRowOutput(0,3)&&e.setRowOutput(1,3),"shared bus assignments");
+ std::array<float,128> mainL{},mainR{},auxL{},auxR{};
+ std::array<float*,kRows> stemsL{},stemsR{};
+ stemsL[3]=auxL.data();stemsR[3]=auxR.data();
+ const std::array<Trigger,2> events{{{0,0,0,127,0},{0,1,0,127,0}}};
+ require(e.render(events.data(),events.size(),mainL.data(),mainR.data(),128,
+                  stemsL.data(),stemsR.data()).accepted==2,"shared bus events");
+ near(mainL[80],0,.001,"shared bus leaked MAIN");
+ near(auxL[80],.5,.001,"shared bus failed to sum both rows");
+}
 static void testStemWithoutMain() {
  std::array<float,2048> source{};source.fill(.25f);
  SincKernel kernel;require(kernel.prepare(1.0),"no MAIN kernel");
@@ -416,7 +432,7 @@ int main() {
   }
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
-  testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();
+  testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
   std::cout<<"Drumator sample-voice regression: 10 groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
