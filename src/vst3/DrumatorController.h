@@ -20,6 +20,8 @@ public:
  }
  Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream*) SMTG_OVERRIDE;
+ Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream*) SMTG_OVERRIDE;
+ Steinberg::tresult PLUGIN_API setState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setParamNormalized(Steinberg::Vst::ParamID,Steinberg::Vst::ParamValue) SMTG_OVERRIDE;
  void registerView(DrumatorView* view);
  void unregisterView(DrumatorView* view);
@@ -48,6 +50,8 @@ public:
  unsigned swingPercent() const noexcept {return swingPercent_;}
  bool addRow();
  bool hideLastEmptyRow();
+ double preferredZoom() const noexcept {return preferredZoom_;}
+ void rememberZoom(double factor) noexcept {preferredZoom_=(factor>1.25)?1.5:1.0;}
  bool restoreVisibleRows(std::size_t previous);
  std::size_t visibleRows() const noexcept {return visibleRows_;}
  bool canHideLast() const noexcept;
@@ -72,6 +76,7 @@ private:
  std::array<std::uint8_t,kRows> pitch_{};
  std::array<std::uint8_t,kRows> choke_{};
  std::uint8_t visibleRows_{kDefaultVisibleRows};
+ double preferredZoom_{1.0};
  std::uint8_t swingPercent_{0};
  std::uint8_t humanizePercent_{0};
 };

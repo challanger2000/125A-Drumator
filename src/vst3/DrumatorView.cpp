@@ -317,7 +317,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
                                  (x<214?-5:5)))status_="SWING NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
- if(y>=kHeaderY&&y<kHeaderY+31) {
+ if(y>=kHeaderY&&y<kHeaderY+30) {
    if(x>=kPatternX&&x<kPatternX+8*kPatternWidth) {
      const auto index=static_cast<std::size_t>((x-kPatternX)/kPatternWidth);
      if(x>=kPatternX+index*kPatternWidth+54.0)
@@ -325,8 +325,18 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      controller_.changePattern(index);invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=1070&&x<=1127) {editor_.setZoomFactor(1.0);invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
-   if(x>=1136&&x<=1217) {editor_.setZoomFactor(1.5);invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;}
+ }
+ if(y>=39&&y<69) {
+   double requested=0.;
+   if(x>=1070&&x<1127)requested=1.0;
+   else if(x>=1136&&x<1217)requested=1.5;
+   if(requested>0.) {
+     if(static_cast<DrumatorEditor&>(editor_).setZoomChecked(requested))
+       controller_.rememberZoom(requested);
+     else status_="HOST HAT ZOOM ABGELEHNT";
+     invalid();
+     return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
  }
  const double actionsY=kGridY+controller_.visibleRows()*kRowHeight+5.0;
  if(y>=actionsY&&y<actionsY+29) {

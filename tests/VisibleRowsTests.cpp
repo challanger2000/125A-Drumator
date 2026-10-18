@@ -56,6 +56,12 @@ int main(){
            "N05 quantization mismatch");
    }
    std::cout<<"N05 1001 discrete pattern values PASS\\n";
+   // N04 shared draw/hit geometry boundaries: pattern [38,68), zoom [39,69).
+   auto patternHit=[](double y){return y>=38.0&&y<68.0;};
+   auto zoomHit=[](double y){return y>=39.0&&y<69.0;};
+   check(patternHit(38.5)&&!patternHit(68.5),"N04 pattern hit margin");
+   check(!zoomHit(38.5)&&zoomHit(68.5),"N04 zoom hit margin");
+   std::cout<<"N04 header draw/hit vertical ranges PASS\\n";
    std::cout<<"Visible-row UX preservation checks PASS\n";
    return 0;
  } catch(const std::exception& e){

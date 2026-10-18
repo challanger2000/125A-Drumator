@@ -43,9 +43,27 @@ Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message
  return result;
 }
 namespace {
+constexpr Steinberg::uint32 kZoomControllerState=0x314D5A44u; // DZM1
 constexpr Steinberg::uint32 kOldState=0x31524D44u;
 constexpr Steinberg::uint32 kNewState=0x32524D44u;
 constexpr auto kRowsState=kStateMagicV3;
+}
+Steinberg::tresult PLUGIN_API Controller::getState(Steinberg::IBStream* state) {
+ if(!state)return Steinberg::kInvalidArgument;
+ Steinberg::IBStreamer stream(state,kLittleEndian);
+ return stream.writeInt32u(kZoomControllerState)&&
+        stream.writeInt8u(preferredZoom_>1.25?1:0)
+     ? Steinberg::kResultOk : Steinberg::kResultFalse;
+}
+Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
+ if(!state)return Steinberg::kInvalidArgument;
+ Steinberg::IBStreamer stream(state,kLittleEndian);
+ Steinberg::uint32 magic=0;
+ Steinberg::uint8 zoom=0;
+ if(!stream.readInt32u(magic)||magic!=kZoomControllerState||
+    !stream.readInt8u(zoom)||zoom>1)return Steinberg::kResultFalse;
+ preferredZoom_=zoom?1.5:1.0;
+ return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
  const auto result=EditController::initialize(context);
@@ -133,6 +151,7 @@ Steinberg::IPlugView* PLUGIN_API Controller::createView(Steinberg::FIDString nam
  if(name&&std::strcmp(name,Steinberg::Vst::ViewType::kEditor)==0) {
     auto* editor=new DrumatorEditor(this,"DrumatorView","Drumator.uidesc");
     editor->setAllowedZoomFactors({1.0,1.5});
+    editor->setZoomChecked(preferredZoom_);
     return editor;
  }
  return nullptr;
