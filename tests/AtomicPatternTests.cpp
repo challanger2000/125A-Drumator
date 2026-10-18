@@ -40,6 +40,16 @@ int main(){
     check(rowControlNext(control,hi,1)==hi&&rowControlNext(control,lo,-1)==lo,"control limits");
     check(rowControlNext(control,hi,1,true)==center&&rowControlNext(control,lo,-1,true)==center,"control reset");
   }
+  std::array<PatternSteps,kPatterns> slots{};
+  slots[0][0]=127;slots[1][0]=80;slots[3][5]=64;
+  check(nextEmptyPattern(0,[&](std::size_t i){return slots[i];})==2,
+        "duplicate must skip occupied destination");
+  slots[7][0]=99;
+  check(nextEmptyPattern(7,[&](std::size_t i){return slots[i];})==2,
+        "duplicate must wrap around");
+  for(auto& slot:slots)slot[0]=127;
+  check(nextEmptyPattern(0,[&](std::size_t i){return slots[i];})==kPatterns,
+        "no free destination must not overwrite");
   AtomicPatternBank bank;
   check(nextStepVelocity(0)==32&&nextStepVelocity(32)==64&&
         nextStepVelocity(64)==96&&nextStepVelocity(96)==127&&

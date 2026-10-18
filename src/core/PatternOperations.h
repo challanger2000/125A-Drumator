@@ -5,6 +5,20 @@ namespace drumator {
 using PatternSteps=std::array<std::uint8_t,kRows*kSteps>;
 constexpr PatternSteps copyPattern(const PatternSteps& p) noexcept {return p;}
 constexpr PatternSteps clearPattern() noexcept {return {};}
+constexpr bool emptyPattern(const PatternSteps& p) noexcept {
+ for(auto velocity:p)if(velocity!=0)return false;
+ return true;
+}
+template<class ReadPattern>
+std::size_t nextEmptyPattern(std::size_t source,ReadPattern&& read) {
+ if(source>=kPatterns)return kPatterns;
+ for(std::size_t offset=1;offset<kPatterns;++offset) {
+   const auto candidate=(source+offset)%kPatterns;
+   if(emptyPattern(read(candidate)))return candidate;
+ }
+ return kPatterns;
+}
+
 constexpr PatternSteps fillInstrument(PatternSteps p,std::size_t row,RowFill mode) noexcept {
  if(row>=kRows)return p;
  auto values=filledRow(mode);

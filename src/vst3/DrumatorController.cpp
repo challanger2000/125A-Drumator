@@ -225,10 +225,16 @@ bool Controller::copyCurrentPattern() {
 }
 bool Controller::pasteCurrentPattern(){return clipboardValid_&&replacePattern(currentPattern(),clipboard_);}
 bool Controller::duplicateCurrentPattern(){
- const auto p=currentPattern();if(p+1>=kPatterns)return false;
+ const auto source=currentPattern();
+ const auto destination=nextEmptyPattern(source,[&](std::size_t candidate){
+   PatternSteps data{};
+   std::copy_n(grid_.begin()+candidate*kRows*kSteps,data.size(),data.begin());
+   return data;
+ });
+ if(destination>=kPatterns)return false; // never replace an occupied beat
  PatternSteps data{};
- std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
- return replacePattern(p+1,data)&&changePattern(p+1);
+ std::copy_n(grid_.begin()+source*kRows*kSteps,data.size(),data.begin());
+ return replacePattern(destination,data)&&changePattern(destination);
 }
 bool Controller::clearCurrentPattern(){return replacePattern(currentPattern(),{});}
 bool Controller::fillRow(std::size_t row,RowFill mode){
