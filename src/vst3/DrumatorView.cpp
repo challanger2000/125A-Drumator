@@ -175,13 +175,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const auto& name=controller_.label(row);
    // Fit the filename in the fixed row area; preserve the extension where possible.
    std::string visibleName=name;
-   if(visibleName.size()>27) {
+   // Reserve space for previous/next sample buttons and the output selector.
+   if(visibleName.size()>16) {
      // Truncate on UTF-8 codepoint boundaries, never inside a character.
-     auto prefixEnd=std::min<std::size_t>(17,name.size());
+     auto prefixEnd=std::min<std::size_t>(9,name.size());
      while(prefixEnd>0&&prefixEnd<name.size()&&
            (static_cast<unsigned char>(name[prefixEnd])&0xC0u)==0x80u)
        --prefixEnd;
-     auto suffixBegin=name.size()-7;
+     auto suffixBegin=name.size()-4;
      while(suffixBegin<name.size()&&
            (static_cast<unsigned char>(name[suffixBegin])&0xC0u)==0x80u)
        ++suffixBegin;
