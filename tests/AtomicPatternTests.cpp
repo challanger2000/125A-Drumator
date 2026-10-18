@@ -1,6 +1,7 @@
 #include "core/AtomicPatternBank.h"
 #include "core/StepVelocity.h"
 #include "core/RowFill.h"
+#include "core/PatternOperations.h"
 #include <array>
 #include <atomic>
 #include <iostream>
@@ -24,6 +25,13 @@ int main(){
   }
   check(filledRow(RowFill::Every4,96)[0]==96&&filledRow(RowFill::Every4,96)[1]==0,
         "fill preserves requested velocity");
+  PatternSteps example{};
+  example[0]=93; example[31]=45; example[kSteps+7]=64;
+  auto filled=fillInstrument(example,0,RowFill::Every8);
+  check(filled[0]==127&&filled[8]==127&&filled[31]==0&&filled[kSteps+7]==64,"row fill isolation");
+  auto moved=shiftInstrument(example,0,true);
+  check(moved[1]==93&&moved[0]==45&&shiftInstrument(moved,0,false)==example,"shift wrap roundtrip");
+  check(copyPattern(example)==example&&clearPattern()==PatternSteps{},"pattern copy clear");
   AtomicPatternBank bank;
   check(nextStepVelocity(0)==32&&nextStepVelocity(32)==64&&
         nextStepVelocity(64)==96&&nextStepVelocity(96)==127&&
