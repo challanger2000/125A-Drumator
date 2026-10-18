@@ -925,6 +925,88 @@ int main(int argc,char** argv) {
  require(component->activateBus(kAudio,kOutput,0,true)==kResultOk,
          "F08 reenable MAIN");
  std::cout<<"F08 packaged auxiliary processing without MAIN PASS\\n";
+ // F08 full packaged 16-bus matrix: fifteen simultaneous row sounds must
+ // reach their individual AUX1..AUX15 despite a NULL MAIN buffer.
+ for(int i=0;i<12;++i)run(-1);
+ for(int row=0;row<16;++row) {
+   for(int solo=0;solo<=1;++solo) {
+     HostMessage gate;gate.setMessageID("Drumator.RowGate");
+     auto* attr=gate.getAttributes();
+     require(attr->setInt("Row",row)==kResultOk&&
+             attr->setInt("Solo",solo)==kResultOk&&
+             attr->setInt("On",0)==kResultOk,
+             "F08 reset row gate attrs");
+     require(processorPoint->notify(&gate)==kResultOk,
+             "F08 reset row gates");
+   }
+   HostMessage choke;choke.setMessageID("Drumator.RowChoke");
+   auto* ca=choke.getAttributes();
+   require(ca->setInt("Row",row)==kResultOk&&
+           ca->setInt("Group",0)==kResultOk&&
+           processorPoint->notify(&choke)==kResultOk,
+           "F08 reset row choke");
+ }
+ std::array<float,16> expectedBus{};
+ for(int busIndex=1;busIndex<16;++busIndex) {
+   const float level=0.04f+static_cast<float>(busIndex)*0.015f;
+   expectedBus[static_cast<std::size_t>(busIndex)]=level;
+   require(send(makeWav(32,true,level),busIndex)==kResultOk,
+           "F08 load dedicated AUX test WAV");
+   HostMessage mix;mix.setMessageID("Drumator.RowMix");
+   auto* m=mix.getAttributes();
+   require(m->setInt("Row",busIndex)==kResultOk&&
+           m->setInt("Gain",100)==kResultOk&&
+           m->setInt("Pan",0)==kResultOk&&
+           processorPoint->notify(&mix)==kResultOk,
+           "F08 normalize AUX row gain and pan");
+   require(component->activateBus(kAudio,kOutput,busIndex,true)==kResultOk,
+           "F08 activate AUX output");
+ }
+ require(component->activateBus(kAudio,kOutput,0,false)==kResultOk,
+         "F08 disable MAIN for full matrix");
+ std::array<std::array<float,256>,16> matrixLeft{},matrixRight{};
+ std::array<std::array<float*,2>,16> matrixPointers{};
+ std::array<AudioBusBuffers,16> matrixBuses{};
+ matrixBuses[0].numChannels=2;matrixBuses[0].channelBuffers32=nullptr;
+ for(int busIndex=1;busIndex<16;++busIndex) {
+   matrixPointers[static_cast<std::size_t>(busIndex)]={{
+      matrixLeft[static_cast<std::size_t>(busIndex)].data(),
+      matrixRight[static_cast<std::size_t>(busIndex)].data()}};
+   matrixBuses[static_cast<std::size_t>(busIndex)].numChannels=2;
+   matrixBuses[static_cast<std::size_t>(busIndex)].channelBuffers32=
+       matrixPointers[static_cast<std::size_t>(busIndex)].data();
+ }
+ EventList simultaneousNotes(24);
+ for(int row=1;row<16;++row) {
+   Event hit{};hit.type=Event::kNoteOnEvent;hit.sampleOffset=0;
+   hit.noteOn.pitch=static_cast<int16>(36+row);
+   hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+   require(simultaneousNotes.addEvent(hit)==kResultOk,
+           "F08 append simultaneous row MIDI");
+ }
+ auto* oldInputEvents=data.inputEvents;
+ data.inputEvents=&simultaneousNotes;
+ data.outputs=matrixBuses.data();data.numOutputs=16;
+ require(audio->process(data)==kResultOk,
+         "F08 sixteen-output processing with null MAIN");
+ for(int busIndex=1;busIndex<16;++busIndex) {
+   double avgL=0.,avgR=0.;
+   for(int i=80;i<180;++i) {
+     avgL+=matrixLeft[static_cast<std::size_t>(busIndex)][static_cast<std::size_t>(i)];
+     avgR+=matrixRight[static_cast<std::size_t>(busIndex)][static_cast<std::size_t>(i)];
+   }
+   avgL/=100.;avgR/=100.;
+   const double expected=expectedBus[static_cast<std::size_t>(busIndex)];
+   require(std::isfinite(avgL)&&std::isfinite(avgR)&&
+           std::abs(avgL-expected)<.03&&std::abs(avgR-expected)<.03,
+           "F08 15-AUX routing amplitude/isolation mismatch");
+ }
+ data.inputEvents=oldInputEvents;
+ data.outputs=priorOutputs;data.numOutputs=priorNumOutputs;
+ require(component->activateBus(kAudio,kOutput,0,true)==kResultOk,
+         "F08 restore MAIN after full matrix");
+ std::cout<<"F08 fifteen simultaneous AUX stems, no MAIN, measured PASS\\n";
+
  // P1 kit-recall interleaving regression: VST3 setState remains supported
  // while a separate realtime actor repeatedly invokes process().
  Steinberg::ResizableMemoryIBStream runningKitState;
