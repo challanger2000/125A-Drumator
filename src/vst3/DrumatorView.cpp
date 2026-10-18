@@ -79,7 +79,7 @@ private:
      const std::string raw(static_cast<const char*>(bytes),size);
      std::size_t start=0;
      while(start<raw.size()) {
-       const auto end=raw.find_first_of("\r\n\0",start);
+       const auto end=raw.find_first_of(std::string("\r\n\0",3),start);
        auto path=raw.substr(start,end==std::string::npos?
                                       std::string::npos:end-start);
        const auto first=path.find_first_not_of(" \t");
