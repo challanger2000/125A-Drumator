@@ -83,10 +83,13 @@ public:
     bool restore(const std::uint8_t* bytes,std::size_t size) noexcept {
         PatternBank data;
         if(!data.load(bytes,size))return false;
-        for(std::size_t p=0;p<kPatterns;++p)
+        std::array<std::uint8_t,kRows*kSteps> complete{};
+        for(std::size_t p=0;p<kPatterns;++p) {
             for(std::size_t r=0;r<kRows;++r)
-                for(std::size_t s=0;s<kSteps;++s)
-                    set(p,r,s,data.get(p,r,s));
+                for(std::size_t step=0;step<kSteps;++step)
+                    complete[r*kSteps+step]=data.get(p,r,step);
+            if(!replacePattern(p,complete.data(),complete.size()))return false;
+        }
         select(data.selected());
         return true;
     }
