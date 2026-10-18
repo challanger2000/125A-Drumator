@@ -249,6 +249,30 @@ static void testStressAndRecovery() {
            "voice pool cannot recover from overload");
  }
 }
+static void testRejectedChokeDoesNotFadeVoices() {
+ std::vector<float> source(4096,0.125f);
+ SincKernel kernel;require(kernel.prepare(1.0),"N09 kernel");
+ SampleVoiceEngine engine;require(engine.setOutputRate(48000),"N09 rate");
+ RowSound row;row.sample={source.data(),nullptr,source.size()};
+ row.kernel=&kernel;row.chokeGroup=1;
+ require(engine.setRow(0,row),"N09 group row");
+ row.chokeGroup=0;
+ require(engine.setRow(1,row),"N09 other row");
+ std::array<Trigger,64> fill{};
+ fill[0]={0,0,0,127,0};
+ for(std::size_t i=1;i<fill.size();++i)
+   fill[i]={0,1,0,127,0};
+ std::array<float,256> l{},r{};
+ auto initial=engine.render(fill.data(),fill.size(),l.data(),r.data(),256);
+ require(initial.accepted==64&&engine.active()==64,"N09 voice capacity");
+ // The extra hit has group 1; rejecting it must not fade the first voice.
+ const Trigger rejected{0,0,0,127,0};
+ auto result=engine.render(&rejected,1,l.data(),r.data(),256);
+ require(result.accepted==0&&result.rejectedCapacity==1,
+         "N09 full pool must reject new group hit");
+ require(engine.active()==64,"N09 rejection changed prior voices");
+ near(l[180],8.0,0.08,"N09 rejection choked a prior voice");
+}
 static void testHighRatio64VoiceStress() {
  const auto started=std::chrono::steady_clock::now();
  std::vector<double> blockMillis;
@@ -372,7 +396,7 @@ int main() {
       require(left[i]==0.f&&right[i]==0.f,"empty sampler produced sound");
   }
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
-  testChokeAndStereo();testCapacityValidationAndAutomation();testBandlimiting();
+  testChokeAndStereo();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
   testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();
   std::cout<<"Drumator sample-voice regression: 10 groups PASS\n";
   return 0;

@@ -354,6 +354,27 @@ Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
  ActiveAudioCall currentCall(activeAudioCalls_);
  if(kitRestoreInProgress_.load(std::memory_order_acquire)) {
+   // Even a zero-frame flush must survive restore. The counter distinguishes
+   // host automation from the kit's own selected pattern.
+   if(data.inputParameterChanges) {
+     for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
+       auto* q=data.inputParameterChanges->getParameterData(i);
+       if(!q||q->getParameterId()!=kPatternParam)continue;
+       for(Steinberg::int32 j=0;j<q->getPointCount();++j) {
+         Steinberg::int32 offset=0;Steinberg::Vst::ParamValue v=0;
+         if(q->getPoint(j,offset,v)!=Steinberg::kResultTrue||
+            offset<0||!std::isfinite(v))continue;
+         const auto pattern=patternFromNormalized(v);
+         auto old=restorePatternEvent_.load(std::memory_order_relaxed);
+         std::uint64_t updated=0;
+         do {
+           updated=((old>>4)+1u)*16u|pattern;
+         }while(!restorePatternEvent_.compare_exchange_weak(
+             old,updated,std::memory_order_acq_rel,std::memory_order_relaxed));
+         selected_.store(pattern,std::memory_order_release);
+       }
+     }
+   }
    if(data.symbolicSampleSize==Steinberg::Vst::kSample32&&
       data.numSamples>0&&data.outputs) {
      for(Steinberg::int32 bus=0;bus<data.numOutputs;++bus) {
@@ -610,6 +631,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  const auto rate=outputRate_.load(std::memory_order_acquire);
  {
     std::lock_guard<std::mutex> guard(kitMutex_);
+    const auto overrideAtStart=restorePatternEvent_.load(std::memory_order_acquire);
     KitRestoreBarrier restoreGate(kitRestoreInProgress_,activeAudioCalls_);
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
@@ -631,6 +653,12 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
       rowGain_[row].store(kit_.gain[row]/100.f,std::memory_order_relaxed);
       rowPan_[row].store((static_cast<int>(kit_.pan[row])-100)/100.f,std::memory_order_relaxed);
     }
+    // Commit kit selection first; then replay any automation received while
+    // restore was busy. No further kit selection writes after this replay.
+    const auto overrideAfter=restorePatternEvent_.load(std::memory_order_acquire);
+    if(overrideAfter!=overrideAtStart)
+      selected_.store(static_cast<std::uint32_t>(overrideAfter&15u),
+                      std::memory_order_release);
     kitRevision_.fetch_add(1,std::memory_order_release);
  }
  return Steinberg::kResultOk;

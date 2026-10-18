@@ -42,6 +42,8 @@ private:
  std::atomic<bool> kitRestoreInProgress_{false};
  std::atomic<std::uint32_t> activeAudioCalls_{0};
  std::atomic<std::uint32_t> kitRevision_{0};
+ // Packed revision and last pattern event arriving while kit restore is gated.
+ std::atomic<std::uint64_t> restorePatternEvent_{0};
  std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
  AtomicPatternBank patterns_;
