@@ -15,7 +15,7 @@ public:
    const double previous=getZoomFactor();
    setZoomFactor(factor);
    if(const auto* activeFrame=getFrame()) {
-     if(std::abs(activeFrame->getZoom()-getAbsScaleFactor())>0.001) {
+     if(std::abs(activeFrame->getTransform().m11-getAbsScaleFactor())>0.001) {
        zoomFactor=previous;
        return false;
      }
