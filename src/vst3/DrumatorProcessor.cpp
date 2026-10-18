@@ -671,11 +671,12 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
     kit_=std::move(candidate);
+    // Publish restored rhythms per complete pattern generation. A live
+    // scheduler must never observe a half-restored pattern.
     for(std::size_t p=0;p<kPatterns;++p)
-     for(std::size_t r=0;r<kRows;++r)
-      for(std::size_t s=0;s<kSteps;++s)
-       patterns_.set(p,r,s,
-          kit_.grid[AtomicPatternBank::index(p,r,s)]);
+      if(!patterns_.replacePattern(p,
+             kit_.grid.data()+p*kRows*kSteps,kRows*kSteps))
+        return Steinberg::kResultFalse;
     selected_.restoreIfUnchanged(selectionAtStart,kit_.selected);
     patterns_.select(kit_.selected);
     visibleRows_.store(kit_.visible,std::memory_order_relaxed);
