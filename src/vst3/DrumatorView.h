@@ -5,7 +5,7 @@
 #include <string>
 namespace drumator {
 class Controller;
-class DrumatorView final : public VSTGUI::CView {
+class DrumatorView final : public VSTGUI::CView, public VSTGUI::IDropTarget {
 public:
  ~DrumatorView() override;
  void refreshFromHost(bool relayout);
@@ -15,6 +15,11 @@ public:
  bool attached(VSTGUI::CView* parent) override;
  VSTGUI::CMouseEventResult onMouseDown(
      VSTGUI::CPoint& point,const VSTGUI::CButtonState& buttons) override;
+ VSTGUI::SharedPointer<VSTGUI::IDropTarget> getDropTarget() override {return this;}
+ VSTGUI::DragOperation onDragEnter(VSTGUI::DragEventData data) override;
+ VSTGUI::DragOperation onDragMove(VSTGUI::DragEventData data) override;
+ void onDragLeave(VSTGUI::DragEventData data) override;
+ bool onDrop(VSTGUI::DragEventData data) override;
  bool acceptFileDrop(VSTGUI::DragEventData data);
  std::size_t visibleRowsForHit() const noexcept;
 private:
