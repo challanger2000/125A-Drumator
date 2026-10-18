@@ -49,7 +49,7 @@ public:
  bool changePattern(std::size_t pattern);
  bool copyCurrentPattern();
  bool pasteCurrentPattern();
- bool duplicateCurrentPattern();
+ bool duplicateCurrentPattern(bool* selectedCopy=nullptr);
  bool clearCurrentPattern();
  bool fillRow(std::size_t row,RowFill mode);
  bool adjustSwing(int delta);
