@@ -138,7 +138,9 @@ private:
  DrumatorView& view_;
 };
 VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
- auto local=data.pos;frameToLocal(local);
+ // VSTGUI delivers IDropTarget positions in the receiving view's coordinate system.
+ // frameToLocal() here applied a second conversion and rejected valid drops.
+ const auto local=data.pos;
  std::string path;
  return local.x>=kLabelX&&local.x<=kGridRight&&
    local.y>=kGridY&&local.y<kGridY+displayedRows()*kRowHeight&&
@@ -392,8 +394,7 @@ void DrumatorView::loadPath(std::size_t row,const std::string& path) {
 }
 bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
  if(!data.drag)return false;
- auto position=data.pos;
- frameToLocal(position);
+ const auto position=data.pos;
  if(position.x<kLabelX||position.x>kGridRight||
     position.y<kGridY||position.y>=kGridY+displayedRows()*kRowHeight)
     return false;
