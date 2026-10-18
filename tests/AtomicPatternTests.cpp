@@ -108,6 +108,23 @@ int main(){
         "out-of-range destination accepted");
   check(guarded.coherentPattern(3,readback)&&readback==good,
         "invalid bulk calls changed live pattern");
+  // Kit recall publishes all eight pattern slices as complete generations.
+  AtomicPatternBank recalled;
+  std::array<std::uint8_t,kCells> recalledGrid{};
+  for(std::size_t pattern=0;pattern<kPatterns;++pattern)
+    for(std::size_t i=0;i<kRows*kSteps;++i)
+      recalledGrid[pattern*kRows*kSteps+i]=static_cast<std::uint8_t>(pattern*13);
+  for(std::size_t pattern=0;pattern<kPatterns;++pattern)
+    check(recalled.replacePattern(pattern,
+             recalledGrid.data()+pattern*kRows*kSteps,kRows*kSteps),
+          "kit pattern generation publication failed");
+  std::array<std::uint8_t,kRows*kSteps> recalledPattern{};
+  for(std::size_t pattern=0;pattern<kPatterns;++pattern){
+    check(recalled.coherentPattern(pattern,recalledPattern),
+          "kit pattern snapshot unavailable");
+    for(auto v:recalledPattern)
+      check(v==pattern*13,"kit recalled incomplete pattern");
+  }
   // Audit B01: concurrent full-pattern replacement must never expose
   // a hybrid of two generations to the scheduler's coherent reader.
   AtomicPatternBank transactionBank;
