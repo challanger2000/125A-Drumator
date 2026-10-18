@@ -3,6 +3,7 @@
 #include "core/RowResizeTransaction.h"
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
+#include "core/RowMixControl.h"
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
@@ -159,7 +160,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
  c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
  c->setFontColor(letters);
- c->drawString("VOL / PAN / P: LINKS -  RECHTS +   |   ALT+SAMPLE: ENTFERNEN",
+ c->drawString("VOL/PAN/P: - LINKS, + RECHTS, STRG+KLICK RESET | ALT+SAMPLE ENTFERNEN",
                VSTGUI::CRect(545,74,1240,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=0;row<controller_.visibleRows();++row) {
@@ -196,6 +197,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(value,VSTGUI::CRect(350,y,415,y+26),VSTGUI::kLeftText);
    std::snprintf(value,sizeof(value),"P %+d",controller_.rowPitch(row));
    c->drawString(value,VSTGUI::CRect(420,y,475,y+26),VSTGUI::kLeftText);
+   // Visible decrement/increment zones: left/right half of each control.
+   c->setFontColor(letters);
+   for(double left:{280.0,350.0,420.0}) {
+      const double width=left==420.0?55.0:65.0;
+      c->drawString("-",VSTGUI::CRect(left,y+15,left+width/2.0,y+28));
+      c->drawString("+",VSTGUI::CRect(left+width/2.0,y+15,left+width,y+28));
+   }
    c->setFillColor(controller_.isRowMuted(row)?on:off);
    c->drawRect({478,y+3,500,y+24},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
@@ -424,17 +432,16 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       // Direct left/right half controls, modifier-free at the default zoom.
       const double start=pitch?420.0:(pan?350.0:280.0);
       const double width=pitch?55.0:65.0;
-      const int delta=x<start+width/2.0?-1:1;
-      if(pitch) {
-         if(!controller_.adjustRowPitch(row,(buttons&VSTGUI::kControl)?
-                                            -controller_.rowPitch(row):delta))
-            status_="PITCH NICHT UEBERNOMMEN";
-      } else {
-         const int mixDelta=(buttons&VSTGUI::kControl)?
-            (pan?-controller_.rowPan(row):100-static_cast<int>(controller_.rowGain(row))):
-            delta*10;
-         if(!controller_.adjustRowMix(row,pan,mixDelta))
-            status_="VOLUME/PAN NICHT UEBERNOMMEN";
+      const bool reset=(buttons&VSTGUI::kControl)!=0;
+      const auto control=pitch?RowControl::Pitch:(pan?RowControl::Pan:RowControl::Volume);
+      const int current=pitch?controller_.rowPitch(row):
+                        pan?controller_.rowPan(row):static_cast<int>(controller_.rowGain(row));
+      const int next=rowControlNext(control,current,x<start+width/2.0?-1:1,reset);
+      const int delta=next-current;
+      if(delta!=0) {
+         const bool ok=pitch?controller_.adjustRowPitch(row,delta):
+                             controller_.adjustRowMix(row,pan,delta);
+         if(!ok)status_="REGLERWERT NICHT UEBERNOMMEN";
       }
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }

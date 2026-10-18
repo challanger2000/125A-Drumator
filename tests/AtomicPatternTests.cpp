@@ -1,6 +1,7 @@
 #include "core/AtomicPatternBank.h"
 #include "core/StepVelocity.h"
 #include "core/RowFill.h"
+#include "core/RowMixControl.h"
 #include "core/PatternOperations.h"
 #include <array>
 #include <atomic>
@@ -32,6 +33,13 @@ int main(){
   auto moved=shiftInstrument(example,0,true);
   check(moved[1]==93&&moved[0]==45&&shiftInstrument(moved,0,false)==example,"shift wrap roundtrip");
   check(copyPattern(example)==example&&clearPattern()==PatternSteps{},"pattern copy clear");
+  for(auto control:{RowControl::Volume,RowControl::Pan,RowControl::Pitch}) {
+    const int lo=rowControlMin(control),hi=rowControlMax(control),center=rowControlDefault(control);
+    check(rowControlNext(control,hi,-1)<hi,"cannot leave maximum");
+    check(rowControlNext(control,lo,1)>lo,"cannot leave minimum");
+    check(rowControlNext(control,hi,1)==hi&&rowControlNext(control,lo,-1)==lo,"control limits");
+    check(rowControlNext(control,hi,1,true)==center&&rowControlNext(control,lo,-1,true)==center,"control reset");
+  }
   AtomicPatternBank bank;
   check(nextStepVelocity(0)==32&&nextStepVelocity(32)==64&&
         nextStepVelocity(64)==96&&nextStepVelocity(96)==127&&
