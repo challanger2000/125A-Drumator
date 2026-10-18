@@ -877,6 +877,26 @@ int main(int argc,char** argv) {
          "F04 state decode");
  require(flushedKit.selected==5,
          "F04 zero-frame automation lost the selected pattern");
+ // N05: actual packaged processor must select the host's displayed pattern
+ // even when an automation point lies between the canonical p/7 values.
+ for(const double v:{0.10,0.124,0.125,0.875,0.90,0.929}) {
+   flushChanges.clearQueue();
+   int32 idx=0;
+   auto* q=flushChanges.addParameterData(drumator::kPatternParam,idx);
+   require(q!=nullptr,"N05 flush automation queue");
+   int32 point=0;
+   require(q->addPoint(0,v,point)==kResultOk,"N05 automation point");
+   require(audio->process(flushData)==kResultOk,"N05 actual host automation");
+   Steinberg::ResizableMemoryIBStream updated;
+   require(component->getState(&updated)==kResultOk,"N05 state save");
+   drumator::KitState observed;
+   require(drumator::KitCodec::decode(
+               static_cast<const std::uint8_t*>(updated.getData()),
+               updated.getCursor(),observed),"N05 state decode");
+   require(observed.selected==drumator::patternFromNormalized(v),
+           "N05 real processor selected different pattern from host");
+ }
+ std::cout<<"N05 actual processor/host noncanonical automation PASS\\n";
  std::cout<<"F04 zero-frame host automation state PASS\\n";
  // F08 integration: deactivate MAIN while a real auxiliary row stays active.
  // Bus 1 is row 1 in the 125A fixed-row routing contract.
@@ -951,6 +971,44 @@ int main(int argc,char** argv) {
  require(!audioFailed.load()&&audioBlocks.load()>0,
          "P1 concurrent kit processing returned invalid data");
  std::cout<<"P1 concurrent complete kit recall and live audio PASS\\n";
+ // F07: reproduce a valid portable kit containing a hidden solo row.
+ // Its samples stay intact, but invisible solo flags must not mute row 1.
+ Steinberg::ResizableMemoryIBStream baselineKit;
+ require(component->getState(&baselineKit)==kResultOk,"F07 baseline snapshot");
+ drumator::KitState hiddenSoloKit;
+ require(drumator::KitCodec::decode(
+         static_cast<const std::uint8_t*>(baselineKit.getData()),
+         baselineKit.getCursor(),hiddenSoloKit),"F07 baseline decode");
+ hiddenSoloKit.visible=4;
+ hiddenSoloKit.solo=static_cast<std::uint16_t>(1u<<7);
+ std::vector<std::uint8_t> hiddenBytes;
+ require(drumator::KitCodec::encode(hiddenSoloKit,hiddenBytes),
+         "F07 hidden solo fixture encode");
+ Steinberg::ResizableMemoryIBStream hiddenState;
+ Steinberg::int32 hiddenWritten=0;
+ require(hiddenState.write(hiddenBytes.data(),
+           static_cast<Steinberg::int32>(hiddenBytes.size()),
+           &hiddenWritten)==kResultOk&&
+           static_cast<std::size_t>(hiddenWritten)==hiddenBytes.size(),
+           "F07 hidden solo fixture stream");
+ hiddenState.rewind();
+ require(component->setState(&hiddenState)==kResultOk,
+         "F07 processor hidden solo recall");
+ hiddenState.rewind();
+ require(ctrl->setComponentState(&hiddenState)==kResultOk,
+         "F07 controller hidden solo recall");
+ Steinberg::ResizableMemoryIBStream sanitized;
+ require(component->getState(&sanitized)==kResultOk,"F07 sanitized state");
+ drumator::KitState sanitizedKit;
+ require(drumator::KitCodec::decode(
+           static_cast<const std::uint8_t*>(sanitized.getData()),
+           sanitized.getCursor(),sanitizedKit)&&
+         sanitizedKit.solo==0&&sanitizedKit.visible==4,
+         "F07 hidden solo stayed active after state load");
+ baselineKit.rewind();
+ require(component->setState(&baselineKit)==kResultOk,
+         "F07 restore baseline kit");
+ std::cout<<"F07 packaged VST3 hidden-solo recall policy PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");

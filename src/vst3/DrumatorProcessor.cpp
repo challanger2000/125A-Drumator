@@ -605,6 +605,9 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
              return Steinberg::kResultFalse;
     }else return Steinberg::kResultFalse;
  }
+ // Valid imported kits may contain solo flags on rows that are hidden.
+ // They are not user-operable; drop only those flags, preserving audio assets.
+ candidate.solo=RowVisibility::visibleSolo(candidate.solo,candidate.visible);
  const auto rate=outputRate_.load(std::memory_order_acquire);
  {
     std::lock_guard<std::mutex> guard(kitMutex_);

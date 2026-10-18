@@ -107,7 +107,8 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        humanizePercent_=candidate.humanize;
        for(std::size_t row=0;row<kRows;++row) {
           muted_[row]=(candidate.muted&(1u<<row))!=0;
-          solo_[row]=(candidate.solo&(1u<<row))!=0;
+          solo_[row]=(RowVisibility::visibleSolo(candidate.solo,candidate.visible)&
+                      (1u<<row))!=0;
           gain_[row]=candidate.gain[row];pan_[row]=candidate.pan[row];
           pitch_[row]=candidate.pitch[row];choke_[row]=candidate.choke[row];
        }

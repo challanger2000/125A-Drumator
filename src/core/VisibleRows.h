@@ -10,6 +10,12 @@ constexpr std::uint32_t kStateMagicV3=0x33524D44u; // "DMR3"
 class RowVisibility {
 public:
  static bool valid(std::size_t n) noexcept {return n>=1&&n<=kRows;}
+ // A hidden solo must never silence every visible instrument after recall.
+ static std::uint16_t visibleSolo(std::uint16_t solo,std::size_t visible) noexcept {
+   if(!valid(visible))return 0;
+   return static_cast<std::uint16_t>(
+       solo&((std::uint32_t{1}<<static_cast<unsigned>(visible))-1u));
+ }
  template<class Grid>
  static bool canHideLast(std::size_t count,const Grid& bank,
                          bool hasLoadedSample) noexcept {

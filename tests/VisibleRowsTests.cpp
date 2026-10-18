@@ -55,6 +55,11 @@ int main(){
            static_cast<unsigned>(std::min(7.0,std::floor(n*8.))),
            "N05 quantization mismatch");
    }
+   check(RowVisibility::visibleSolo(0xffffu,4)==0x000fu,
+         "F07 recall retained hidden solo and could mute visible rows");
+   check(RowVisibility::visibleSolo(0x8000u,16)==0x8000u,
+         "F07 visible sixteenth row lost solo");
+   std::cout<<"F07 visible-only solo recall policy PASS\\n";
    std::cout<<"N05 1001 discrete pattern values PASS\\n";
    // N04 shared draw/hit geometry boundaries: pattern [38,68), zoom [39,69).
    auto patternHit=[](double y){return y>=38.0&&y<68.0;};
