@@ -16,6 +16,7 @@
 #include <cctype>
 #include <cstring>
 #include <filesystem>
+#include "core/SampleFolderNavigation.h"
 #include <fstream>
 #include <vector>
 
@@ -441,24 +442,20 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
    const auto current=std::filesystem::u8path(samplePaths_[row]);
    const auto parent=current.parent_path();
    if(parent.empty()||!std::filesystem::is_directory(parent))return LoadStatus::NotFound;
-   std::vector<std::filesystem::path> candidates;
+   std::vector<std::string> candidates;
    for(const auto& entry:std::filesystem::directory_iterator(parent)) {
-     if(!entry.is_regular_file())continue;
+     std::error_code ec;
+     if(!entry.is_regular_file(ec)||ec)continue;
      auto ext=entry.path().extension().u8string();
      std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
-     if(ext==".wav"||ext==".flac")candidates.push_back(entry.path());
+     if(ext==".wav"||ext==".flac")candidates.push_back(entry.path().u8string());
    }
-   if(candidates.empty())return LoadStatus::NotFound;
-   std::sort(candidates.begin(),candidates.end(),[](const auto& a,const auto& b){
-     return a.filename().u8string()<b.filename().u8string();
-   });
-   const auto it=std::find(candidates.begin(),candidates.end(),current);
-   if(it==candidates.end())return LoadStatus::NotFound;
-   const auto index=static_cast<std::size_t>(it-candidates.begin());
-   const auto next=direction>0?(index+1)%candidates.size():
-                (index+candidates.size()-1)%candidates.size();
-   if(next==index)return LoadStatus::NotFound;
-   return loadWav(row,candidates[next].u8string());
+   std::string selected;
+   if(!adjacentSample(candidates,current.u8string(),direction,selected))
+      return LoadStatus::NotFound;
+   // Transactional: loadWav changes the active sample only after validation
+   // and processor acceptance; a bad candidate does not erase the old one.
+   return loadWav(row,selected);
  }catch(const std::filesystem::filesystem_error&){return LoadStatus::ReadError;}
   catch(const std::bad_alloc&){return LoadStatus::ReadError;}
 }

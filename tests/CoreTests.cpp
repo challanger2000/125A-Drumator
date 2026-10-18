@@ -1,4 +1,5 @@
 #include "core/SequencerCore.h"
+#include "core/SampleFolderNavigation.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -17,6 +18,22 @@ static std::vector<Trigger> get(const PatternBank& b,Clock t,
 }
 int main(){
  try {
+  // Sample navigation: sorted, cyclic, unchanged on invalid requests.
+  const std::vector<std::string> files{"D.wav","A.wav","B.flac"};
+  std::string selected="keep";
+  check(adjacentSample(files,"A.wav",1,selected)&&selected=="B.flac",
+        "folder next");
+  check(adjacentSample(files,"A.wav",-1,selected)&&selected=="D.wav",
+        "folder backward wrap");
+  check(adjacentSample(files,"D.wav",1,selected)&&selected=="A.wav",
+        "folder forward wrap");
+  check(!adjacentSample(files,"missing.wav",1,selected)&&selected=="A.wav",
+        "missing current sample changed selection");
+  check(!adjacentSample(files,"A.wav",0,selected),"invalid navigation direction");
+  check(!adjacentSample({"same.wav"},"same.wav",1,selected),
+        "single sample must not reload");
+  check(adjacentSample({"B.wav","A.wav","B.wav"},"A.wav",1,selected)&&
+        selected=="B.wav","duplicate filename handling");
   PatternBank b;
   check(b.get(0,0,0)==0,"initial silent grid");
   check(b.set(0,0,0,127)&&b.set(0,1,1,100)&&b.set(0,2,2,66)&&
