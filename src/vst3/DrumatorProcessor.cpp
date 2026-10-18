@@ -83,13 +83,13 @@ Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 s
  return size==Steinberg::Vst::kSample32?Steinberg::kResultTrue:Steinberg::kResultFalse;
 }
 Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
- if(!state) {voices_.reset();wasPlaying_=false;}
+ if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;}
  return AudioEffect::setActive(state);
 }
 Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
  // Steinberg's AudioEffect default returns kNotImplemented. A real host
  // may invoke this independently of setActive; honor the lifecycle.
- if(!state) {voices_.reset();wasPlaying_=false;}
+ if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;}
  return Steinberg::kResultOk;
 }
 // Messages are delivered on the UI thread by the VST3 IConnectionPoint
