@@ -187,8 +187,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        ++suffixBegin;
      visibleName=name.substr(0,prefixEnd)+"..."+name.substr(suffixBegin);
    }
-   c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,230,y+26),
+   c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,202,y+26),
                  VSTGUI::kLeftText);
+   c->setFontColor(accent);
+   c->drawString("<",VSTGUI::CRect(203,y,216,y+26));
+   c->drawString(">",VSTGUI::CRect(216,y,229,y+26));
+   // sample name rendering above has its own bounds
+
    char busLabel[16]{};
    if(controller_.rowOutput(row)==0)std::snprintf(busLabel,sizeof(busLabel),"MAIN");
    else std::snprintf(busLabel,sizeof(busLabel),"O%02u",controller_.rowOutput(row)+1);
@@ -461,6 +466,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=535&&x<558) {
       if(!controller_.cycleRowChoke(row))status_="CHOKE NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=203&&x<230&&(buttons&VSTGUI::kAlt)==0) {
+     const auto result=controller_.stepSample(row,x<216?-1:1);
+     status_=result==Controller::LoadStatus::Accepted?"SAMPLE GEWECHSELT":"SAMPLEWECHSEL NICHT MOEGLICH";
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=230&&x<275&&(buttons&VSTGUI::kAlt)==0) {
       if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";

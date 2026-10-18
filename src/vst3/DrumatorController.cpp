@@ -119,6 +119,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
           !KitCodec::decode(encoded.data(),encoded.size(),candidate))
           return Steinberg::kResultFalse;
        grid_=candidate.grid;
+       samplePaths_.fill({});
        visibleRows_=candidate.visible;
        swingPercent_=candidate.swing;
        humanizePercent_=candidate.humanize;
@@ -158,6 +159,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
  }else return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
+ samplePaths_.fill({});
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(auto& name:labels_)name="LEER - WAV LADEN";
@@ -335,7 +337,7 @@ bool Controller::clearSample(std::size_t row) {
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok)labels_[row]="LEER - WAV LADEN";
+ if(ok){labels_[row]="LEER - WAV LADEN";samplePaths_[row].clear();}
  return ok;
 }
 bool Controller::cycleRowOutput(std::size_t row) {
@@ -425,6 +427,35 @@ bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(ok)grid_[(p*kRows+r)*kSteps+s]=static_cast<std::uint8_t>(next);
  return ok;
 }
+Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
+ if(row>=kRows)return LoadStatus::InvalidRow;
+ if(direction!=1&&direction!=-1)return LoadStatus::Rejected;
+ if(samplePaths_[row].empty())return LoadStatus::NotFound;
+ try {
+   const auto current=std::filesystem::u8path(samplePaths_[row]);
+   const auto parent=current.parent_path();
+   if(parent.empty()||!std::filesystem::is_directory(parent))return LoadStatus::NotFound;
+   std::vector<std::filesystem::path> candidates;
+   for(const auto& entry:std::filesystem::directory_iterator(parent)) {
+     if(!entry.is_regular_file())continue;
+     auto ext=entry.path().extension().u8string();
+     std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+     if(ext==".wav"||ext==".flac")candidates.push_back(entry.path());
+   }
+   if(candidates.empty())return LoadStatus::NotFound;
+   std::sort(candidates.begin(),candidates.end(),[](const auto& a,const auto& b){
+     return a.filename().u8string()<b.filename().u8string();
+   });
+   const auto it=std::find(candidates.begin(),candidates.end(),current);
+   if(it==candidates.end())return LoadStatus::NotFound;
+   const auto index=static_cast<std::size_t>(it-candidates.begin());
+   const auto next=direction>0?(index+1)%candidates.size():
+                (index+candidates.size()-1)%candidates.size();
+   if(next==index)return LoadStatus::NotFound;
+   return loadWav(row,candidates[next].u8string());
+ }catch(const std::filesystem::filesystem_error&){return LoadStatus::ReadError;}
+  catch(const std::bad_alloc&){return LoadStatus::ReadError;}
+}
 Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& path) {
  if(row>=kRows)return LoadStatus::InvalidRow;
  if(path.empty())return LoadStatus::NotFound;
@@ -486,6 +517,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  // Success means the processor accepted the immutable asset for the
  // next audio block; no claim is made that the buffer has already rendered.
  labels_[row]=name;
+ samplePaths_[row]=path;
  return LoadStatus::Accepted;
 }
 }

@@ -68,6 +68,7 @@ public:
   NoProcessorConnection, Rejected
  };
  LoadStatus loadWav(std::size_t row,const std::string& path);
+ LoadStatus stepSample(std::size_t row,int direction);
  std::uint8_t velocity(std::size_t pattern,std::size_t row,std::size_t step) const noexcept;
  std::size_t currentPattern() noexcept;
  const std::string& label(std::size_t row) const noexcept;
@@ -80,6 +81,8 @@ private:
  bool clipboardValid_{false};
  bool replacePattern(std::size_t p,const PatternSteps& data);
  std::array<std::string,kRows> labels_{};
+ // Filesystem navigation is session-only. Embedded WAV data remains self-contained.
+ std::array<std::string,kRows> samplePaths_{};
  std::array<bool,kRows> muted_{};
  std::array<bool,kRows> solo_{};
  std::array<std::uint8_t,kRows> gain_{};
