@@ -243,10 +243,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       !bytes||count!=kRows*kSteps)return Steinberg::kInvalidArgument;
    const auto* values=static_cast<const std::uint8_t*>(bytes);
    for(std::size_t i=0;i<kRows*kSteps;++i)if(values[i]>127)return Steinberg::kInvalidArgument;
-   for(std::size_t row=0;row<kRows;++row)for(std::size_t step=0;step<kSteps;++step)
-     if(!patterns_.set(static_cast<std::size_t>(target),row,step,values[row*kSteps+step]))
-       return Steinberg::kResultFalse;
-   return Steinberg::kResultOk;
+   return patterns_.replacePattern(static_cast<std::size_t>(target),values,count)
+       ?Steinberg::kResultOk:Steinberg::kResultFalse;
  }
  if(std::strcmp(msg->getMessageID(),"Drumator.StepEdit")==0) {
    Steinberg::int64 pattern=-1,step=-1,velocity=-1;
@@ -462,10 +460,23 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
      if(finish<=cursor)return;
-     patterns_.select(activePattern);
+     // Read exactly one generation; a concurrently replaced pattern is
+     // deferred to a later block rather than rendered in a mixed state.
+     std::array<std::uint8_t,kRows*kSteps> consistent{};
+     if(!patterns_.coherentPattern(activePattern,consistent)) {
+       cursor=finish;return;
+     }
+     struct CoherentView {
+       const std::array<std::uint8_t,kRows*kSteps>& values;
+       std::uint8_t program;
+       std::uint8_t selected() const noexcept {return program;}
+       std::uint8_t get(std::size_t p,std::size_t r,std::size_t step) const noexcept {
+          return p==program?values[r*kSteps+step]:0;
+       }
+     } read{consistent,static_cast<std::uint8_t>(activePattern)};
      const Clock clock{initialPpq+static_cast<double>(cursor)*tempo/(60.0*rate),
                        tempo,rate,finish-cursor,true,swing,humanize,phaseOriginStep_};
-     const auto scheduled=StepScheduler::run(patterns_,clock,[&](Trigger hit){
+     const auto scheduled=StepScheduler::run(read,clock,[&](Trigger hit){
        hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
        triggers_.appendStep(hit);
      });
