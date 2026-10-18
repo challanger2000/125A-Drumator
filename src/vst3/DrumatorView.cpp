@@ -137,6 +137,21 @@ private:
 
  DrumatorView& view_;
 };
+VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
+ auto local=data.pos;frameToLocal(local);
+ std::string path;
+ return local.x>=kLabelX&&local.x<=kGridRight&&
+   local.y>=kGridY&&local.y<kGridY+displayedRows()*kRowHeight&&
+   DrumatorDropTarget::extractSamplePath(data.drag,path)
+   ?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
+}
+VSTGUI::DragOperation DrumatorView::onDragMove(VSTGUI::DragEventData data) {
+ return onDragEnter(data);
+}
+void DrumatorView::onDragLeave(VSTGUI::DragEventData) {}
+bool DrumatorView::onDrop(VSTGUI::DragEventData data) {
+ return acceptFileDrop(data);
+}
 std::size_t DrumatorView::visibleRowsForHit() const noexcept {
  return displayedRows();
 }
@@ -179,7 +194,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
                            Controller& controller,VSTGUI::VST3Editor& editor)
  : CView(size),controller_(controller),editor_(editor) {
  setMouseEnabled(true);
- setDropTarget(VSTGUI::makeOwned<DrumatorDropTarget>(*this));
+ // The view itself owns the drop-target interface, as in Phraseator.
  controller_.registerView(this);
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
