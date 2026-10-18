@@ -267,7 +267,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(letters);c->drawString(actions[i],VSTGUI::CRect(x,buttonsY,x+109,buttonsY+29));
  }
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-    const double top=kGridY+fillMenuRow_*kRowHeight;
+    const double top=std::max(0.0,std::min(kGridY+fillMenuRow_*kRowHeight,getViewSize().getHeight()-125.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","FILL ALL","CLEAR"};
     for(int i=0;i<5;++i) {
       const double y=top+i*25.;
@@ -341,7 +341,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
  if(fillMenuRow_>=0) {
-   const double top=kGridY+fillMenuRow_*kRowHeight;
+   const double top=std::max(0.0,std::min(kGridY+fillMenuRow_*kRowHeight,getViewSize().getHeight()-125.0));
    const int row=fillMenuRow_;
    fillMenuRow_=-1;
    if(x>=650&&x<755&&y>=top&&y<top+125) {
@@ -352,6 +352,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    invalid();
+   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
 
  if(y>=74&&y<98&&x>=448&&x<505) {
@@ -477,12 +478,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=kLabelX&&x<275&&(buttons&VSTGUI::kAlt)!=0) {
+   if(x>=kLabelX&&x<203&&(buttons&VSTGUI::kAlt)!=0) {
       if(controller_.clearSample(row))status_="SAMPLE ENTFERNT - STEPS BLEIBEN";
       else status_="SAMPLE KONNTE NICHT ENTFERNT WERDEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=kLabelX&&x<275) {
+   if(x>=kLabelX&&x<203) {
       load(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kGridX&&x<kGridRight) {
