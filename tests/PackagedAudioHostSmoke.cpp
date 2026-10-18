@@ -1091,6 +1091,50 @@ int main(int argc,char** argv) {
  require(component->setState(&baselineKit)==kResultOk,
          "F07 restore baseline kit");
  std::cout<<"F07 packaged VST3 hidden-solo recall policy PASS\\n";
+ // N08: after restoring a long drum hit, a single playing block followed
+ // immediately by STOP must clear all tails in the next host block.
+ drumator::KitState stopKit;
+ require(drumator::KitCodec::decode(
+           static_cast<const std::uint8_t*>(baselineKit.getData()),
+           baselineKit.getCursor(),stopKit),
+         "N08 baseline decode");
+ stopKit.grid.fill(0);
+ stopKit.grid[0]=127;
+ stopKit.selected=0;
+ stopKit.solo=0;stopKit.muted=0;
+ stopKit.swing=0;stopKit.humanize=0;
+ stopKit.wav[0]=makeWav(32,true,.25f);
+ stopKit.names[0]="N08_Transport.wav";
+ std::vector<std::uint8_t> stopBytes;
+ require(drumator::KitCodec::encode(stopKit,stopBytes),
+         "N08 fixture encode");
+ Steinberg::ResizableMemoryIBStream stopState;
+ Steinberg::int32 stopWritten=0;
+ require(stopState.write(stopBytes.data(),
+         static_cast<Steinberg::int32>(stopBytes.size()),
+         &stopWritten)==kResultOk&&
+         static_cast<std::size_t>(stopWritten)==stopBytes.size(),
+         "N08 fixture stream");
+ stopState.rewind();
+ require(component->setState(&stopState)==kResultOk,"N08 recall");
+ auto* previousChanges=data.inputParameterChanges;
+ data.inputParameterChanges=nullptr;
+ context.state=ProcessContext::kPlaying|
+               ProcessContext::kProjectTimeMusicValid|
+               ProcessContext::kTempoValid;
+ context.projectTimeMusic=0.;
+ context.tempo=120.;
+ run(-1);
+ double playingEnergy=0.;
+ for(float v:left)playingEnergy+=std::abs(v);
+ require(playingEnergy>1.,"N08 fixture did not start a sequencer voice");
+ context.state=0;
+ run(-1);
+ for(int i=0;i<256;++i)
+   require(left[i]==0.f&&right[i]==0.f,
+           "N08 immediate stop failed to silence long sample tail");
+ data.inputParameterChanges=previousChanges;
+ std::cout<<"N08 kit-recall playing-block immediate-stop regression PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
