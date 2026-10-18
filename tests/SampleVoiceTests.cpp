@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <vector>
 #include <algorithm>
+#include <chrono>
 
 using namespace drumator;
 static void require(bool ok,const char* text){if(!ok)throw std::runtime_error(text);}
@@ -249,6 +250,7 @@ static void testStressAndRecovery() {
  }
 }
 static void testHighRatio64VoiceStress() {
+ const auto started=std::chrono::steady_clock::now();
  // Worst-case ratio 16x, 64 concurrently sounding voices, repeated blocks.
  std::vector<float> sample(131072,0.125f);
  SincKernel kernel;require(kernel.prepare(16.0),"16x stress kernel");
@@ -276,6 +278,12 @@ static void testHighRatio64VoiceStress() {
    }
    require(engine.active()==0,"16x voice pool not reclaimed");
  }
+ const auto elapsed=std::chrono::duration<double>(
+     std::chrono::steady_clock::now()-started).count();
+ std::cout<<"F14 high-ratio 64-voice stress elapsed "<<elapsed<<" s\\n";
+ // A deliberately generous CI hang/regression ceiling; NOT a real-time CPU
+ // qualification. Host-specific scheduling must be measured in Studio One.
+ require(elapsed<20.0,"F14 stress exceeded 20-second CI safety ceiling");
 }
 static void testStemWithoutMain() {
  std::array<float,2048> source{};source.fill(.25f);
