@@ -73,6 +73,17 @@ int main(){
   AtomicPatternBank restored;
   check(restored.restore(stored.data(),stored.size()),"restore failed");
   check(restored.snapshot()==stored,"atomic bank roundtrip differs");
+  // A restored state must expose coherent full-pattern generations.
+  std::array<std::uint8_t,kRows*kSteps> restoredGeneration{};
+  for(std::size_t pattern=0;pattern<kPatterns;++pattern) {
+    check(restored.coherentPattern(pattern,restoredGeneration),
+          "restored pattern generation unavailable");
+    for(std::size_t row=0;row<kRows;++row)
+      for(std::size_t step=0;step<kSteps;++step)
+        check(restoredGeneration[row*kSteps+step]==
+                  bank.get(pattern,row,step),
+              "restored generation differs from source");
+  }
   auto invalid=stored;invalid.back()=255;
   check(!restored.restore(invalid.data(),invalid.size()),"invalid grid accepted");
   check(restored.snapshot()==stored,"invalid restore changed live grid");
