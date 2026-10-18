@@ -452,12 +452,21 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
      std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
      if(ext==".wav"||ext==".flac")candidates.push_back(entry.path().u8string());
    }
-   std::string selected;
-   if(!adjacentSample(candidates,current.u8string(),direction,selected))
-      return LoadStatus::NotFound;
-   // Transactional: loadWav changes the active sample only after validation
-   // and processor acceptance; a bad candidate does not erase the old one.
-   return loadWav(row,selected);
+   std::string cursor=current.u8string();
+   // Attempt each candidate at most once, skipping corrupt or inaccessible files.
+   // The active sample/path is changed only by a successful loadWav().
+   for(std::size_t tried=0;tried<candidates.size()-1;++tried) {
+      std::string selected;
+      if(!adjacentSample(candidates,cursor,direction,selected))
+         return LoadStatus::NotFound;
+      const auto status=loadWav(row,selected);
+      if(status==LoadStatus::Accepted)return status;
+      // A disconnected processor or allocation failure must not be hidden.
+      if(status==LoadStatus::NoProcessorConnection||
+         status==LoadStatus::Rejected)return status;
+      cursor=selected;
+   }
+   return LoadStatus::NotFound;
  }catch(const std::filesystem::filesystem_error&){return LoadStatus::ReadError;}
   catch(const std::bad_alloc&){return LoadStatus::ReadError;}
 }
