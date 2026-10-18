@@ -452,6 +452,7 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
      std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
      if(ext==".wav"||ext==".flac")candidates.push_back(entry.path().u8string());
    }
+   if(candidates.size()<2)return LoadStatus::NotFound;
    std::string cursor=current.u8string();
    // Attempt each candidate at most once, skipping corrupt or inaccessible files.
    // The active sample/path is changed only by a successful loadWav().
