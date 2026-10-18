@@ -81,6 +81,7 @@ struct RowSound {
     float gain{1.f}; // linear amplitude, 1 = 0 dB.
     float pan{0.f};  // -1 left, 0 center, +1 right.
     std::uint8_t chokeGroup{0}; // 0 = disabled.
+    std::uint8_t outputBus{0}; // assigned when launching a voice
     bool mute{false};
     const void* ownerToken{nullptr}; // audio-owned identity for safe deferred reclaim
 };
@@ -119,6 +120,7 @@ public:
                 return false;
         }
         rows_[row]=sound;
+        rows_[row].outputBus=static_cast<std::uint8_t>(row); // legacy output mapping
         return true;
     }
     // Called only by the audio-thread owner at block boundaries.
@@ -129,6 +131,10 @@ public:
         rows_[row].gain=gain;
         rows_[row].pan=pan;
         return true;
+    }
+    bool setRowOutput(std::size_t row,std::uint8_t bus) noexcept {
+        if(row>=kRows||bus>=kRows)return false;
+        rows_[row].outputBus=bus;return true;
     }
     bool setRowChoke(std::size_t row,std::uint8_t group) noexcept {
         if(row>=kRows||group>4)return false;
@@ -221,10 +227,10 @@ public:
                 }
                 const auto a=static_cast<float>(vl*voice.gainL*envelope);
                 const auto b=static_cast<float>(vr*voice.gainR*envelope);
-                if(stemLeft&&stemRight&&voice.row>0&&
-                   stemLeft[voice.row]&&stemRight[voice.row]) {
-                   stemLeft[voice.row][f]+=a;
-                   stemRight[voice.row][f]+=b;
+                if(stemLeft&&stemRight&&voice.outputBus>0&&
+                   stemLeft[voice.outputBus]&&stemRight[voice.outputBus]) {
+                   stemLeft[voice.outputBus][f]+=a;
+                   stemRight[voice.outputBus][f]+=b;
                 }else {
                    l+=a;r+=b;
                 }
@@ -250,6 +256,7 @@ private:
         std::uint32_t releaseLeft{0},releaseTotal{0};
         std::uint8_t group{0};
         std::uint8_t row{0};
+        std::uint8_t outputBus{0};
         const void* ownerToken{nullptr};
         bool active{false};
     };
@@ -286,6 +293,7 @@ private:
                     (pan>=0.0?1.0:std::cos(-pan*pi/2.0));
             v.group=row.chokeGroup;
             v.row=event.row;
+            v.outputBus=row.outputBus;
             v.ownerToken=row.ownerToken;
             v.releaseTotal=0;
             v.releaseLeft=0;

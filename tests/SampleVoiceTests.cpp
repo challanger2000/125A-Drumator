@@ -331,6 +331,25 @@ static void testHighRatio64VoiceStress() {
  // qualification. Host-specific scheduling must be measured in Studio One.
  require(elapsed<20.0,"F14 stress exceeded 20-second CI safety ceiling");
 }
+static void testAssignableOutput() {
+ std::array<float,1024> sample{};sample.fill(.5f);
+ SincKernel kernel;require(kernel.prepare(1.),"output kernel");
+ SampleVoiceEngine e;require(e.setOutputRate(48000),"output rate");
+ RowSound row;row.kernel=&kernel;row.sample={sample.data(),nullptr,sample.size()};
+ require(e.setRow(0,row),"output row");
+ require(!e.setRowOutput(16,1)&&!e.setRowOutput(0,16),"invalid output");
+ require(e.setRowOutput(0,3),"assign stem 3");
+ std::array<float,128> mainL{},mainR{},auxL{},auxR{};
+ std::array<float*,kRows> stemsL{},stemsR{};
+ stemsL[3]=auxL.data();stemsR[3]=auxR.data();
+ const Trigger hit{0,0,0,127,0};
+ require(e.render(&hit,1,mainL.data(),mainR.data(),128,stemsL.data(),stemsR.data()).accepted==1,"output render");
+ near(mainL[70],0,.001,"assigned signal leaked to MAIN");
+ near(auxL[70],.5,.001,"assigned stem no signal");
+ e.reset();stemsL[3]=nullptr;stemsR[3]=nullptr;
+ require(e.render(&hit,1,mainL.data(),mainR.data(),128,stemsL.data(),stemsR.data()).accepted==1,"fallback render");
+ near(mainL[70],.5,.001,"disabled stem did not fall back MAIN");
+}
 static void testStemWithoutMain() {
  std::array<float,2048> source{};source.fill(.25f);
  SincKernel kernel;require(kernel.prepare(1.0),"no MAIN kernel");
@@ -397,7 +416,7 @@ int main() {
   }
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
-  testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();
+  testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();
   std::cout<<"Drumator sample-voice regression: 10 groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
