@@ -251,6 +251,8 @@ static void testStressAndRecovery() {
 }
 static void testHighRatio64VoiceStress() {
  const auto started=std::chrono::steady_clock::now();
+ std::vector<double> blockMillis;
+ blockMillis.reserve(5*36);
  // Worst-case ratio 16x, 64 concurrently sounding voices, repeated blocks.
  std::vector<float> sample(131072,0.125f);
  SincKernel kernel;require(kernel.prepare(16.0),"16x stress kernel");
@@ -263,9 +265,17 @@ static void testHighRatio64VoiceStress() {
  for(std::size_t i=0;i<hits.size();++i)
    hits[i]={0,static_cast<std::uint8_t>(i%kRows),0,127,0};
  std::array<float,256> l{},r{};
+ const auto measuredRender=[&](const Trigger* events,std::size_t count) {
+   const auto begin=std::chrono::steady_clock::now();
+   const auto result=engine.render(events,count,l.data(),r.data(),256);
+   const auto finish=std::chrono::steady_clock::now();
+   blockMillis.push_back(
+       std::chrono::duration<double,std::milli>(finish-begin).count());
+   return result;
+ };
  for(int cycle=0;cycle<5;++cycle) {
    engine.reset();
-   auto result=engine.render(hits.data(),hits.size(),l.data(),r.data(),256);
+   auto result=measuredRender(hits.data(),hits.size());
    require(result.status==RenderStatus::Ok&&result.accepted==64,
            "16x maximum-polyphony launch");
    // 131072 source frames / 16x = 8192 output frames;
@@ -273,13 +283,25 @@ static void testHighRatio64VoiceStress() {
    for(int block=0;block<35;++block) {
      for(float v:l)require(std::isfinite(v),"16x nonfinite left");
      for(float v:r)require(std::isfinite(v),"16x nonfinite right");
-     result=engine.render(nullptr,0,l.data(),r.data(),256);
+     result=measuredRender(nullptr,0);
      require(result.status==RenderStatus::Ok,"16x stress block");
    }
    require(engine.active()==0,"16x voice pool not reclaimed");
  }
  const auto elapsed=std::chrono::duration<double>(
      std::chrono::steady_clock::now()-started).count();
+ std::sort(blockMillis.begin(),blockMillis.end());
+ const auto atPercentile=[&](unsigned percent) {
+   const auto position=std::min<std::size_t>(
+       blockMillis.size()-1,(blockMillis.size()*percent+99)/100-1);
+   return blockMillis[position];
+ };
+ constexpr double kBlockDeadlineMs=256.0/48000.0*1000.0;
+ std::cout<<"F14 64-voice 16x offline block times: p95="
+          <<atPercentile(95)<<"ms p99="<<atPercentile(99)
+          <<"ms max="<<blockMillis.back()
+          <<"ms; 48k/256 deadline="<<kBlockDeadlineMs
+          <<"ms (CI runner, NOT Studio One real-time evidence)\\n";
  std::cout<<"F14 high-ratio 64-voice stress elapsed "<<elapsed<<" s\\n";
  // A deliberately generous CI hang/regression ceiling; NOT a real-time CPU
  // qualification. Host-specific scheduling must be measured in Studio One.
