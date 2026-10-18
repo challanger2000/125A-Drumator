@@ -32,6 +32,6 @@ private:
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
  void load(std::size_t row);
  bool adjustEditorHeight();
- void loadPath(std::size_t row,const std::string& path);
+ bool loadPath(std::size_t row,const std::string& path);
 };
 }

@@ -105,6 +105,10 @@ if(DRUMATOR_BUILD_VST3)
   # cmake macro interpolates source paths into a CMake parse expression;
   # normalize the official SDK source location first.
   file(TO_CMAKE_PATH "${VST3_SDK_ROOT}" _DrumatorSdkRoot)
+  if(WIN32)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchVstguiWin32Drop.cmake")
+    phraseator_patch_vstgui_windows_drop("${_DrumatorSdkRoot}/vstgui4/vstgui/lib/platform/win32/win32datapackage.cpp")
+  endif()
   # Decoder pinned to an immutable upstream commit, used only at import time.
   set(_drflac_dir "${CMAKE_BINARY_DIR}/third_party")
   file(MAKE_DIRECTORY "${_drflac_dir}")

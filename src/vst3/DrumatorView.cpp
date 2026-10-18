@@ -447,7 +447,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  }
  setDirty(false);
 }
-void DrumatorView::loadPath(std::size_t row,const std::string& path) {
+bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
  const auto outcome=controller_.loadWav(row,path);
  switch(outcome) {
  case Controller::LoadStatus::Accepted:
@@ -468,6 +468,7 @@ void DrumatorView::loadPath(std::size_t row,const std::string& path) {
      status_="PROZESSOR HAT SAMPLE ABGELEHNT - RATE/LAST PRUEFEN";break;
  }
  invalid();
+ return outcome==Controller::LoadStatus::Accepted;
 }
 bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
  if(!data.drag) {
@@ -488,8 +489,7 @@ bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
    status_="D&D FEHLER: HOST UEBERGIBT KEINEN WAV/FLAC-DATEIPFAD";
    invalid();return false;
  }
- loadPath(row,path);
- return true;
+ return loadPath(row,path);
 }
 
 void DrumatorView::load(std::size_t row) {
