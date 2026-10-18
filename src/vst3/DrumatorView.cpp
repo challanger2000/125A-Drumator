@@ -83,8 +83,10 @@ std::size_t DrumatorView::visibleRowsForHit() const noexcept {
  return displayedRows();
 }
 std::size_t DrumatorView::displayedRows() const noexcept {
- return compactViewport_?std::min<std::size_t>(4,controller_.visibleRows()-std::min(firstRow_,controller_.visibleRows()-1)):
-                         controller_.visibleRows();
+ const auto total=controller_.visibleRows();
+ if(!compactViewport_)return total;
+ if(total==0)return 0;
+ return std::min<std::size_t>(4,total-std::min(firstRow_,total-1));
 }
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
