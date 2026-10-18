@@ -343,7 +343,6 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        else if(result==RowResizeResult::RollbackFailed)
          status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
      }
-     else status_="INSTRUMENT KONNTE NICHT HINZUGEFUEGT WERDEN";
      invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
