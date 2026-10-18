@@ -285,7 +285,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("PATTERN A-H   |   NR=FILL   SHIFT+STEP: VELOCITY   SHIFT+CHOKE: ZURUECK",VSTGUI::CRect(16,47,320,67),
+ c->drawString("FILL: LINKS AUF ZEILENNUMMER   |   SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,335,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
@@ -428,16 +428,16 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                static_cast<unsigned>(controller_.visibleRows()));
  c->drawString(rowsLabel,VSTGUI::CRect(277,buttonsY,455,buttonsY+29),
                VSTGUI::kLeftText);
- const char* actions[]={"COPY","PASTE","DUPLICATE","CLEAR"};
- for(int i=0;i<4;++i) {
+ const char* actions[]={"COPY","PASTE","CLEAR"};
+ for(int i=0;i<3;++i) {
    const double x=480+i*115.;
    c->setFillColor(panel);c->drawRect({x,buttonsY,x+109,buttonsY+29},VSTGUI::kDrawFilled);
    c->setFontColor(letters);c->drawString(actions[i],VSTGUI::CRect(x,buttonsY,x+109,buttonsY+29));
  }
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-    const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-125.0));
-    const char* names[]={"FILL 2","FILL 4","FILL 8","FILL ALL","CLEAR"};
-    for(int i=0;i<5;++i) {
+    const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-150.0));
+    const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR"};
+    for(int i=0;i<6;++i) {
       const double y=top+i*25.;
       c->setFillColor(panel);
       c->drawRect({650,y,755,y+24},VSTGUI::kDrawFilled);
@@ -514,13 +514,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
  if(fillMenuRow_>=0) {
-   const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-125.0));
+   const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-150.0));
    const int row=fillMenuRow_;
    fillMenuRow_=-1;
-   if(x>=650&&x<755&&y>=top&&y<top+125) {
+   if(x>=650&&x<755&&y>=top&&y<top+150) {
      const int option=static_cast<int>((y-top)/25.);
-     const RowFill items[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,RowFill::All,RowFill::Clear};
-     if(option>=0&&option<5&&!controller_.fillRow(static_cast<std::size_t>(row),items[option]))
+     const RowFill items[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,RowFill::Snare24,RowFill::All,RowFill::Clear};
+     if(option>=0&&option<6&&!controller_.fillRow(static_cast<std::size_t>(row),items[option]))
        status_="FILL NICHT UEBERNOMMEN";
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
@@ -570,15 +570,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  const double actionsY=kGridY+displayedRows()*kRowHeight+5.0;
  if(y>=actionsY&&y<actionsY+29) {
-   if(x>=480&&x<940) {
+   if(x>=480&&x<825) {
      const int action=static_cast<int>((x-480)/115.);
-     if(action>=0&&action<4&&x<480+action*115.+109) {
-       bool selectedCopy=true;
+     if(action>=0&&action<3&&x<480+action*115.+109) {
        const bool ok=action==0?controller_.copyCurrentPattern():
           action==1?controller_.pasteCurrentPattern():
-          action==2?controller_.duplicateCurrentPattern(&selectedCopy):controller_.clearCurrentPattern();
-       status_=ok?(action==2&&!selectedCopy?"KOPIE ERSTELLT - AUSWAHL NICHT GEWECHSELT":
-                       "PATTERN-AKTION ERFOLGREICH"):"PATTERN-AKTION NICHT MOEGLICH";
+          controller_.clearCurrentPattern();
+       status_=ok?"PATTERN-AKTION ERFOLGREICH":"PATTERN-AKTION NICHT MOEGLICH";
        invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
      }
    }

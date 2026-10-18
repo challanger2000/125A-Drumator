@@ -24,6 +24,12 @@ int main(){
     }
     check(active==(mode==RowFill::Clear?0u:kSteps/spacing),"row fill count");
   }
+  {
+    const auto row=filledRow(RowFill::Snare24);
+    for(std::size_t step=0;step<kSteps;++step)
+      check(row[step]==((step%8==4)?127:0),"snare 2 and 4 fill");
+    check(filledRow(RowFill::Snare24,96)[4]==96,"snare velocity");
+  }
   check(filledRow(RowFill::Every4,96)[0]==96&&filledRow(RowFill::Every4,96)[1]==0,
         "fill preserves requested velocity");
   PatternSteps example{};
