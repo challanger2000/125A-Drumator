@@ -345,9 +345,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          if(q->getPoint(j,offset,v)!=Steinberg::kResultTrue||
             offset<0||!std::isfinite(v))continue;
          const auto pattern=patternFromNormalized(v);
-         restorePatternValue_.store(pattern,std::memory_order_relaxed);
-         restorePatternRevision_.fetch_add(1,std::memory_order_release);
-         selected_.store(pattern,std::memory_order_release);
+         restorePatternLatch_.submit(pattern,selected_);
        }
      }
    }
@@ -607,7 +605,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  const auto rate=outputRate_.load(std::memory_order_acquire);
  {
     std::lock_guard<std::mutex> guard(kitMutex_);
-    const auto overrideAtStart=restorePatternRevision_.load(std::memory_order_acquire);
+    const auto overrideAtStart=restorePatternLatch_.revision();
     ControlRestoreEntry restoreGate(restoreGate_);
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
@@ -631,10 +629,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     }
     // Commit kit selection first; then replay any automation received while
     // restore was busy. No further kit selection writes after this replay.
-    const auto overrideAfter=restorePatternRevision_.load(std::memory_order_acquire);
-    if(overrideAfter!=overrideAtStart)
-      selected_.store(restorePatternValue_.load(std::memory_order_acquire),
-                      std::memory_order_release);
+    restorePatternLatch_.finish(overrideAtStart,selected_);
     kitRevision_.fetch_add(1,std::memory_order_release);
  }
  return Steinberg::kResultOk;

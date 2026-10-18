@@ -7,6 +7,7 @@
 #include "core/SampleExchange.h"
 #include "core/TriggerBatch.h"
 #include "core/KitRestoreGate.h"
+#include "core/PatternRestoreLatch.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include <array>
 #include <atomic>
@@ -42,9 +43,8 @@ private:
  // The audio callback never waits; only control-side setState waits for a block.
  KitRestoreGate restoreGate_{};
  std::atomic<std::uint32_t> kitRevision_{0};
- // A lock-free bounded parameter handoff from audio to control during restore.
- std::atomic<std::uint64_t> restorePatternRevision_{0};
- std::atomic<std::uint32_t> restorePatternValue_{0};
+ // Bounded lock-free handoff of host automation arriving during state recall.
+ PatternRestoreLatch restorePatternLatch_{};
  std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
  AtomicPatternBank patterns_;

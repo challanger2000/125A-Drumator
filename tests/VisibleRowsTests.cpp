@@ -1,5 +1,6 @@
 #include "core/VisibleRows.h"
 #include "core/KitRestoreGate.h"
+#include "core/PatternRestoreLatch.h"
 #include "core/RowResizeTransaction.h"
 #include "core/HostEditDirty.h"
 #include "core/PatternQuantization.h"
@@ -100,6 +101,22 @@ int main(){
          "Restore/audio gate did not serialize callbacks");
    check(gate.audioEnter(),"Gate remained closed after restore");
    gate.audioLeave();
+   // N07: actual production latch code, simulated kit-selection write.
+   PatternRestoreLatch patternLatch;
+   std::atomic<std::uint32_t> selection{0};
+   const auto before=patternLatch.revision();
+   selection.store(1,std::memory_order_release); // begin restoring kit B
+   patternLatch.submit(7,selection);             // host flushes H during restore
+   selection.store(1,std::memory_order_release); // kit commit overrides temporarily
+   patternLatch.finish(before,selection);
+   check(selection.load(std::memory_order_acquire)==7,
+         "N07 automation flushed during restore was lost");
+   const auto after=patternLatch.revision();
+   selection.store(2,std::memory_order_release);
+   patternLatch.finish(after,selection);
+   check(selection.load(std::memory_order_acquire)==2,
+         "N07 stale host automation overrode later kit");
+   std::cout<<"N07 restore/automation selection arbitration PASS\\n";
    std::cout<<"R01 single-atomic restore and audio admission PASS\\n";
    std::cout<<"Visible-row UX preservation checks PASS\n";
    return 0;
