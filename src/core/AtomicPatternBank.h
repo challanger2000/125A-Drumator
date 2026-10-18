@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 
 namespace drumator {
 class AtomicPatternBank final {
@@ -21,13 +22,40 @@ public:
              unsigned velocity) noexcept {
         if(p>=kPatterns||row>=kRows||step>=kSteps||velocity>127)
             return false;
+        std::lock_guard<std::mutex> guard(writeMutex_);
+        version_[p].fetch_add(1,std::memory_order_acq_rel);
         grid_[index(p,row,step)].store(static_cast<std::uint8_t>(velocity),
                                        std::memory_order_relaxed);
+        version_[p].fetch_add(1,std::memory_order_release);
         return true;
     }
     std::uint8_t get(std::size_t p,std::size_t row,std::size_t step) const noexcept {
         if(p>=kPatterns||row>=kRows||step>=kSteps)return 0;
         return grid_[index(p,row,step)].load(std::memory_order_relaxed);
+    }
+    // Obtain a complete generation, or reject the attempt. Audio never waits.
+    bool coherentPattern(std::size_t p,
+                         std::array<std::uint8_t,kRows*kSteps>& out) const noexcept {
+        if(p>=kPatterns)return false;
+        const auto before=version_[p].load(std::memory_order_acquire);
+        if(before&1u)return false;
+        std::array<std::uint8_t,kRows*kSteps> candidate{};
+        for(std::size_t i=0;i<candidate.size();++i)
+            candidate[i]=grid_[p*kRows*kSteps+i].load(std::memory_order_relaxed);
+        const auto after=version_[p].load(std::memory_order_acquire);
+        if(before!=after|| (after&1u))return false;
+        out=candidate;
+        return true;
+    }
+    bool replacePattern(std::size_t p,const std::uint8_t* values,std::size_t count) noexcept {
+        if(p>=kPatterns||!values||count!=kRows*kSteps)return false;
+        for(std::size_t i=0;i<count;++i)if(values[i]>127)return false;
+        std::lock_guard<std::mutex> guard(writeMutex_);
+        version_[p].fetch_add(1,std::memory_order_acq_rel);
+        for(std::size_t i=0;i<count;++i)
+            grid_[p*kRows*kSteps+i].store(values[i],std::memory_order_relaxed);
+        version_[p].fetch_add(1,std::memory_order_release);
+        return true;
     }
     bool select(std::size_t p) noexcept {
         if(p>=kPatterns)return false;
@@ -64,6 +92,8 @@ public:
     }
 private:
     std::array<std::atomic<std::uint8_t>,kCells> grid_{};
+    mutable std::mutex writeMutex_{};
+    std::array<std::atomic<std::uint64_t>,kPatterns> version_{};
     std::atomic<std::uint8_t> selected_{0};
 };
 }
