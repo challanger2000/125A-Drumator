@@ -47,6 +47,9 @@ private:
  std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
  AtomicPatternBank patterns_;
+ // Last coherent patterns, read/written only in the audio callback.
+ std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> audioPatternCache_{};
+ std::array<bool,kPatterns> audioPatternValid_{};
  SampleVoiceEngine voices_;
 
  SampleExchange exchange_{};
