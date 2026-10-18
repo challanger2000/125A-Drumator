@@ -1,5 +1,6 @@
 #include "core/AtomicPatternBank.h"
 #include "core/StepVelocity.h"
+#include "core/RowFill.h"
 #include <array>
 #include <atomic>
 #include <iostream>
@@ -10,6 +11,19 @@ using namespace drumator;
 static void check(bool okay,const char* msg){if(!okay)throw std::runtime_error(msg);}
 int main(){
  try {
+  for(auto mode:{RowFill::Every2,RowFill::Every4,RowFill::Every8,RowFill::All,RowFill::Clear}) {
+    const auto row=filledRow(mode);
+    const auto spacing=mode==RowFill::Every2?2u:mode==RowFill::Every4?4u:mode==RowFill::Every8?8u:1u;
+    std::size_t active=0;
+    for(std::size_t step=0;step<kSteps;++step) {
+      const auto expected=mode!=RowFill::Clear&&step%spacing==0?127:0;
+      check(row[step]==expected,"row fill positions");
+      if(row[step])++active;
+    }
+    check(active==(mode==RowFill::Clear?0u:kSteps/spacing),"row fill count");
+  }
+  check(filledRow(RowFill::Every4,96)[0]==96&&filledRow(RowFill::Every4,96)[1]==0,
+        "fill preserves requested velocity");
   AtomicPatternBank bank;
   check(nextStepVelocity(0)==32&&nextStepVelocity(32)==64&&
         nextStepVelocity(64)==96&&nextStepVelocity(96)==127&&
