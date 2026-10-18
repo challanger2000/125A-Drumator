@@ -90,6 +90,35 @@ int main(){
   }
   writer.join();
   (void)samples;
+  // Audit B01: concurrent full-pattern replacement must never expose
+  // a hybrid of two generations to the scheduler's coherent reader.
+  AtomicPatternBank transactionBank;
+  std::array<std::uint8_t,kRows*kSteps> oldPattern{},newPattern{},coherent{};
+  oldPattern.fill(15);newPattern.fill(115);
+  check(transactionBank.replacePattern(0,oldPattern.data(),oldPattern.size()),"initial transaction");
+  std::atomic<bool> replaceDone{false};
+  std::thread replacer([&]{
+    for(int iteration=0;iteration<2000;++iteration){
+      const auto& source=(iteration&1)?oldPattern:newPattern;
+      if(!transactionBank.replacePattern(0,source.data(),source.size()))
+        std::terminate();
+    }
+    replaceDone.store(true,std::memory_order_release);
+  });
+  std::size_t verified=0;
+  while(!replaceDone.load(std::memory_order_acquire)){
+    if(transactionBank.coherentPattern(0,coherent)){
+      check(coherent==oldPattern||coherent==newPattern,
+            "torn pattern generation during replacement");
+      ++verified;
+    }
+  }
+  replacer.join();
+  check(transactionBank.coherentPattern(0,coherent),"final coherent generation");
+  check(coherent==oldPattern||coherent==newPattern,"invalid final generation");
+  check(!transactionBank.replacePattern(0,newPattern.data(),newPattern.size()-1),
+        "invalid replacement length accepted");
+  (void)verified;
   std::cout<<"Atomic pattern bank: PASS\n";
   return 0;
  }catch(const std::exception& ex){
