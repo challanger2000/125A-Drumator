@@ -394,10 +394,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=480&&x<940) {
      const int action=static_cast<int>((x-480)/115.);
      if(action>=0&&action<4&&x<480+action*115.+109) {
+       bool selectedCopy=true;
        const bool ok=action==0?controller_.copyCurrentPattern():
           action==1?controller_.pasteCurrentPattern():
-          action==2?controller_.duplicateCurrentPattern():controller_.clearCurrentPattern();
-       status_=ok?"PATTERN-AKTION ERFOLGREICH":"PATTERN-AKTION NICHT MOEGLICH";
+          action==2?controller_.duplicateCurrentPattern(&selectedCopy):controller_.clearCurrentPattern();
+       status_=ok?(action==2&&!selectedCopy?"KOPIE ERSTELLT - AUSWAHL NICHT GEWECHSELT":
+                       "PATTERN-AKTION ERFOLGREICH"):"PATTERN-AKTION NICHT MOEGLICH";
        invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
      }
    }
