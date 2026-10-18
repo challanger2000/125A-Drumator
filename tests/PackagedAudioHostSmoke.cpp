@@ -948,9 +948,9 @@ int main(int argc,char** argv) {
  }
  std::array<float,16> expectedBus{};
  for(int busIndex=1;busIndex<16;++busIndex) {
-   const float level=0.04f+static_cast<float>(busIndex)*0.015f;
-   expectedBus[static_cast<std::size_t>(busIndex)]=level;
-   require(send(makeWav(32,true,level),busIndex)==kResultOk,
+   const float stemAmplitude=0.04f+static_cast<float>(busIndex)*0.015f;
+   expectedBus[static_cast<std::size_t>(busIndex)]=stemAmplitude;
+   require(send(makeWav(32,true,stemAmplitude),busIndex)==kResultOk,
            "F08 load dedicated AUX test WAV");
    HostMessage mix;mix.setMessageID("Drumator.RowMix");
    auto* m=mix.getAttributes();
