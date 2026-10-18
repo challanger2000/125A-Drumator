@@ -40,6 +40,9 @@ int main(){
     check(rowControlNext(control,hi,1)==hi&&rowControlNext(control,lo,-1)==lo,"control limits");
     check(rowControlNext(control,hi,1,true)==center&&rowControlNext(control,lo,-1,true)==center,"control reset");
   }
+  check(emptyPattern(PatternSteps{}),"empty pattern detection");
+  PatternSteps populated{};populated[kSteps+4]=92;
+  check(!emptyPattern(populated),"nonempty source detection");
   std::array<PatternSteps,kPatterns> slots{};
   slots[0][0]=127;slots[1][0]=80;slots[3][5]=64;
   check(nextEmptyPattern(0,[&](std::size_t i){return slots[i];})==2,
