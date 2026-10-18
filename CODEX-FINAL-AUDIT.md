@@ -1,427 +1,517 @@
-# 125A Drumator – unabhängiger Abschluss-Audit vor der Vintage-GUI
+# 125A Drumator – unabhängiger technischer Nach-Audit
 
-**Prüfdatum:** 18.10.2026 (Europe/Berlin).
+**Prüfdatum:** 18.10.2026, UTC.
 
-**Repository/Branch:** `challanger2000/125A-Drumator`, `develop/v1.0.0`.
+**Repository / Branch:** `challanger2000/125A-Drumator` / `develop/v1.0.0`.
 
-**Geprüfter Branch-HEAD:** **`6b8fa5446512f89262c109866d1c5443faac1945`**.
+**Geprüfter Entwicklungscommit:** **`32f68ca7b2c3dc395c5a68efeb991760c373d4ac`**.
 
-**Pluginversion:** weiterhin `0.1.0`; keine finale V1-Freigabe.
+**Pluginversion:** `0.1.0`, unverändert. Der spätere Dokumentationscommit dieses Berichts ist kein neuer geprüfter Implementierungsstand.
 
-**Vergleich:** `TECHNISCHER-AUDIT.md`, F01–F17, Prüfstand `a64c94a117ae7b485450b9367b7703039b949fa4`.
+**Vergleichsgrundlagen:** [TECHNISCHER-AUDIT.md][original], F01–F17, ursprünglicher Quellstand `a64c94a117ae7b485450b9367b7703039b949fa4`; [vorheriger CODEX-FINAL-AUDIT.md][previous], N01–N05, geprüfter Quellstand `6b8fa5446512f89262c109866d1c5443faac1945`, veröffentlicht mit Berichtcommit `04e8b285afe0b5b151ef9d4d275201ea0fc144ff`. Auch [Issue #1][issue] wurde berücksichtigt; die jüngste ausdrückliche Benutzeranweisung erlaubt ausschließlich die Veröffentlichung dieses Berichts.
 
 ## 1. Entscheidung
 
-**Die funktionale Entwicklung ist noch nicht belastbar abgeschlossen. Eine Freigabe zur Implementierung der endgültigen Vintage-GUI wird nicht erteilt.**
+**Ist die technische Grundlage bereit für die endgültige Vintage-GUI? NEIN.**
 
-Die Reparaturen verbessern den Stand wesentlich: Die falsche 1100-Pixel-Childbreite, die numerischen Klicklücken, der Win32-Drop-Längenfehler, der ursprüngliche Flushverlust und die fehlenden Legacy-Defaults wurden im tatsächlichen Code angegangen. Der aktuelle Windows-Workflow ist erfolgreich. Das ist ein positiver Entwicklungsnachweis, aber keine vollständige Funktions-, Echtzeit- oder Studio-One-Abnahme.
+Die Reparaturen sind substanziell und wurden am tatsächlichen Code nachgeprüft. Insbesondere sind der belegte FLAC-Längenwiderspruch N03 und die aktuelle Host-/DSP-Abbildungsabweichung N05 gezielt angegangen. Das Routing ohne MAIN wird inzwischen mit gemessenen positiven Pegeln auf allen 15 AUX-Bussen geprüft. Der frühere Rollback benutzt keinen normalen, möglicherweise gesperrten Hide-Befehl mehr. Eine Zoompräferenz wird jetzt im Controllerstate gespeichert.
 
-Es bestehen weiterhin konkrete Fehler. Besonders relevant sind:
+Die funktionale Entwicklung ist trotzdem noch nicht belastbar abgeschlossen:
 
-1. **P1 – Neue Pattern-Quantisierungsabweichung:** Der Host-Stringparameter und Prozessor/GUI interpretieren Zwischenwerte unterschiedlich. Bei `0,10` nennt der Host Pattern **A**, während Prozessor und GUI **B** auswählen. Der neue A–H-Test prüft nur die acht kanonischen Werte und übersieht das.
-2. **P1 – Unvollständiger Resize-Rollback:** Wird beim Hinzufügen eine belegte, zuvor versteckte Zeile sichtbar und der Host lehnt die Vergrößerung ab, scheitert die Rücknahme an der normalen „nur leere Zeile ausblenden“-Sperre. Der neue Hilfsfunktionstest bildet diese reale Controllerbedingung nicht ab.
-3. **P2 – Abgelehnter Zoom kann Modell und Darstellung trennen:** Der Editor kann „150%“ melden, obwohl der Frame nach Resize-Ablehnung bei 100% bleibt.
-4. **P2 – FLAC-Vollständigkeit ungeprüft:** Eine kleinere tatsächliche Framezahl als die deklarierte wird weiterhin nicht ausdrücklich abgewiesen.
-5. **P2/P3 – Zoompräferenz und Hitboxränder:** Zoompersistenz fehlt weiterhin; kleine Draw-/Hit-Rechteckabweichungen bleiben bestehen.
+1. **N02 bleibt FAIL:** Der neue Zoomcheck verwendet einen SDK-Cache, der nach Öffnen mit gespeicherten 150 % von der tatsächlichen Transformation abweichen kann. Ein abgelehnter Wechsel zu 100 % kann als erfolgreich gelten.
+2. **N06, P1:** Die Pattern-Reparatur verändert ohne Migration die hörbare Bedeutung bestimmter bereits gespeicherter Automationswerte.
+3. **N07, P1:** Während der neuen Kit-Restoresperre werden Parameter-Flushes mit Erfolg quittiert und verworfen. Der vorher reparierte F04-Pfad ist unter dieser Bedingung wieder umgangen.
+4. **N08, P2:** Die neue Kitrevision setzt im ersten laufenden Block `wasPlaying_` zurück. Ein unmittelbar folgender Stop kann deshalb neue Sequencertails weiterlaufen lassen.
+5. **N09, P2:** Bei voller Polyphonie verändert ein anschließend verworfener Choke-Trigger bereits laufende Stimmen. Der versprochene Erhalt aktiver Sounds bei Kapazitätsablehnung gilt dann nicht.
 
-Zusätzlich fehlen belastbare Nachweise für die angehängte native GUI, komplette Kitwechsel unter laufendem Audio, die vollständige 16-Ausgangs-Matrix und gepacte Echtzeit-Deadlines. Der Bericht trennt diese offenen Nachweise von den belegten Fehlern.
+Die vollständige Atomizität des neuen Kitprotokolls ist außerdem **nicht nachgewiesen**. Der Konkurrenztest akzeptiert durchgehend stumme Blöcke und misst keine Generationenkonsistenz. Ein konkreter Memory-Ordering-Einwand wird als Risiko R01 getrennt von beobachteten Laufzeitfehlern dokumentiert. Native GUI-Abnahme und belastbare Echtzeitmessung bleiben offen.
 
-## 2. Prüfgrundlage und Beweisgrenzen
+Diese Entscheidung ist eine technische Arbeitsfreigabeentscheidung vor dem endgültigen GUI-Umbau. Sie behauptet weder einen hier ausgeführten Studio-One-Fehlschlag noch einen pauschal funktionsunfähigen Sampler.
 
-### 2.1 Verbindliche Regeln und Umfang
+## 2. Prüfumfang, Regeln und Evidenz
 
-`125A-Engineering/START-HERE.md` und `AGENTS.md` wurden zuerst gelesen. Der Engineering-Stand ist unverändert bei `5f13a850c065167526519f0249fb7a38b5841a6a`. Die bereits im Erstaudit gelesenen einschlägigen Guardrails und Standards bleiben anwendbar; insbesondere wurden die Vorgaben zu geeigneten unabhängigen Tests, GUI-Traceability, Host-Verträgen und Echtzeitmessung berücksichtigt. Die AI-Engineering-, Release-QA- und Realtime-QA-Vorgaben wurden erneut abgeglichen.
+### 2.1 Verbindliche Grundlagen
 
-Untersucht wurden alle **23 Produktionsquelldateien** im Vergleich zum Erstaudit: 13 sind bytegleich geblieben, 10 wurden geändert oder neu hinzugefügt. Dazu wurden die zehn Testdateien, CMake, UIDESC, Workflow und der bisherige Auditbericht abgeglichen. Der neue Stand verändert gegenüber dem veröffentlichten Erstaudit 13 Implementierungs-/Testdateien. Die unveränderten Scheduler-, Codec-, Exchange- und Routinggrundlagen wurden nicht allein deshalb als fehlerfrei behandelt, weil sie unverändert sind.
+`125A-Engineering/START-HERE.md`, die einschlägigen Engineering-Guardrails, Standards und QA-Regeln sowie das aktuelle Projekt-`AGENTS.md` wurden abgeglichen. Engineering-HEAD: `5f13a850c065167526519f0249fb7a38b5841a6a`, gegenüber dem vorigen Audit unverändert. Maßgeblich sind insbesondere Zustands-/Automationskompatibilität, nachweisbare GUI-Bedienketten und die Trennung von Durchsatz und zeitlich getakteter Echtzeitprüfung. Es wurden keine Regeln oder Dateien im Engineering-Repository geändert.
 
-Die SDK-Verifikation erfolgt gegen die tatsächlich gelesenen, gepinnten Quellen:
+Die SDK-Quellen wurden gegen die Projektbaseline gelesen: VST3 SDK3.8.1 `3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96`, public.sdk `586dc5e6c8012c3e4b01c79389375cbe96bdb1da`, pluginterfaces `4f547e8e102b47de4a8b8aaf343c73b700786372`, VSTGUI `5db272256172557818b6158cf0bb2c4410bddb25`. dr_flac ist in CMake auf Upstreamcommit `dfe8377631000664666519fdb83da193fd8037f4` festgelegt. Die lokale SDK-Kopie ist nur eine Quellenreferenz; nicht benötigte Build-/Dokumentations-Submodule wurden nicht als vollständig eingerichtete Windows-Toolchain ausgegeben.
 
-| Abhängigkeit | Commit |
+Die Cloud-Einrichtung wurde anhand des Skills `cloud-environment-onboarding:setup` geprüft. Die vorhandene Umgebung eignet sich für Quell-, Git- und analytische Prüfungen. Sie enthält hier keinen nutzbaren Windows-VST3-/Studio-One-Laufzeitplatz. Gemäß Projektregel wurden keine Linux-Builds als Ersatz durchgeführt. Es wurde keine neue Umgebungskonfiguration benötigt.
+
+Untersucht wurden alle **24 Produktionsquelldateien**, alle **10 Testdateien**, UIDESC, CMake, Workflow, relevante Projektdokumentation und die vollständige Reparaturhistorie. Gegenüber dem vorigen geprüften Implementierungsstand sind neun Produktionsdateien und drei Testdateien geändert oder ergänzt; die neue Produktionsdatei ist `PatternQuantization.h`. Unveränderte Scheduler-, Decoder-, Exchange-, Kit- und Voicepfade wurden erneut in den Gesamtablauf einbezogen. Die Gleichheit beziehungsweise Änderung der Dateien wurde anhand eines SHA-256-Inventars überprüft.
+
+### 2.2 Status und Nachweisarten
+
+- **PASS:** Der genau eingegrenzte Fehlerfall wird durch geeignete vorhandene Assertions und den zugeordneten erfolgreichen Windows-Workflow gestützt; Quellpfad und unabhängige Gegenprüfung passen dazu. Kein allgemeines GUI-/Release-PASS.
+- **TEILWEISE:** Implementierung vorhanden, aber mindestens ein relevanter Pfad, Gegenfall oder praktischer Wirkungsnachweis fehlt.
+- **FAIL:** Konkreter Widerspruch mit nachvollziehbarem Gegenfall am tatsächlichen Produkt-/SDK-Pfad. Quellenbeweis beziehungsweise analytischer Ablauf ist ausdrücklich kein hier ausgeführter Binär- oder DAW-Test.
+- **OFFEN:** Zusätzliche Messung, Windows-/Hostprüfung oder Spezifikationsentscheidung erforderlich.
+
+**Hier ausgeführt:** read-only Git-/Diff-/Quell-/SDK-Abgleich, unabhängige Python-Berechnungen für Patterngrenzen, GUI-Koordinaten, Zoomzustände, Transportzustände und die unveränderte SRC-Koeffizientenformel. Die Ergebnisse werden unten mit ausreichend Angaben zur Wiederholung wiedergegeben. Hilfsmodelle werden nicht als Produktregressionstests gewertet.
+
+**Nicht hier ausgeführt:** C++-Tests, Windows-Build, VST3-Ausführung, native Editor-Attaches/Klicks, Studio One, 125A Plugin Tester, eigener Validatorlauf, Allocation-Profiler oder zeitlich getakteter Audiotest. Keine bestehende Testdatei wurde verändert. Kein Actions-Build wurde gestartet.
+
+Die im vorigen Audit extern mit `ffprobe` untersuchte FLAC-Gegenfixture deklarierte 256 Frames bei 128 tatsächlichen Frames. Im aktuellen Quellstand ist genau dieser Fall nun als Repositorytest vorhanden. Die frühere externe Untersuchung wird nicht als erneute Ausführung des reparierten Wrappers ausgegeben.
+
+### 2.3 Aktuelle Windows-Evidenz
+
+Der vorhandene [Actions-Run #39085666516][run], Workflowlauf #186, zeigt **Success**, Gesamtdauer **2 min 41 s**, und verweist auf exakt den geprüften Commit `32f68ca7b2c3dc395c5a68efeb991760c373d4ac`. Der [Windows-Job][job] ist erfolgreich, Dauer 2 min 37 s. Die öffentliche Zusammenfassung zeigt ein Artefakt `125A-Drumator-M11-Full-Kit-Stress-QA`, ca. 1,4 MB, Digest `sha256:9b6c142e862a77cdaa564a6ec5f93639442003c8ce45f9ac71ac036420edbef4`.
+
+Der Workflow [W:31] baut acht CTest-Executables und zwei separate Paket-Smokes; deren Aufrufe und Validatoraufrufe prüfen Fehlercodes. Somit sind die tatsächlich vorhandenen, verpflichtenden Assertions eng begrenzte vorhandene Windows-Evidenz. Die vollständigen Logs sind im verfügbaren Zugriff an eine Anmeldung gebunden; ein direkter Step-Log-Abruf lieferte 404. **Individuelle Testausgaben, numerische Performancewerte und genaue Validator-Testzahlen wurden nicht erneut ausgelesen.** Das Paket wurde hier nicht heruntergeladen oder ausgeführt. Eine Run-Zusammenfassung ersetzt weder Binärinspektion noch Studio-One-Abnahme.
+
+### 2.4 Sämtliche Folgecommits seit dem letzten Bericht
+
+| Commit | Tatsächlich geprüfter Inhalt |
 |---|---|
-| VST3 SDK 3.8.1 | `3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96` |
-| public.sdk | `586dc5e6c8012c3e4b01c79389375cbe96bdb1da` |
-| pluginterfaces | `4f547e8e102b47de4a8b8aaf343c73b700786372` |
-| VSTGUI | `5db272256172557818b6158cf0bb2c4410bddb25` |
-| dr_flac | Datei aus Upstream-Commit `dfe8377631000664666519fdb83da193fd8037f4` |
+| `c28f256e133bc8f359516dcc549e97bed756a970` | Direkter Zeilenzahl-Rollback, FLAC-Ist/Soll-Längenvergleich, gemeinsame Patternquantisierung und neue Assertions. |
+| `889c813b16090aaac6d3bbe2b989b2adb60b0ddb` | Korrektur einer Windows-`min`-Makrokollision im Test. |
+| `da0c25e137bcadc0a408c02aaf9ebef472aa5421` | Zoomcheck, Controller-Zoomstate, getrennte Header-Hitbereiche. |
+| `a61ed7242120cb2b258926a3f469d85019820d2a` | Kit-Busyflag, Zähler aktiver Audioaufrufe, Kitrevision, Nullausgabe während Restore, Konkurrenztest. |
+| `7f04fc0e670912b00057d3055b58070c9f1d820d` | Tatsächlicher Prozessor-Flush bei Zwischenwerten; Maskierung versteckter Solos und Recalltest. |
+| `caa976370d78f3ac862eda388323223fa7af0811` | Pakettest für alle 15 AUX-Ausgänge mit Null-MAIN und Pegelassertionen. |
+| `2c99e688121010e5cec666e764020eae7607aad1` | Korrektur einer MSVC-Testwarnung wegen Variablenschatten. |
+| `32f68ca7b2c3dc395c5a68efeb991760c373d4ac` | Messung einzelner Core-Renderblöcke und Ausgabe von p95/p99/Maximum; kein neues Echtzeit-Gate. |
 
-### 2.2 Bedeutung der Statusangaben
+Committexte wurden nur als Navigation benutzt. Die Bewertung beruht auf dem tatsächlichen Diff und den vollständigen betroffenen Aufrufketten.
 
-- **PASS:** Der ausdrücklich bezeichnete Fehlerfall ist durch einen geeigneten vorhandenen Test und den zugeordneten erfolgreichen Windows-Durchlauf belegt. Das ist keine pauschale Pluginfreigabe.
-- **TEILWEISE:** Eine plausible beziehungsweise nachvollziehbare Reparatur ist vorhanden, aber der vollständige Befund oder seine tatsächliche Interaktionskette ist nicht ausreichend verifiziert.
-- **FAIL:** Ein konkreter verbleibender oder neuer Fehler ist am tatsächlichen Quell-/SDK-Pfad und einem nachvollziehbaren Gegenbeispiel belegt. Ein solcher Quellenbeweis wird nicht als hier ausgeführter DAW-Test bezeichnet.
-- **OFFEN:** Der nötige Praxis-, Binär- oder Messnachweis ist mit dem vorliegenden Material nicht abschließend möglich.
+## 3. Ergebnis F01–F17
 
-Die folgenden Kürzel verweisen auf konkrete Dateien und Zeilen des oben festgehaltenen Prüfcommits: **C** Controller, **V** View, **P** Prozessor, **K** Voice/SRC, **F** FLAC, **H** packaged Host-Smoke, **T** Voice-Tests, **R** VisibleRows-Tests, **B** KitCodec, **E** Editor, **X** Resize-Policy, **Q** EditorGeometry-Smoke, **S** SampleExchange. Jeder verlinkte Zeilenverweis führt zu einer unveränderlichen Commit-URL.
+Die Zeilenlinks beziehen sich immer auf den geprüften Entwicklungscommit. Kürzel: C Controller, CH Controllerheader, P Prozessor, PH Prozessorheader, V View, E Editor, K Voice/SRC, S Exchange, B KitCodec, F FLAC, G Patternquantisierung, H Paket-Hosttest, T Voice-Tests, R VisibleRows-Tests, Q Editor-Smoke, W Workflow, L Zeilenpolicy, A AtomicPatternBank, Z Sequencer.
 
-### 2.3 Bestehende Windows-Evidenz
-
-Der vorhandene [Windows-Run #39081934139](https://github.com/challanger2000/125A-Drumator/actions/runs/39081934139), Workflowlauf #178, ist eindeutig dem geprüften Commit **`6b8fa5446512f89262c109866d1c5443faac1945`** zugeordnet. Die zugängliche Run-Zusammenfassung und der [Windows-Job](https://github.com/challanger2000/125A-Drumator/actions/runs/39081934139/job/117540495952) zeigen **Success/succeeded**; Gesamtdauer 2 min 53 s. Es wird ein Artefakt angezeigt.
-
-Der unveränderte Workflow baut acht CTest-Executables sowie zwei separate Windows-Smokes, führt CTest und anschließend Validator, Editor-Smoke und Audio-Host-Smoke mit Fehlerprüfung aus. Deshalb werden vorhandene konkrete Testassertionen als eng begrenzte CI-Evidenz berücksichtigt. **Die vollständigen individuellen Logs sind im verfügbaren Webzugang an eine Anmeldung gebunden und wurden nicht erneut ausgelesen.** Es werden keine neuen Einzelmesswerte aus diesen Logs erfunden. Das Artefakt wurde hier nicht heruntergeladen oder ausgeführt; seine angezeigte Existenz ersetzt keine Binärprüfung.
-
-### 2.4 In diesem Audit tatsächlich ausgeführt
-
-- Read-only Git-, Quell-, SDK- und Testabgleich mit dem aktuellen Branch-HEAD.
-- Unabhängige Python-Gegenprüfungen von Rechtecken, Resize-/Zoomzuständen, UTF-8-Kürzung und den unterschiedlichen Pattern-Abbildungen.
-- Unabhängige numerische DTFT-Berechnung der aktuellen SRC-Koeffizientenformel.
-- Erzeugung einer externen FLAC-Gegenfixture aus dem vorhandenen Testfixture und Untersuchung mit dem installierten `ffprobe`: deklarierte und tatsächliche Framezahl getrennt erfasst.
-
-**Nicht hier ausgeführt:** C++-Regressionstests, Windows-VST3, native Editor-Attaches/Klicks, Studio One, 125A Plugin Tester, eigene Validatorläufe oder gepacte Echtzeitmessungen. Die Windows-only-Projektregel wurde respektiert; es wurde kein Linux-Pluginbuild als Ersatz erzeugt. Die analytischen Modelle sind keine Ausführung des Plugin-Codes. Die neuen Prüfungen verändern keine bestehenden Tests.
-
-## 3. Status sämtlicher ursprünglicher Befunde F01–F17
-
-| Befund | Status | Implementierungsprüfung und verbleibender Nachweis |
+| Befund | Status | Nachprüfung, Nachweis und verbleibende Grenze |
 |---|---|---|
-| **F01 – Childbreite/Clipping** | **TEILWEISE** | [V:95] und [V:108] verwenden jetzt 1280; Konstruktor, Parent und UIDESC passen dazu. Alle 32 Stepfüllungen liegen rechnerisch innerhalb dieser Breite. Der vorhandene Smoke [Q:43] misst weiterhin nur die ungeöffnete äußere View. Kein Attach-/Draw-/Randklicktest der tatsächlichen Child-View bei 1/4/16 Zeilen und beiden Zooms. Der konkrete 1100-Widerspruch ist im Quellstand beseitigt; praktische GUI-Abnahme fehlt. |
-| **F02 – Klicklücken/Hitboxen** | **FAIL** | Numerische Lücken werden jetzt abgewiesen [V:364], A–H-Abstände ebenfalls [V:323]; Patterntexte verwenden die richtige Breite [V:140]. Der Headerbereich wurde jedoch pauschal auf y=38…69 erweitert [V:320]: Patternflächen enden gezeichnet bei 68, Zoom beginnt gezeichnet erst 39. Zwei zusätzliche aktive Randstreifen bleiben, siehe N04. Keine echte negative Randklickregression. |
-| **F03 – Host→GUI/State-Relayout** | **TEILWEISE** | Registrieren/Abmelden von Views, `notifyViews`, Override von `setParamNormalized` und State-Relayout sind vorhanden [C:22], [C:31], [C:98], [V:82]. Der neue Test [H:780] prüft Controllerwerte und erzeugt drei **ungeöffnete** Editorobjekte. Er erzeugt keine angehängte `DrumatorView` und prüft weder Invalidierung noch sichtbaren Rasterwechsel. Rejected-Resize bei State-Recall bleibt unaufgelöst. |
-| **F04 – Null-Sample-Flush** | **PASS** | [P:334] verarbeitet Parameter vor allen Audiopufferbedingungen. [H:814] sendet einen echten Zero-Frame-/Zero-Output-`ProcessData`-Aufruf und prüft nach `getState` Auswahl5 statt nur den Rückgabecode. Dieser konkrete ehemalige Datenverlust ist im erfolgreichen Windows-Durchlauf sinnvoll abgesichert. Mehrpunkt-/Resume-/Offline-Flushmatrix zusätzlich sinnvoll, aber kein verbleibender ursprünglicher Frühreturnfehler erkennbar. |
-| **F05 – Host Dirty** | **TEILWEISE** | Alle früheren Edit-Nachrichten gehen nun über `sendEditMessage`, das bei Erfolg `componentHandler2->setDirty(true)` aufruft [C:37]. Die neue Regression [R:45] prüft ausschließlich die generische Bool-/Callback-Hilfsfunktion. Sie registriert keinen echten oder Mock-`IComponentHandler2`, ruft keinen Controlleredit auf und misst keine tatsächliche Hostbenachrichtigung. Reale Song-Modified-/Autosave-Abnahme fehlt. |
-| **F06 – Legacy-Controllerstate** | **TEILWEISE** | DMR1 setzt das Factoryraster neu auf [C:115]; DMR1–3 setzen nun Pitch und Choke zurück [C:125]. Das passt zum Prozessor [P:543]. Die vorhandenen Codec-Migrationstests für DMR4–9 prüfen diese Controllerpfade nicht. Keine neue Regression „veränderter moderner Controller → DMR1/2/3 → Anzeige/nächster Edit/Prozessorvergleich“. |
-| **F07 – Unsichtbares Solo nach Hide** | **TEILWEISE** | `canHideLast()` verweigert jetzt eine Solo-Zeile [C:171]. Der ursprüngliche unmittelbare Bedienweg ist dadurch gesperrt. Die VisibleRows-Tests verwenden aber die ältere Corepolicy ohne Controller-Solozustand; ein Controller-Hide-/Recalltest fehlt. Schon gespeicherte Zustände mit Solo oberhalb der sichtbaren Zeilen werden vom Codec weiterhin akzeptiert; deren Bedien-/Migrationspolitik bleibt offen. |
-| **F08 – Aux ohne MAIN-Puffer** | **TEILWEISE** | Prozessor und Renderer erlauben zwei Null-MAIN-Pointer [P:355], [K:160]. Der Coretest [T:288] prüft tatsächlich L/R-Amplitude am Stem. Der neue Pakettest [H:844] prüft hingegen nur Erfolg und endliche Werte, lässt also auch reine Nullen passieren. Kein vollständiger 16-Bus-Pakettest mit gemessenen Auxwerten und inaktiven Lücken. Der frühere Abbruch ist repariert; die vollständige Routingbehauptung ist noch nicht belegt. |
-| **F09 – Host-DPI im Resize** | **TEILWEISE** | `DrumatorEditor::effectiveScale()` [E:9] macht den tatsächlichen SDK-Gesamtfaktor zugänglich; [V:100] verwendet ihn. Das ist mathematisch der richtige Faktor `UI-Zoom × ContentScale`. Es gibt keinen nativen ContentScale-/Monitorwechsel-/Hostrect-Test. |
-| **F10 – Resize-Ablehnung** | **FAIL** | Ein boolesches Resizeergebnis und eine Rollbackpolicy existieren [V:101], [X:6]. Der reale Revert des Hinzufügens ist aber `hideLastEmptyRow()` [V:340] und kann bei belegter versteckter Zeile scheitern. Die neue Regression [R:30] ersetzt diesen Pfad durch bedingungsloses `--rows` und deckt den Gegenfall nicht ab. Siehe N01. Für Attach/State-Relayout existiert außerdem kein bedienbarer Fallback bei Ablehnung. |
-| **F11 – Ctrl+Links-Reset** | **TEILWEISE** | Formeln für Swing/Humanize/Gain/Pan/Pitch sind jetzt vorhanden [V:307], [V:371] und führen rechnerisch zu 0/0/100/0/0. Kein Test sendet native Ctrl-Klicks an beide Hälften aller entsprechenden Zeilenfelder und prüft Audio/State. Die Implementierung ist erkennbar, die Interaktionsabnahme fehlt. |
-| **F12 – UTF-8-Kürzung** | **TEILWEISE** | Präfix/Suffix werden jetzt an UTF-8-Codepointgrenzen getrennt [V:177]. Das frühere `ä`-Gegenbeispiel und weitere CJK-/Emoji-/Kombinationsfälle ergeben im unabhängigen Modell gültiges UTF-8. Graphemgrenzen, tatsächliche Fontbreite und Clipping werden weiterhin nicht gemessen. Keine entsprechende neue Repositoryregression. |
-| **F13 – FLAC-Dekodiergrenzen** | **TEILWEISE** | Metadaten werden vor Vollausgabe geprüft und PCM wird in 4096er-Blöcken mit Framebudget gelesen [F:27], [F:36], [F:47]. Der große unbeschränkte Full-Read-Pfad ist entfernt. [H:736] prüft eine riesige deklarierte Länge plus Erhalt des alten Outputs. Unbekannte Länge, echte Oversize-Datei, Stereo-/Mehrkanalgrenzen, Allokations-/Zeitmessung und Vollständigkeit werden nicht ausreichend geprüft; N03 bleibt relevant. |
-| **F14 – SRC/Aliasing** | **TEILWEISE** | Ratioabhängige 32/64/128/256 Taps verbessern die beiden alten Gegenfälle erheblich [K:39]. Der neue Test [T:33] misst aber nur eine Phase/Frequenz bei Ratio 16. Der Stress [T:252] ist ein Durchsatz-/Hangtest mit 20-s-Grenze und ausdrücklich kein Realtime-Gate. Übergangsband, fractional ratios/phases, Audiofixtures und p99/Deadlines sind nicht freigegeben; siehe Abschnitt6. |
-| **F15 – Zoomanzeige/Persistenz** | **FAIL** | Die Auswahl wird jetzt farbig gezeichnet [V:142]; neue Editorobjekte werden jedoch weiterhin ohne gespeicherten Zoom angelegt [C:131]. Kein Controller-Zoomstate, keine Wiederherstellung. Ein abgelehnter Zoom kann außerdem eine falsche Auswahl anzeigen, N02. Der zugehörige Commit bezeichnete die Änderung selbst als partiell. |
-| **F16 – A–H-Hosttexte** | **FAIL** | `StringListParameter` ist eingeführt [C:52], und [H:103] prüft alle acht `p/7`-Texte. Dessen SDK-Quantisierung unterscheidet sich aber von `lround(value*7)` in [C:152] und [P:406]. Hosttext/Plainwert und tatsächlich gewähltes Pattern widersprechen sich bei Zwischenwerten. Neue Regression N05. |
-| **F17 – Win32-Dateidrop** | **TEILWEISE** | [V:65] und [V:278] übernehmen jetzt die gemeldete Länge, entfernen optional einen letzten Terminator und weisen innere NULs ab. Das passt zum gepinnten Win32-Datenpaket. Es gibt aber keinen neuen `IDataPackage`-/Drop-Regressionstest und keinen Explorer-/Studio-One-Nachweis über den tatsächlichen Zeilenladepfad. |
+| **F01 – Breite/Clipping** | **TEILWEISE** | [V:96], [V:108], [C:164] und UIDESC verwenden konsistent 1280. Alle 32 Stepflächen passen rechnerisch hinein; Step32 endet bei x=1229. Der konkrete 1100-Widerspruch ist beseitigt. [Q:45] prüft weiterhin nur das ungeöffnete äußere Editorobjekt; Attach, tatsächliche Childgröße und Randklicks fehlen. |
+| **F02 – Hitboxen/Lücken** | **TEILWEISE** | Numerische Lücken 345…350 und 415…420 werden in [V:376] abgewiesen. A–H-Lücken werden in [V:323] abgewiesen; Headerbereiche sind nun passend getrennt, N04. Kein nativer negativer Klicktest. Zeilenfelder haben teilweise bewusst größere Ziele als die Glyphen/Stepfüllungen; diese Unterschiede sind in Abschnitt8 ausgewiesen. |
+| **F03 – Host→GUI/Relayout** | **TEILWEISE** | Registrierung, Abmeldung und Invalidierung sind vorhanden [C:23], [C:32], [V:84]. State-Recall ruft Relayout auf [C:120]. [H:817] prüft Werte und drei ungeöffnete Editorobjekte, ohne tatsächliche Custom-View. Sichtbarer Rasterwechsel und abgelehntes Recall-Resize bleiben ungetestet. |
+| **F04 – Parameter-Flush** | **TEILWEISE** | Außerhalb Restore verarbeitet [P:372] Nullframes/Nulloutputs korrekt; [H:851] prüft Auswahl5, [H:882] zusätzlich Zwischenwerte. Dieser Normalfall ist abgesichert. Der neue Restore-Frühreturn liegt davor und verwirft Flushes: **N07 / FAIL**. |
+| **F05 – Host Dirty** | **TEILWEISE** | Nachrichtenänderungen laufen über [C:38] mit `IComponentHandler2::setDirty(true)` bei Erfolg. [R:46] prüft nur einen Bool-/Callbackhelper, keinen Controller und keinen Hosthandler. Song-Modified, Autosave, Ablehnungen und Meldereihenfolge fehlen. Zoomänderungen durch `rememberZoom` senden keine Dirtymeldung; deren Persistenz im ansonsten unveränderten Song ist gesondert zu prüfen. |
+| **F06 – Legacy-Defaults** | **TEILWEISE** | [C:135] stellt bei DMR1 das Factoryraster her; [C:144] setzt alle modernen Felder zurück. Das passt zum Prozessor [P:588]. Codec-Migrationstests betreffen DMR4–9, nicht den tatsächlichen Controller nach modernen Edits beim Laden von DMR1–3. Dieser gezielte Zustandstest fehlt weiterhin. |
+| **F07 – Unsichtbare Solos** | **TEILWEISE** | Direkter Hide bleibt bei Solo gesperrt [C:192]. Neu maskiert [L:14] versteckte Solobits beim Prozessor- und Controller-Recall [P:610], [C:110]. [H:1056] prüft am Paket, dass ein verstecktes Bit nach Restore nicht mehr gespeichert wird; dieser Recall-Teil ist sinnvoll belegt. Er prüft weder hörbares sichtbares Instrument noch tatsächlichen GUI-Hide. Versteckte Samples bleiben absichtlich erhalten. |
+| **F08 – AUX ohne MAIN** | **PASS, enger Fehlerfall** | [P:394] und [K:160] erlauben Null-MAIN. [T:310] prüft bekannte Stemamplitude. Neu [H:928] liefert über 16 Busdeskriptoren bei inaktivem Null-MAIN auf allen 15 AUX-Bussen positive erwartete L/R-Pegel. Reine Nullen bestehen diesen neuen Test nicht. Nicht freigegeben sind damit alle Host-Rekonfigurationen und Isolationstoleranzen, siehe Abschnitt7. |
+| **F09 – HiDPI im Resize** | **TEILWEISE** | [E:11] gibt den kombinierten SDK-Faktor frei; [V:100] multipliziert Breite/Höhe richtig mit Zoom×ContentScale. Kein nativer ContentScale-/Monitorwechseltest. Der geerbte SDK-ContentScale-Pfad kann bei Resize-Ablehnung ebenfalls inkonsistent werden; siehe N02/Risiken. |
+| **F10 – Resize-Ablehnung** | **TEILWEISE** | [V:348] und [V:362] stellen bei Ablehnung nun den gespeicherten Count direkt wieder her; N01 wurde im Code sinnvoll repariert. Die Regression verwendet weiterhin nur einen Integerhelper. Attach/Recall übernehmen einen neuen Count vor einem eventuell abgelehnten Resize, ohne Scroll-/Fit-Fallback [C:105], [V:87]. Bedienbarkeit dieses Falls bleibt offen. |
+| **F11 – Ctrl+Links-Reset** | **TEILWEISE** | [V:307], [V:314], [V:384] und [V:388] ergeben Human/Swing/Pan/Pitch=0 und Gain=100. Keine neue native Ctrl-Klick-/Audio-/Stateprüfung, weder pro Zeile noch bei 150 %. |
+| **F12 – UTF-8-Namen** | **TEILWEISE** | [V:177] kürzt an Codepointgrenzen. Der frühere kaputte UTF-8-Schnitt ist im gelesenen Pfad beseitigt. Weiterhin Bytezahl statt Fontbreite, kein Graphemschutz, keine Messung langer breiter Namen. Keine Produktregression für CJK, Emoji, kombinierende Zeichen oder tatsächliche Darstellung. |
+| **F13 – FLAC-Grenzen** | **TEILWEISE** | Metadatenprüfung vor Vollausgabe, 4096-Frame-Blöcke und Framebudget [F:27], [F:36], [F:49]. Riesige deklarierte Länge plus Erhalt des Outputs werden geprüft [H:765]; kleiner Längenwiderspruch nun ebenfalls, N03. Unbekannte Länge, tatsächlich bis/über die Ausgabegrenze wachsende Streams, Stereo-/Mehrkanalmatrix, Peak-RAM und Decoderzeit sind unzureichend verifiziert. |
+| **F14 – Resampling/Last** | **TEILWEISE** | Adaptive 32/64/128/256 Taps bleiben unverändert [K:39]. Der ursprüngliche Aliasgegenfall ist deutlich verbessert; [T:33] prüft einen Frequenz-/Phasenpunkt. Neu werden 180 Core-Blockzeiten gemessen [T:268], aber die Messwerte sind nicht dauerhaft zugänglich, kein Deadline-/Overrun-Gate, kein Paced-Realtime. Vollständiger SRC-Qualitätsvertrag fehlt. |
+| **F15 – Zoomanzeige/Persistenz** | **FAIL im Ablehnungsfall; Persistenzteil implementiert** | DZM1 mit fünf Bytes speichert 100/150 [C:51]; neue Editorobjekte übernehmen die Präferenz [C:155]. [H:127] prüft den Controllerstate im selben Controller. Keine native Reopenprüfung. Im belegten N02-Fall wird nach Ablehnung eine falsche Präferenz/Anzeige gespeichert. `setState` aktualisiert außerdem keine bereits geöffnete Editorinstanz. |
+| **F16 – Patterntexte A–H** | **PASS, aktueller Abbildungsvertrag** | Stringliste [C:71] und gemeinsame `patternFromNormalized` [G:6] stimmen jetzt mit dem SDK überein. [H:107] prüft A–H; [H:115] prüft Zwischenwerttexte; [H:882] tatsächliche Prozessorzustände. Keine aktuelle `round(7v)`-/`floor(8v)`-Differenz mehr zwischen diesen Codepfaden. Altprojektkompatibilität und Restore-Flush sind separate Fehler N06/N07. |
+| **F17 – Win32-Drop-Länge** | **TEILWEISE** | [V:65] und [V:277] akzeptieren die gemeldete Länge ohne erforderlichen Terminator und entfernen einen optionalen letzten NUL. Das entspricht dem gepinnten Win32-Datenpaket. Kein tatsächlicher `IDataPackage`-/Explorer-/Studio-One-Droptest; keine sichtbare Zielzeilen-/Zoomregression. |
 
-**Wichtig:** TEILWEISE bedeutet nicht, dass die Reparatur falsch sein muss. Es bedeutet, dass der vollständige Fehlerfall einschließlich seiner behaupteten Wirkung nicht hinreichend nachgewiesen ist. Umgekehrt wird ein konkreter neuer Widerspruch nicht durch einen grünen Workflow zum PASS.
+Ein enger PASS schließt den genau bezeichneten ursprünglichen Fehlerfall. Er ist keine Abnahme des gesamten betroffenen Subsystems. TEILWEISE bedeutet nicht automatisch fehlerhafte Reparatur, sondern fehlende hinreichende Absicherung des vollständigen Befunds.
 
-## 4. Neue beziehungsweise weiter konkretisierte Fehler
+## 4. Ergebnis N01–N05
 
-### N01 – P1 / FAIL: Rollback benutzt eine gesperrte Benutzeraktion
-
-**Quellen:** [V:337], [C:168], [C:193], [X:6]; Testgegenstück [R:30].
-
-Der neue Add-Row-Vorgang ist:
-
-1. `controller_.addRow()` erhöht und publiziert die sichtbare Zeilenzahl.
-2. `adjustEditorHeight()` verlangt ein größeres Fenster.
-3. Bei Ablehnung soll `controller_.hideLastEmptyRow()` den alten Zustand zurücksetzen.
-
-Der dritte Schritt ist keine uneingeschränkte Transaktionsrücknahme. Er ist die normale Benutzerfunktion mit Sample-, Step- und Solosperre.
-
-**Konkreter zulässiger Gegenfall:** Ein DM10-Kit hat `visible=4`, aber ein Sample oder Steps auf Zeile 5. Der Codec erlaubt das ausdrücklich: Alle 16 Engineplätze werden gespeichert, Sichtbarkeit ist davon getrennt. Der bestehende Pakettest lädt sogar alle 16 Samples, ohne zuvor die sichtbaren vier Zeilen zu erweitern [H:274]. Nach Recall dieses Kits klickt der Nutzer Plus. Zeile 5 wird sichtbar. Der Host lehnt die Vergrößerung von 300 auf 317 logische Pixel ab. Der Revert sieht nun die belegte letzte Zeile und verweigert das Ausblenden. Ergebnis: Sichtbarkeit 5 bleibt bestehen, Fenster 300; die neue Aktionsleiste liegt bei y258; nach dem ersten Fehlversuch ist zunächst vor allem der Status unterhalb y300 abgeschnitten. Bei wiederholtem Plus auf weitere belegte versteckte Zeilen wächst die Inkonsistenz: 4→5→6→7 bei unverändert 300 Pixeln Höhe. Die Plusfläche bei sechs Zeilen ist mit y287…300 noch teilweise erreichbar; danach liegt die Aktionsleiste bei y316…345 vollständig außerhalb und die siebte Zeile ist teilweise abgeschnitten. Der normale Bedienweg kann dadurch tatsächlich unzugänglich werden.
-
-Der Code zeigt zwar „ZEILEN-ROLLBACK FEHLGESCHLAGEN“, behebt den Zustand aber nicht. Das unabhängige Policymodell ergibt: Start 4 → Add 5 → Resizefalse → Hidefalse → End 5.
-
-**Warum der neue Test das übersieht:** Seine Revertlambda dekrementiert bedingungslos einen `int`. Er kennt weder Labels noch Raster noch Solo und ruft keinen Controller auf. Der Testname darf nicht als Prüfung des tatsächlichen Controller-/Hostpfads gelesen werden.
-
-**Empfehlung:** Eine echte Rücknahme der ursprünglichen Sichtbarkeit beziehungsweise eine erst nach erfolgreicher Fensterverhandlung wirksame Änderung vorsehen. Normale Lösch-/Hide-Sicherungen nicht pauschal entfernen. Regression über tatsächlichen Controller, gültiges Kit mit belegter versteckter Zeile und ablehnenden `IPlugFrame`; Modelle, State und reale Fenstergröße müssen konsistent bleiben. Keine Korrektur wurde hier durchgeführt.
-
-### N02 – P2 / FAIL: Abgelehnter Zoom lässt den Editorwert zurück
-
-**Pluginquellen:** [V:328], [V:142], [V:100].
-
-**SDK-Primärquellen:** `vst3editor.cpp:600–613`, `cframe.cpp:248–275` und `cframe.cpp:921–944` im gepinnten VSTGUI.
-
-`VST3Editor::setZoomFactor()` setzt zuerst `zoomFactor=factor`. Es ruft danach `CFrame::setZoom()` auf, wertet dessen Fehler aber nicht aus. `CFrame::setZoom()` stellt bei einer abgelehnten Größenänderung seinen alten Transform wieder her. Drumators direkter Aufruf erhält keinen Erfolgscode und führt weder einen eigenen Abgleich noch eine Rücknahme durch.
-
-**Gegenfall:** Bei 100% lehnt der Host den Wechsel auf 150% ab. Der Frame bleibt tatsächlich bei 1,0, während `getZoomFactor()` 1,5 liefert. Der neue Marker [V:142] markiert 150%; ein späterer Rowresize rechnet mit 1,5. Das ist ein konkreter SDK-/Pluginpfad, kein hier ausgeführter Studio-One-Test.
-
-**Empfehlung:** Nach der Zoomverhandlung tatsächliche Framegröße/Transformation, Editorwert und ausgewählte Anzeige konsistent halten. Einen ablehnenden Resizehost und anschließend weitere Row-/Zoomaktionen testen. SDK-Verhalten nicht allein aus dem gespeicherten `getZoomFactor()` als erfolgreich interpretieren.
-
-### N03 – P2 / FAIL des Vollständigkeitsvertrags: Dekodierte FLAC-Länge nicht mit Metadaten verglichen
-
-**Quellen:** [F:38], [F:47], [F:55], [H:736]. Decoderprimärquelle: `drflac_read_pcm_frames_f32`, gepinnte `dr_flac.h:11701ff`.
-
-Die neue Begrenzung verhindert die frühere unbeschränkte PCM-Ausgabe. Sie prüft jedoch nur `totalPCMFrameCount > maxFrames`. Anschließend wird gelesen, bis der Decoder 0 liefert. Nach `close()` wird lediglich `framesRead != 0` gefordert; ein Vergleich mit einer bekannten deklarierten Gesamtzahl fehlt. Der gelesene Upstreamdecoder beendet einen nicht weiter dekodierbaren Stream und gibt bereits gelesene Frames zurück.
-
-**Konkrete Gegenfixture:** Das vorhandene 98-Byte-Test-FLAC enthält 128 Frames. Nur die 36-Bit-Gesamtframezahl in STREAMINFO wurde von 128 auf 256 geändert, alle Audioframes blieben gleich. Eine unabhängige `ffprobe`-Prüfung zeigt `duration_ts=256`, aber genau einen dekodierten Frame mit `nb_samples=128`. Beide Werte liegen weit unter den neuen Größenlimits. Der Wrapperpfad speichert 128 gelesene Frames und besitzt keinen Zweig, der den Widerspruch 256≠128 abweist.
-
-**Beweisgrenze:** Die Fixture wurde unabhängig untersucht und der gepinnte Decoder-/Wrapperkontrollfluss geprüft. Der Windows-Drumator-Wrapper wurde hier nicht ausgeführt. Es wird kein beobachteter Studio-One-Datenverlust behauptet. Belegt ist die fehlende Vollständigkeitsbedingung samt konkreter Eingabe; deren Ablehnung sollte vor dem Überschreiben des bisherigen Samples gefordert werden.
-
-**Empfehlung:** Bekannte deklarierte Gesamtlänge vor dem Schließen aufbewahren und vollständige Dekodierung überprüfen; unbekannte Länge getrennt behandeln. Tests mit zu großer, zu kleiner und unbekannter deklarierter Länge sowie echten Mehrframe-Dateien mit abgeschnittenem Ende. Der bestehende „enorm große Metadaten“-Test trifft diesen kleinen, durch die Budgetprüfung zulässigen Gegenfall nicht.
-
-### N04 – P3 / FAIL: Header-Hitbox wurde für zwei verschiedene y-Bereiche vereinheitlicht
-
-**Quellen:** Zeichnung [V:137], [V:144]; Dispatch [V:320].
-
-Die Patternflächen haben y=38…68, die Zoomflächen y=39…69. Der neue gemeinsame Headerzweig akzeptiert y=38…69. Damit wählt `(350,68.5)` A unterhalb seiner gezeichneten Fläche; `(1080,38.5)` aktiviert 100% oberhalb seiner Fläche. Diese kleinen Restabweichungen sind kein schwerer Audiofehler, widersprechen aber der geforderten identischen Draw-/Hit-Geometrie.
-
-**Empfehlung:** Die tatsächlichen Zielrechtecke auch zum Hit-Test verwenden. Negative Randfälle pro Buttontyp prüfen, statt einen gemeinsamen Bereich zu verlängern. Keine neuen UI-Geometrie-/Mausregressionen wurden hierfür gefunden.
-
-### N05 – P1 / FAIL: Neue SDK-Stringliste und bestehender Scheduler verwenden verschiedene diskrete Abbildungen
-
-**Pluginquellen:** [C:52], [C:149], [P:342], [P:405]; Test [H:103].
-
-**SDK-Primärquellen:** `public.sdk/source/vst/vstparameters.cpp:291–330` und `pluginterfaces/base/futils.h:93–97`, jeweils im oben angegebenen Commit.
-
-Der neue `StringListParameter::toString()` verwendet `toPlain()`, und dieses verwendet das SDK-`FromNormalized(value,7)`:
-
-```text
-Host-Plainwert / Textindex = min(7, int(value * 8))
-Drumator-Prozessor / GUI   = lround(value * 7)
-```
-
-Für nichtnegative normalisierte Werte ist `int` hier Abschneiden nach unten. Die Grenzstellen unterscheiden sich. Konkrete Beispiele:
-
-| Normalisierter Wert | Host-String/Plainindex | Prozessor- und GUI-Auswahl |
-|---:|---|---|
-| 0,10 | A /0 | B /1 |
-| 0,124 | A /0 | B /1 |
-| 0,875 | H /7 | G /6 |
-| 0,90 | H /7 | G /6 |
-| 0,929 | H /7 | H /7 |
-
-Ein unabhängiger Vergleich an 1001 Werten `i/1000` fand 213 Abweichungen. Das ist keine Ausführung des Plugins, sondern die direkte Gegenprüfung der beiden tatsächlichen Implementierungsformeln. Alle acht kanonischen Werte `p/7` stimmen überein; genau deshalb bleibt der neue Regressionstest grün.
-
-**Reproduktion im nativen Testhost:** `getParamStringByValue(1000,0.10)` und `normalizedParamToPlain(1000,0.10)` abfragen; denselben Wert als Patternparameter liefern und anschließend `getState().selected` beziehungsweise Audio mit deutlich unterschiedlichen A/B-Patterns prüfen. Dasselbe für 0,90. Die Inkonsistenz betrifft auch alte nichtkanonische Automationswerte; sie darf nicht pauschal als ungültiger Hostinput abgetan werden, denn die öffentliche Normalized-/Plain-API definiert gerade deren Abbildung.
-
-**Empfehlung:** Eine gemeinsame verbindliche Quantisierung für Text, Plainwert, GUI, Flush, laufende Automation und Stateübernahme festlegen. Wegen der vorhandenen Projekte nicht unbesehen die bisherigen DSP-Auswahlgrenzen ändern. Neben `p/7` alle Grenzstellen und ihre Nachbarn testen; zwischen Hostanzeige und hörbarem Pattern muss dieselbe Auswahl gelten.
-
-## 5. Was die Regressionstests tatsächlich belegen – und was nicht
-
-| Neuer/berufener Test | Geeigneter Teilnachweis | Fehlender oder schwacher Teil |
+| Befund | Status | Tatsächlicher Reparaturstand |
 |---|---|---|
-| F03, [H:780] | Public-Controllerwert und ComponentState können gesetzt/gelesen werden; Ressourcenrechteck vorhanden | Kein `IPlugView::attached`, kein HWND, keine Custom-View, kein Render, keine Invalidierungsbeobachtung. `views_` ist in diesem Pfad leer. |
-| F03, drei `createView`/`release`, [H:801] | Lebensdauer dreier ungeöffneter Editorobjekte | Kein echter Close/Reopen-Zyklus eines nativen Editors; keine Registrierung/Abmeldung der tatsächlichen Child-View getestet. |
-| F04, [H:814] | Zero-Frame/Zero-Output wird vom echten Paketprozessor verarbeitet; gespeicherte Auswahl wird geprüft | Nur ein Wert und keine anschließende Audio-Resume-Messung; die wichtigste ursprüngliche Assertion ist dennoch funktional geeignet. |
-| F05, [R:45] | Ein Callback wird bei Booltrue, nicht bei Boolfalse ausgeführt | Kein Hosthandler, kein Nachrichtenversand, kein Controlleredit, kein tatsächlicher Dirty-Call gemessen. |
-| F08, [T:288] | Voicecore liefert bekannte L/R-Amplitude ohne MAIN | Nicht die gesamte SDK-/Bus-/Adapterkette. |
-| F08, [H:844] | Paketprozessor bricht ohne MAIN nicht mehr ab und liefert keine NaNs | Ausgabearrays beginnen mit 0; nur `isfinite` wird geprüft. Ein vollständig stummer Aux würde bestehen. Kommentar bezeichnet Bus1 außerdem missverständlich als row1 statt sichtbarer Zeile 2. |
-| F10, [R:30] | Reihenfolge und Rückgabeklassen der generischen Transaktionspolicy | Revert kennt keine echten Hide-Sperren. Keine Ausführung von `Controller::canHideLast`, keine `IPlugFrame`-Resizeverhandlung, kein Gegenfall „versteckt und belegt“. |
-| F13, [H:736] | Riesige deklarierte Framezahl wird abgelehnt; vorheriger Output bleibt erhalten | Keine Allokations-/Zeitinstrumentierung; ein langsamer Decoder mit nachträglicher Ablehnung könnte dieselbe Assertion erfüllen. Unbekannte Länge und kleine Längenwidersprüche fehlen. |
-| F14, [T:33] | Bei Ratio 1 sind 32 Taps eingestellt; bei Ratio 16 misst Phase 0 am Punkt 0,04 unter −40 dB | Keine tatsächliche Audiorender-/FFT-Referenz dieses Gegenfalls, kein Sweep und kein fractional-ratio-/Phasen-/Passbandvertrag. |
-| F14, [T:252] | 64 Voices bei Ratio 16 können starten, finite Samples erzeugen und nach genügend Frames auslaufen; grober Hangschutz | Eine einzige gesamte Laufzeit inklusive Kernelvorbereitung, kein per-block Timing, keine Callbackkadenz, keine Deadlines, kein p95/p99. |
-| Bestehende Kit-/Codec-Tests | Roundtrip und Korruptionsablehnung, DMR4…9-Migration, Größenlimits | Keine Legacy-DMR1…3-Controllerabweichung aus verändertem Zustand und kein atomarer Kitwechsel während laufender Audiocallbacks. |
-| Bestehender Editor-Smoke | Factory/Controller/View und äußeres 1280×300-Rechteck | Verifiziert weiterhin weder Childbreite nach Attach noch Zeichnung, Maus, Zoom, HiDPI oder dynamische Zeilenhöhe. |
-| F16, [H:103] | Acht exakte Buchstaben bei `p/7` | Keine Zwischenwerte, Plain-API, Auswahlgrenzen oder Audio-/Statekonsistenz; N05 bleibt unsichtbar. |
+| **N01 – Rollback mit belegter versteckter Zeile** | **TEILWEISE** | Der Produktionsfehler wurde zielgerichtet beseitigt: [V:347] speichert den alten Count, [C:214] stellt ihn unabhängig von Sample/Steps/Solo wieder her. Das ist der richtige Unterschied zu einer normalen Benutzer-Hide-Aktion. Der Test [R:31] ruft diese Methode weiterhin nicht auf; er kennt weder Nachrichtenversand noch versteckte Belegung oder ablehnendes `IPlugFrame`. Ein PASS der tatsächlichen Interaktionskette ist deshalb nicht begründet. |
+| **N02 – Zoomablehnung** | **FAIL** | Der neue Check [E:18] erkennt einen häufigen Fall, wenn der Framecache vorher korrekt gesetzt war. Er prüft aber `CFrame::getZoom()` statt tatsächlicher Transformation. Nach Wiederöffnung mit gespeichertem Zoom kann dieser Cache anders initialisiert sein. Konkreter Gegenfall unten. |
+| **N03 – FLAC deklarierte/decodierte Länge** | **PASS, genau dieser Fall** | [F:46] merkt die deklarierte Zahl; [F:57] verweigert eine abweichende bekannte Länge vor `out.swap`. [H:777] verwendet ausdrücklich „deklariert256, tatsächlich128“ und verlangt unveränderten vorherigen Output. Geeigneter gezielter Wrappertest im erfolgreichen Windowslauf. Unbekannte Länge und beliebige Korruptionsfälle sind damit nicht pauschal bestanden. |
+| **N04 – Header-Randstreifen** | **TEILWEISE** | Pattern wird in [38,68), Zoom in [39,69) gezeichnet und nun entsprechend getrennt getroffen [V:137], [V:320], [V:329]. Die beiden alten y=68,5-/38,5-Gegenpunkte sind rechnerisch korrekt. [R:64] prüft allerdings zwei testlokale Lambdas mit denselben Zahlen und keinen Produkt-Hit-Test. Eine erneute Produktregression würde diesen Test nicht zwingend brechen. |
+| **N05 – Host-/DSP-Zwischenwerte** | **PASS, ursprünglicher Abbildungswiderspruch** | Controller und alle drei Prozessorpfade verwenden nun [G:6], also `min(7,floor(8*clamp(v)))`, gleich dem gepinnten SDK. Die neuen Hosttests prüfen Zwischenwerttexte und echte Prozessor-Flush-/Stateauswahl. Unabhängiger 1001-Punkte-Vergleich bestätigt die aktuelle mathematische Übereinstimmung. Die gesamte Automation bleibt wegen N06/N07 nicht freigegeben; Audio bei mehreren Punkten im laufenden Block ist ergänzend nötig. |
 
-Die Tests verwenden aktive Throw-/Exit-Prüfungen und beruhen nicht allein auf durch `NDEBUG` abschaltbaren Assertions. Der CMake-Sammelbuild für alle acht CTests besteht weiter. Die Diagnose „fehlende Tests“ meint deshalb vor allem **fehlende relevante Gegenfälle und Integrationspfade**, nicht pauschal eine nicht ausführbare Testsuite.
+### N02: Noch fehlerhafter Weg über gespeicherte 150 %
 
-Die Ausgabe „sample-voice regression:10 groups PASS“ ist inzwischen veraltet: Es werden 13 benannte Testfunktionen nach dem zusätzlichen Empty-Samplerblock aufgerufen. Das verfälscht keine Checks, sollte aber nicht als exakte Testgruppenzählung zitiert werden.
+**Priorität P2; nachgewiesener Quellen-/SDK-Gegenfall, kein hier ausgeführter nativer Test.**
 
-## 6. Audioengine, SRC, Stimmen und Echtzeit
+Produktdateien: [DrumatorEditor.h:14][E:14], [DrumatorController.cpp:155][C:155], [DrumatorView.cpp:334][V:334]. Maßgebliche SDK-Dateien: [vst3editor.cpp:2053][sdk-open], [cframe.cpp:89][sdk-frame-cache], [cframe.cpp:248][sdk-frame-zoom].
 
-### 6.1 SRC: nachgewiesene Verbesserung, noch kein vollständiger Qualitätsvertrag
+1. Ein gültiger Controllerstate enthält 150 %. `createView` ruft `setZoomChecked(1.5)` vor dem Öffnen auf. Ohne Frame setzt dies den Editorfaktor auf 1,5.
+2. Der SDK-Normalpfad `enableEditing(false)` erzeugt den Frame und setzt dessen Transformation direkt mit `setTransform(scale(...))`, Zeile2081. Er ruft in diesem Pfad kein `CFrame::setZoom` auf. `userScaleFactor`, den `getZoom()` zurückgibt, ist zunächst **1,0**. Tatsächliche Transformation und Cache können folglich **1,5 / 1,0** sein. Ein Host bei normalem DPI muss das optionale ContentScale-Interface nicht aufrufen; der Gegenfall ist somit ein zulässiger Lifecycle.
+3. Benutzer klickt 100 %. Der SDK setzt den Editorwert zunächst auf1,0. Der Host lehnt die Größenänderung ab. `CFrame::setZoom` stellt die vorherige Transformation1,5 wieder her; sein Cache bleibt1,0.
+4. Der Wrapper vergleicht Cache1,0 mit erwartetem Faktor1,0 und meldet **Erfolg**. `rememberZoom(1.0)` speichert100 %, die Anzeige markiert100 %, die Darstellung bleibt150 %. Künftige Row-Resizes verwenden ebenfalls den falschen Faktor.
 
-Der neue Kernel verwendet 32/64/128/256 Taps ab den Verhältnissen 1 beziehungsweise 2/4/8 [K:39]. Die Tabelle liegt nun als Vector auf dem Controlthread-Heap [K:41]; ihre Konstruktion findet nicht im Audiocallback statt. Das vermeidet die entsprechend große lokale Stacktabelle und vermeidet eine pauschale 256-Tap-Rechenschleife bei Ratio 1.
+Der unabhängige Zustandsdurchlauf ergibt: `editor=1.0`, `preferred=1.0`, `frame_transform=1.5`, `frame_zoom_cache=1.0`, `wrapper_reports_success=true`.
 
-Die unabhängige komplexe Frequenzantwort aus der tatsächlichen Koeffizientenformel einschließlich Float32-Koeffizienten ergibt für Phase 0:
+**Empfehlung:** Die Zoomtransaktion an der tatsächlich wirksamen Transformation und dem tatsächlichen Host-/Frameergebnis absichern; den Initialisierungsweg einschließen. Dabei die SDK-API und Resize-Reentranz respektieren. Kein weiterer bloßer Vergleich eines ungesichert synchronen Caches. Den geerbten `setContentScaleFactor`-Pfad einbeziehen: auch er setzt den Faktor vor `CFrame::setZoom` und ignoriert dessen Ablehnung.
 
-| Ratio | Taps | Quellfrequenz in Zyklen/Frame | Antwort |
-|---:|---:|---:|---:|
-|16|256|0,040000|−47,678 dB|
-|16|256|0,060000|−92,328 dB|
-|16|256|0,028125|−1,918 dB|
-|16|256|0,034375|−14,064 dB|
-|8|256|0,100000|−113,854 dB|
-|4|128|0,200000|−129,309 dB|
-|1|32|0,100000|0,000 dB|
+**Fehlende Regression:** Echter attachter Editor bei gespeichertem150 %, Host ohne ContentScale-Aufruf; Ablehnung150→100, Ablehnung100→150, erneuter gleicher Zoom, Close/Reopen, ContentScale1/1,5/2. Prüfen: reale Transformation, Frame-/Hostrect, Editorfaktor, Präferenz, Auswahlfarbe und nachfolgende Rowgröße. Der vorhandene State-Bytetest kann all diese Fehler übersehen.
 
-Die beiden ursprünglichen Ratio-16-Gegenfälle lagen bei ungefähr −5,24 und −12,27 dB. Die Verbesserung ist also real aus der Implementierung ableitbar. Sie wird ausdrücklich anerkannt.
+## 5. Neue beziehungsweise jetzt konkret nachgewiesene Fehler
 
-Die zusätzlichen Punkte zeigen jedoch, weshalb ein einzelner Stopbandpunkt nicht genügt: Bei Ratio 16 und 48 kHz Ausgabe liegt 0,028125 bei 21,6 kHz Ausgangsfrequenz im Passbandrand und wird um etwa 1,92 dB abgesenkt.0,034375 entspräche 26,4 kHz und faltet auf 21,6 kHz zurück; dieser Übergangsbereich wird nur um etwa 14,06 dB gedämpft. Ohne vorab festgelegtes nutzbares Passband, Übergangsband und Stopbandziel ist daraus weder eine pauschale Freigabe noch ein nachträglich erfundener Grenzwert abzuleiten.
+### N06 – P1 / FAIL: Reparatur verändert alte Patternautomation ohne Migration
 
-**Noch erforderlich:** Audio-Sweep/FFT mit unabhängiger Referenz, Phasen und nichtganzzahlige Ratios, 44,1/48/96/192 kHz-Quellen/Hosts, Pitch 0/±12/±24, Sampleanfang/-ende und reale Drums. Den 40-dB-Einzeltest nicht mit einem vollständigen SRC-Qualitätsziel gleichsetzen.
+**Ursache:** [PatternQuantization.h:6][G:6], Verwendung [C:170], [P:382], [P:451], [P:468]. Der Vorgängerstand verwendete `lround(clamp(v)*7)`. Der neue Stand verwendet `min(7,floor(clamp(v)*8))`. Beide sind für kanonische `p/7` gleich, für andere gültige Normalwerte nicht.
 
-### 6.2 CPU-/RAM-Folgen der Reparatur
-
-Bei 64 Stimmen und 256 Taps entstehen bis zu `64×256×2=32768` Tap-/Kanalbeiträge pro Ausgabesample, also achtmal so viele wie beim bisherigen 32-Tap-Kern. Das ist eine rechnerische Lastbeschreibung, kein gemessener CPU-Prozentwert.
-
-Die Koeffiziententabelle wird für jedes vorbereitete nichtleere Sample weiterhin auf `1024×256` Floatwerte dimensioniert, selbst wenn nur 32 Taps genutzt werden. Das sind 1 MiB pro Kernel statt zuvor 128 KiB. 16 aktuelle geladene Zeilen können dafür allein 16 MiB benötigen; alte klingende Sampleversionen und ein gerade vorbereitetes neues Kit kommen hinzu. Die Auslagerung vom Stack war korrekt, ersetzt aber kein gemessenes Gesamt-RAM-Budget.
-
-Der neue Stress umfasst pro Zyklus 8192 aktive Ausgabeframes plus Drain. Über fünf Zyklen sind 40960 aktive Frames bei 48 kHz ungefähr 0,853 s aktive Audiolänge; mit allen 36 Blöcken je Zyklus werden 46080 Frames verarbeitet. Eine Gesamtlaufzeit unter 20 s ist ein sinnvoller großzügiger Hangschutz, aber kann einen großen Realtimefehlbetrag unentdeckt lassen. Der Testkommentar kennzeichnet diese Einschränkung korrekt. Es liegt kein neuer p95/p99-/Max-/Deadline-Nachweis vor.
-
-**Gesamtstatus Echtzeit: OFFEN.** Keine hörbare Glitchfreiheit oder Realtimekapazität unter 64 langen hochtransponierten Stereo-Voices behaupten. Paket-, Host- und Mehrinstanzlast mit echter Callbackkadenz messen.
-
-### 6.3 Stimmen, Mix, Choke und Transport
-
-Die Grundlagen bleiben nachvollziehbar: maximal 64 Voices, keine harte Voice-Stealing-Abschneidung, One-shot-Überlappung, Stereo-Balance mit Unity in der Mitte und ein sampleratenabhängiger Chokefade. Leere Rows bleiben still. Samples und Kernel bleiben für alte Voices am ursprünglichen Eigentümer.
-
-Folgende alte Risiken bestehen weiterhin:
-
-- `fire()` beginnt Chokefades **vor** der Suche nach einem freien Voiceplatz [K:261]. Bei voller Polyphonie kann ein neuer Hit alte Stimmen abblenden, obwohl er selbst anschließend verworfen wird. Kein neuer Kombinationsregressionstest.
-- Event-/Voice-Überläufe bleiben ohne nutzerseitige Diagnose; der Prozessor wertet Appendergebnisse und `rejectedCapacity` nicht aus [P:388], [P:435], [P:460].
-- Mute/Solo filtern neue Trigger. Bereits klingende Voices behalten Gain, Pan, Pitch und Asset. Das ist bestehendes, teilweise ausdrücklich getestetes Verhalten und wird nicht als neue Regression ausgegeben; für lange Samples muss der Bedienvertrag klar sein.
-- PLAY→STOP setzt Stimmen zurück. Seek/Loop bei weiter gesetztem Playing hat keinen eigenen Discontinuity-Reset; gewünschtes Tailverhalten ist noch festzulegen.
-- MIDI bleibt eine 16-Noten-One-shot-Zuordnung 36…51, keine vollständige GM-Map und kein unbegrenzt spezifizierter MIDI-Controller-/Panikvertrag.
-
-## 7. Import, Projektzustände und Hostintegration
-
-### 7.1 Import und Speicher
-
-WAV-Decoder und Kitlimits sind unverändert: PCM8/16/24/32 und Float32 mono/stereo, ausgewählte Extensible-Fälle,16 MiB je WAV und 64 MiB eingebettete Quellen pro Kit. RF64/RIFX, Float64 und 24 gültige Bits im 32-Bit-Container sind nicht als voll unterstützt anzunehmen. NaN/Inf-Schutz und Extrema müssen mit dem tatsächlichen Fixturekorpus nachvollzogen werden.
-
-Die FLAC-Grenzreparatur ist substanziell besser, siehe F13. Dateilesen, Preflight, Decode und Pitch-Neuberechnung laufen aber weiterhin synchron über den UI-/Controlthread. Der Prozessor dekodiert beim Pitchschritt neu und baut den Kernel neu auf. Die längeren Kernel erhöhen diese Kosten. Ein Importworker wurde nicht eingeführt; dabei müsste ein späterer Worker die bestehende Single-Producer-Ownership respektieren. Kein Worker oder Streamingverhalten darf aus dem Commitstand heraus behauptet werden.
-
-### 7.2 Vollständige Kittransaktion bleibt ein offenes P1-Risiko
-
-`publishRestoredKit()` [P:474] präpariert alle Assets vorab, veröffentlicht sie aber weiterhin über 16 einzelne Pending-Slots. Danach ersetzt `setState()` Raster, Auswahl und Mixfelder einzeln [P:568]. Der Audiothread greift nicht auf den Controlmutex zu, was für seine Echtzeitfähigkeit richtig ist, aber diese getrennten Publikationen nicht zu einer vollständigen Generationstransaktion macht.
-
-Bei einem laut SDK zulässigen `setState()` während laufender Verarbeitung ist eine Ausführung zwischen zwei Publikationen möglich: Zeile 1 neu, Zeile 2 alt; anschließend neue/alte Raster- oder Mixteile. Bereits gestartete Voices behalten ohnehin ihre alten Assets. Die bisherigen erfolgreichen Recalltests stoppen/reaktivieren oder verwenden frische Instanzen beziehungsweise liefern einen beschädigten Kandidaten, bevor überhaupt publiziert wird. Sie belegen nicht, dass ein **gültiger** kompletter Kitwechsel unter laufendem Audio kohärent erfolgt.
-
-**Status: TEILWEISE/technisches Risiko, kein hier gemessener Mischblock.** Für eine Abnahme sind eine ausdrückliche Kitwechsel-/Tailpolitik und ein Test unter tatsächlicher Nebenläufigkeit erforderlich. Ungültige-Kandidaten-Rollback und atomare Audioübernahme sind verschiedene Anforderungen.
-
-### 7.3 Legacy- und unsichtbare Zustände
-
-DMR1-Griddefaults sowie Pitch-/Choke-Defaults sind korrigiert. Ein Test muss trotzdem einen absichtlich veränderten Controller **vor** DMR1/2/3-Recall verwenden; eine frische Instanz kann das frühere Problem verdecken. Prüfen: Raster, Labels, M/S, Gain/Pan/Pitch/Choke, Auswahl, Zeilenzahl und nächster Edit, jeweils gegen den Prozessor.
-
-DM10 erlaubt weiterhin versteckte geladene Rows und Solobits außerhalb des sichtbaren Bereichs [B:70]. Die direkte Hide-Solosperre heilt keine bereits gespeicherten versteckten Solos aus früheren Versionen. Dafür ist eine Bedien-/Migrationsentscheidung nötig. Das ist von N01 zu unterscheiden: Versteckte geladene Rows sind im aktuellen Stateformat zulässig und müssen daher beim Resize-Rollback berücksichtigt werden.
-
-### 7.4 Multi-Out, Dirty und Lifecycle
-
-Die Routingreparatur für Null-MAIN ist nachvollziehbar. Freie Ausgangszuordnung bleibt nicht implementiert: Zeile 1 geht auf MAIN, Zeilen 2…16 auf ihre festen Aux-Busse, sofern aktiv/vorhanden, ansonsten auf MAIN. Die vollständige Matrix aus 16 registrierten Busbeschreibungen, inaktiven Lücken, MAIN-inaktiv, Aux15 und Songrecall ist weiterhin nicht end-to-end belegt. Der neue F08-Pakettest darf wegen seiner reinen Finite-Assertion nicht als gemessener Audio-Isolationstest zitiert werden.
-
-Dirty-Aufrufe sind im Controller jetzt eingebaut. Die generische Callbackpolicy kann die VST3-Anbindung jedoch nicht unabhängig beweisen. Ein Mock-/Testhost muss `IComponentHandler2` tatsächlich anbieten und bei Sample, Clear, Step, Velocity, Mix, Pitch, M/S, Choke, Swing, Humanize und Zeilenzahl echte Aufrufe zählen; abgelehnte Edits dürfen keinen Erfolg vortäuschen. Abgebrochene Resize-Transaktionen verursachen bereits erfolgreich versandte Hin-/Rücknachrichten und Dirtymeldungen; die gewünschte No-op-/Undo-/Modifiedpolitik gehört geprüft.
-
-`setProcessing`, Float32-Unterstützung, InfiniteTail und bestehende Aktivierungs-/Sampleratenwechselpfade bestehen weiter. Float64 wird bewusst abgelehnt und ist nicht allein deshalb ein Fehler. Native Editorlifecycle, mehrere Ansichten/Instanzen, Host-DPI-Wechsel und tatsächlich geöffnete/geschlossene Fenster fehlen als belastbare Abnahme.
-
-## 8. Gesamte GUI: Bedienung und Zeilen-/Zoommatrix
-
-Die Oberfläche bleibt eine gezeichnete Custom-View, keine Sammlung nativer Slider und Texteingaben. Deshalb sind leere UIDESC-Controltags hier nicht automatisch ein Fehler; die manuelle Koordinatenroute muss getestet werden.
-
-| Gruppe | Aktueller Pfad und wesentliche Prüfung | Status der vollständigen Bedienabnahme |
+| Gespeicherter Automationswert | Alter Prozessor | Aktueller Prozessor/Hosttext |
 |---|---|---|
-| A–H | Zeichnung/Hit-Test und `changePattern` vorhanden; Abstände horizontal korrigiert; N04/N05 beachten | FAIL für die genannten Rest-/Abbildungsfehler; native Klickkette offen |
-| Zoom100/150 | Beide Buttons liegen jetzt in 1280; Auswahlfarbe vorhanden; SDKzoom wird direkt gesetzt | FAIL wegen Persistenz und N02; HiDPI-/Fensterpraxis offen |
-| Swing/Humanize ± | Nachrichteneffekt und Recall vorhanden; Ctrlformel hinzugefügt | TEILWEISE; keine nativen Modifier-/Mausprüfungen |
-| Samplefeld/Zeilennummer | Dialog/Alt-Clear und begrenzter einzelner WAV-/FLAC-Dateidrop | TEILWEISE; echter `IDataPackage` und Browserpfad nicht getestet |
-| VOL/PAN/PITCH-Hälften | Eigene Zielbereiche statt durchgehender Lücke; korrekte Resetformeln | TEILWEISE; alle 16 Rows, beide Hälften, Grenzen und Audio/State testen |
-| M/S/Choke | Zustandsfarben/Zahl und Nachrichten vorhanden; Solo verhindert direktes Hide | TEILWEISE; keine komplette Controller-zu-Audio-Klickmatrix |
-| 32 Steps × 16 Rows × 8 Patterns | On/Off und Shift-Velocity vorhanden; rechnerisch alle Stepflächen innerhalb 1280 | TEILWEISE; vollständige native Raster-/Modifier-/Stateprüfung fehlt |
-| Plus/Minus | Transaktionshelper eingebaut | FAIL N01; Recall-/Attach-Ablehnung zusätzlich offen |
-| Namen, Hilfen, Status | UTF-8-Codepointkürzung verbessert; feste Font-/Textrechtecke | TEILWEISE; Fontmetriken, Grapheme und echte Windowsbilder fehlen |
+| 0,10 | B | A |
+| 0,124 | B | A |
+| 0,125 | B | B |
+| 0,875 | G | H |
+| 0,90 | G | H |
+| 0,929 | H | H |
 
-Die logische Höhe bleibt `max(300,172+29*rows)`:1/4 Zeilen 300, 5 Zeilen 317, 16 Zeilen 636. Bei 150% werden daraus 450, 475,5 und 954 nominelle Pixel Höhe; bei zusätzlichem Hostscale 2 nochmals doppelt so groß. Der allgemeine Größenvertrag ist nun mathematisch richtiger, aber Rundung, tatsächlicher HWND-Clientbereich und ein abgelehnter Resize müssen beobachtet werden. Eine 1920-Pixel-Breite bei 150% lässt auf einem 1920-Pixel-Display keinen normalen Fensterrand übrig; einen Fit-/Scrollfallback gibt es nicht.
+Der unabhängige Vergleich `v=i/1000, i=0…1000` findet **213 geänderte Auswahlen**. Das ist die jetzt beseitigte interne Abweichung N05, als **Kompatibilitätsregression gegenüber gespeicherten älteren Automationskurven** betrachtet. Eine alte Kurve mit Wert0,10 kann nach Update einen anderen Beat spielen. Alte Projektstates speichern nur eine diskrete Auswahl; sie migrieren keine hostseitig gespeicherten Kurven. Parameter-ID1000, Version0.1.0 und StateformatDM10 bleiben unverändert; ein Übergangspfad ist nicht vorhanden.
 
-Keine nativen Bilder dieses Audits wurden erzeugt. Gute Farben und korrekte Zahlenfelder werden deshalb nicht allein aus Quellkoordinaten als visuell abgenommen bezeichnet.
+**Abgrenzung:** Aktuelle interne Übereinstimmung ist verbessert. Ein Projekt mit ausschließlich den acht `p/7`-Werten ist von diesem Gegenfall nicht betroffen. Die tatsächliche Quantisierung beziehungsweise Speicherung von Zwischenwerten in Studio One ist separat zu testen. Die Änderung der öffentlich akzeptierten Parameterabbildung ist trotzdem unmittelbar nachweisbar und verletzt ohne vereinbarte Migration die Engineering-Kompatibilitätsregel.
 
-### Noch offene funktionale Produktziele
+**Empfehlung:** Einen ausdrücklich kompatiblen gemeinsamen Parametervertrag einschließlich Hosttext/Plainwert festlegen. Alte Wiedergabesemantik bewahren oder einen nachvollziehbaren, ausdrücklich vereinbarten Migrations-/Versionsweg entwickeln. Nicht einfach wieder zwei unterschiedliche aktuelle Abbildungen einführen.
 
-Der Scopeentwurf nennt weiterhin unabhängige Instrumentennamen, frei bedienbares Output-Assignment, Preview, Copy/Paste, praktisches Undo und einen laufenden Stepindikator. Diese sind im aktuellen Provisorium nicht vollständig vorhanden. Es gibt keine neue Playhead-/Transportanzeige; „Running-Light“ in README ist damit nicht als implementierte GUI-Funktion belegt. Numerische Texteingabe, Mausrad und Reglerdrag fehlen ebenfalls.
+**Fehlende Regression:** Dasselbe alte Projekt beziehungsweise dieselbe feste Normalwertkurve mit alter und neuer Paketversion rendern; A–H enthalten unverwechselbare Rhythmen. Hosttext, `normalizedParamToPlain`, Controller, Prozessorstate und Audio an allen alten/neuen Schwellen und unmittelbar beidseitig davon vergleichen. Die aktuellen Tests schreiben ausschließlich den neuen Vertrag fest und können diesen Kompatibilitätsbruch nicht erkennen.
 
-Das Scope-Dokument ist ausdrücklich ein Entwurf. Diese Punkte werden daher nicht automatisch zu 17 weiteren Bugs erklärt. Sie müssen aber **vor dem endgültigen Layout** als V1-Pflicht, bewusste Verschiebung oder Streichung entschieden sein. Vintage-Charakter-DSP ist weiterhin optional und nicht vorhanden; dieser Audit entwickelt keine neue GUI und keinen solchen DSP.
+### N07 – P1 / FAIL: Kit-Restoresperre verwirft erfolgreiche Parameter-Flushes
 
-## 9. Priorisierte notwendige Nacharbeiten
+**Ursache:** [DrumatorProcessor.cpp:355][P:355] prüft die Restoresperre und kehrt mit `kResultOk` zurück, bevor [P:372] die Parameterwarteschlangen verarbeitet. Bei Nullframes wird nicht einmal ein Puffer beschrieben; die Änderungen verschwinden vollständig. Es gibt keine Pending-Parameterübernahme oder spätere Wiederholung im Plugin.
 
-### Vor einer technischen Freigabe
+**Konkreter Ablauf:** Ein Restore installiert PatternA und befindet sich noch innerhalb der Sperre. Ein legaler Zero-Frame-/Zero-Output-`process()` liefert danach die AuswahlH. Der Aufruf gibt Erfolg zurück, liest die Queue aber nicht. Nach Freigabe der Sperre und ohne erneutes Hostevent bleibt der Prozessor beiA, während Controller/HostH anzeigen können. Besonders eindeutig ist das Interleaving nach `selected_.store` in Zeile623 und vor dem Entsperren beim Verlassen des Blocks. Es bedarf keines defekten WAVs und keiner fehlerhaften Hostdaten.
 
-1. **P1 N05:** Einheitliche Patternabbildung einschließlich kompatibler Automationsgrenzen herstellen und mit Zwischen-/Grenzwerten gegen Hosttext, Plainwert, GUI, State und Audio testen.
-2. **P1 N01/F10:** Tatsächlichen Resize-Rollback mit belegten versteckten Rows absichern; Attach/State-Recall mit abgelehntem Fensterresize bedienbar halten.
-3. **P1 Risiko Kitwechsel:** Kohärenten kompletten Kitwechsel bei laufendem Audio nachweisen oder den zulässigen Host-/Produktvertrag belastbar begrenzen. Keine bloße Annahme „State kommt immer bei gestoppter Verarbeitung“.
-4. **P2 N02/F15:** Zoomwert, tatsächliche Darstellung und Wiederherstellung über Ablehnung/Close/Reopen konsistent halten.
-5. **P2 N03:** FLAC-Vollständigkeits- und Fehlerpolitik absichern, bestehendes Sample bei Ablehnung erhalten.
-6. **P2/N04:** Verbleibende Randhitboxen korrigieren und die eigentlichen nativen GUI-Regressionspfade etablieren.
+Im normalen Audioblock während Restore werden auch MIDI/Automation vollständig ignoriert. Ob Trigger beim Kitladen verworfen werden dürfen, benötigt eine Produktentscheidung; ein ohne Effekt erfolgreich bestätigter Parameter-Flush ist bereits ein konkreter Funktionsverlust. Das ist eine Regression des reparierten F04-Normalpfads.
 
-Diese Punkte sind Empfehlungen für einen nachgelagerten Korrekturauftrag. Im Rahmen dieses Audits wurde keine Reparatur vorgenommen.
+**Empfehlung:** Eine eindeutige Reihenfolge zwischen Statecommit und eintreffender Automation definieren und die erforderlichen Werte mit begrenztem, allokationsfreiem Verfahren erhalten. Nur den Flushcode vor die Sperre zu verschieben reicht nicht automatisch: spätere Restorestores könnten ihn erneut überschreiben. Auch getState, Resume und Controlleranzeige müssen denselben endgültigen Wert sehen.
 
-### Vor Beginn der endgültigen Vintage-GUI-Implementierung
+**Fehlende Regression:** Deterministisch überlappender tatsächlicher Paket-Restore plus Zero-Frame-Flush; ein Flush nach Stateauswahl-Commit und vor Entsperren; anschließend getState und hörbare Wiedergabe ohne erneutes Event. Zusätzlich laufende Blockautomation und gewünschte MIDI-Policy. Der vorhandene Flushtest läuft außerhalb der Sperre, der Konkurrenztest sendet keine Parameterqueues.
 
-- Alle bestätigten P1-Fehler geschlossen; weitere P1-Risiken durch geeignete Tests oder einen ausdrücklich akzeptierten Produktvertrag geklärt.
-- Für jedes Bedienelement eine nachvollziehbare Aktion→Controller→Prozessor→Audio/State→GUI-Kette; keine Freigabe nur aufgrund des Vorhandenseins einer Methode.
-- Tatsächlich angehängte GUI mit 100/150%, 1/4/16 Rows, Host-DPI und ablehnender Resizeverhandlung geprüft; keine abgeschnittenen oder falsch markierten/zugeordneten Ziele.
-- Verbindliche Funktionsliste und Bedienverträge für die bisher fehlenden V1-Ziele.
-- SRC-Qualitätsziel und echte Realtime-/RAM-Zielbudgets mit Messungen; funktionierender Song-/Sample-/Routingrecall und tatsächliche Dirty-Anbindung.
-- Separate Studio-One-Abnahme der folgenden Liste. Ein bestehender erfolgreicher Build ist dafür kein Ersatz.
+### N08 – P2 / FAIL: Transport-Stop direkt nach erstem Restoreblock wird übersehen
 
-**Entscheidung bleibt: Noch keine Freigabe.** Eine rein statische Designstudie wäre eine separate Produktentscheidung; die hier angefragte belastbare Bestätigung „funktional abgeschlossen, endgültige GUI kann gebaut werden“ ist durch den vorliegenden Stand nicht gedeckt.
+**Ursache:** [DrumatorProcessor.cpp:400][P:400] prüft Stop und merkt `wasPlaying_=playing`. Bei neuer Kitrevision setzt [P:408] diese Merkung im selben laufenden Block wieder auf `false`. Danach kann der Scheduler im neuen Kit bereits neue Stimmen starten.
 
-## 10. Konkrete letzte Studio-One-Praxistests
+**Konkreter Ablauf:** Gültiges Kit mit langem Sample laden. Erster vollständiger Block danach: `playing=true`, PPQ auf einem aktiven Step, Revision neu. Der Block setzt `wasPlaying_` zunächsttrue, im Revisionszweigfalse und startet anschließend einen neuen One-Shot. Der direkt folgende Block meldet `playing=false`. Die Bedingung `wasPlaying_ && !playing` ist false; der vorgesehene Stop-Reset bleibt aus und der lange Sound läuft weiter. Ein zusätzlicher laufender Block dazwischen würde die Merkung wiedertrue setzen und den Fehler verdecken.
 
-Genaue Studio-One-Version, Windowsversion, ASIO-Treiber, CPU, Monitor-DPI, Samplerate, Blockgröße und installierte VST3-Binäridentität protokollieren. Alte Angaben „Studio Pro 8.1.2“ nicht ungeprüft als Nachweis einer anderen aktuellen Hostversion übernehmen.
+**Empfehlung:** Die Revisionsbereinigung darf die tatsächlich im aktuellen Block verarbeitete Transportlage nicht verlieren. Gewünschte Stop-/Tailsemantik konsistent erhalten.
 
-1. **GUI und Randbedienung:** Bei 1/4/16 Rows und 100/150% jeden globalen und zeilenbezogenen Button, alle 32 Steps, beide numerischen Hälften und die Abstände klicken. Shift/Alt/Ctrl prüfen. Vollständige Screenshots, reale Clientmaße und Fensterränder erfassen. Mehrere DPI-/Monitorstellungen einschließlich rechts/unten am Displayrand.
-2. **Resize/Zoom-Ablehnung:** Kleiner Monitor beziehungsweise kontrolliert ablehnender Testhost zuerst automatisiert; in Studio One groß/klein, Monitorwechsel, wiederholter Zoom und Rowwechsel. Reale Transformation, Zoommarkierung, Controller-/Prozessor-State und sichtbare Zeilenzahl vergleichen. N01 mit einem gültigen Kit mit versteckter belegter Zeile nachstellen.
-3. **Patternautomation:** A–H jeweils mit eindeutig unterschiedlichen hörbaren Pattern belegen. Hostanzeige, GUI, State und Audio bei normalen Punkten sowie 0,10/0,90 vergleichen. Gestoppte Audioengine, Zero-Frame-Flush, Wiederaufnahme, mehrere Punkte pro Block und Save/Reopen. N05 muss zunächst im nativen Harness geschlossen werden.
-4. **Sampleimport:** WAV/FLAC aus dem Explorer und aus dem Studio-One-Browser getrennt testen. Lange/Unicodepfade, Stereo, unterschiedliche Bit-/Sampleraten, defekte und abgeschnittene FLACs sowie Größenränder. Zielzeile und tatsächliche Audioquelle prüfen; Fehlversuch muss das alte Sample erhalten. Clear/Replace während langer Tails prüfen.
-5. **Song Modified/Recall:** Nur einen Step, nur ein Sample und nur einen Mixwert ändern: Modified-Zustand, Schließenrückfrage, Autosave und Undo beobachten. 16 unterschiedliche Samples und sämtliche Pattern-/Roweinstellungen speichern; Originaldateien verschieben; Studio One vollständig neu starten und identisches Audio/Routing verlangen. Alte DMR1/2/3-Projekte aus bereits verändertem Zustand laden.
-6. **Multi-Out:** Alle 16 Stereoausgänge einzeln und gemeinsam, letzte Aux, inaktive Lücken, MAIN-inaktiv und Rückfall auf MAIN. L/R-Amplituden und Übersprechen numerisch messen; keine Doppelung und keine verschwundenen Rows nach Songneustart.
-7. **Sequencer/MIDI:** Verschiedene Tempi, negative PPQ/Preroll, Loop/Seek, Stop/Resume, MIDI-Audition bei gestopptem Transport; Velocitystufen, Chokegruppen und volle Polyphonie. Samplegenaue Onsets und erwartete Tails gegen einen unabhängigen Sollplan prüfen.
-8. **SRC/Realtime:** Realistische und synthetische Samples bei 44,1/48/96/192 kHz, Pitch bis ±24, kleine und wechselnde Blockgrößen, 64 lange Stereo-Voices und mehrere Instanzen. Audio kontinuierlich mit UI-/Import-/Automationstress; p95/p99/max, Deadlineüberschreitungen und Dropzähler erfassen. Ein 20-s-Throughputlimit ist kein Realtime-PASS.
-9. **Editorlifecycle:** Mindestens 20 echte Öffnen→Bedienen→Schließen→Neuöffnen-Zyklen, Track-/Instanzwechsel, zwei Instanzen, State-/Zeilenwechsel bei offenem Editor und Hostneustart. Zoompräferenz und sichtbares Raster müssen stimmen. Bloßes `createView/getSize/release` zählt nicht als nativer Zyklus.
-10. **Getrennte Abnahmen:** Steinberg Validator, 125A Plugin Tester und native automatisierte Hosttests auf dem endgültig zugeordneten Windows-Paket dokumentieren; danach Studio-One-Bedienung und musikalische Hörprüfung separat akzeptieren. Keine Zusammenfassung aller Ebenen zu einem einzigen „PASS“.
+**Fehlende Regression:** Tatsächlicher Prozessor: Restore → genau ein laufender Block mit neuem Sequencerhit → Stop; der Folgebuffer muss gemäß vorhandener Stop-Policy still sein. MIDI-Audition bei dauerhaft gestopptem Transport separat erhalten. Im neuen Konkurrenztest ist `rtContext.state=0`; er kann diesen Ablauf grundsätzlich nicht prüfen.
 
-## 11. Arbeitsprotokoll und Grenzen dieses Berichts
+### N09 – P2 / FAIL des vorhandenen Ablehnungsvertrags: Choke verändert Stimmen vor Kapazitätsentscheidung
 
-Dieser Bericht basiert auf dem oben genannten aktuellen Quellstand und vergleicht die 17 Befunde einzeln. Es wurden keine Pluginquellen, bestehenden Tests, Ressourcen oder Workflows verändert, keine Reparaturen ausgeführt und keine neuen Actions-Builds gestartet. Ausschließlich `CODEX-FINAL-AUDIT.md` wird für die angeforderte Bereitstellung auf `develop/v1.0.0` committed und gepusht; der Dokumentationscommit liegt naturgemäß nach dem geprüften Implementierungscommit.
+**Ursache:** [SampleVoiceEngine.h:261][K:261] aktiviert Chokefades vor der Suche nach einer freien Stimme [K:269]. Sind alle64 Stimmen belegt, folgt [K:293] `rejectedCapacity++`, obwohl vorherige Stimmen bereits verändert wurden. Der Kommentar in Zeile267 verspricht bei Polyphonieerschöpfung einen verworfenen Trigger bei intaktem aktivem Sound.
 
-Die im Bericht aufgeführten mathematischen/Quellen-Gegenbeispiele sind ausreichend konkret, um sie in einem später genehmigten Korrekturauftrag als native Regressionen umzusetzen. Sie ersetzen keinen hier nicht verfügbaren Windows-/Studio-One-Lauf. Verbleibende Unsicherheit wird deshalb ausdrücklich als TEILWEISE oder OFFEN bezeichnet.
+**Konkreter Gegenfall:** 64 lange Stimmen starten, darunter mindestens eine mit Gruppe1; die übrigen können Gruppe0 sein. Ein weiteres gültiges Rowinstrument mit Gruppe1 wird getriggert. Es gibt keinen freien Slot: **kein neuer Sound**, aber die bestehende Gruppe1 bekommt einen Fade. Bei48kHz und2ms endet sie nach96 Frames. Ein kapazitätsbedingt abgelehnter Hit ist somit hörbar wirksam.
 
-## 12. Direkte Primärquellen der entscheidenden SDK-Verträge
+Dieser Fehler wurde nicht durch die acht jüngsten Commits eingeführt; das bisher als fehlender Kombinationsnachweis genannte Risiko ist am konkreten Ablauf und dem bestehenden Vertragskommentar jetzt präzisiert. Separate Tests für Choke und Kapazität reichen nicht.
 
-- [StringListParameter::toString/toPlain](https://github.com/steinbergmedia/vst3_public_sdk/blob/586dc5e6c8012c3e4b01c79389375cbe96bdb1da/source/vst/vstparameters.cpp#L291).
-- [FromNormalized: int(norm × (numSteps+1))](https://github.com/steinbergmedia/vst3_pluginterfaces/blob/4f547e8e102b47de4a8b8aaf343c73b700786372/base/futils.h#L93).
-- [VST3Editor::setZoomFactor und RequestResize](https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/plugin-bindings/vst3editor.cpp#L600).
-- [CFrame::setZoom und Rücknahme bei Ablehnung](https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/lib/cframe.cpp#L248).
-- [CFrame::setSize und beforeSizeChange](https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/lib/cframe.cpp#L921).
-- [VST3Editor: ungeöffnetes init](https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/plugin-bindings/vst3editor.cpp#L452) und [tatsächliches open](https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/plugin-bindings/vst3editor.cpp#L1305).
-- [Win32DataPackage::getData: Pfadlänge ohne Terminator](https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/lib/platform/win32/win32datapackage.cpp#L144).
-- [IComponent::setState ist auch im Processing-Zustand zulässig](https://github.com/steinbergmedia/vst3_pluginterfaces/blob/4f547e8e102b47de4a8b8aaf343c73b700786372/vst/ivstcomponent.h#L197).
-- [dr_flac: Frames bis zum Dekodier-/Streamende lesen](https://github.com/mackron/dr_libs/blob/dfe8377631000664666519fdb83da193fd8037f4/dr_flac.h#L11701).
+**Empfehlung:** Slotannahme und Chokewirkung entsprechend einer ausdrücklich festgelegten Policy transaktional behandeln. Bei der vorhandenen „Drop ohne Änderung“-Policy dürfen abgelehnte Trigger keine Voicezustände ändern. Falls eine andere musikalische Policy gewollt ist, muss sie dokumentiert und auf hörbaren Ausfall geprüft werden.
 
-[B:70]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/core/KitState.h#L70
-[C:22]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L22
-[C:31]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L31
-[C:37]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L37
-[C:52]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L52
-[C:98]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L98
-[C:115]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L115
-[C:125]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L125
-[C:131]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L131
-[C:149]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L149
-[C:152]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L152
-[C:168]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L168
-[C:171]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L171
-[C:193]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorController.cpp#L193
-[E:9]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorEditor.h#L9
-[F:27]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/FlacImport.cpp#L27
-[F:36]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/FlacImport.cpp#L36
-[F:38]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/FlacImport.cpp#L38
-[F:47]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/FlacImport.cpp#L47
-[F:55]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/FlacImport.cpp#L55
-[H:103]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/PackagedAudioHostSmoke.cpp#L103
-[H:274]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/PackagedAudioHostSmoke.cpp#L274
-[H:736]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/PackagedAudioHostSmoke.cpp#L736
-[H:780]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/PackagedAudioHostSmoke.cpp#L780
-[H:801]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/PackagedAudioHostSmoke.cpp#L801
-[H:814]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/PackagedAudioHostSmoke.cpp#L814
-[H:844]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/PackagedAudioHostSmoke.cpp#L844
-[K:39]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/core/SampleVoiceEngine.h#L39
-[K:41]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/core/SampleVoiceEngine.h#L41
-[K:160]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/core/SampleVoiceEngine.h#L160
-[K:261]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/core/SampleVoiceEngine.h#L261
-[P:334]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L334
-[P:342]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L342
-[P:355]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L355
-[P:388]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L388
-[P:405]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L405
-[P:406]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L406
-[P:435]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L435
-[P:460]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L460
-[P:474]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L474
-[P:543]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L543
-[P:568]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorProcessor.cpp#L568
-[Q:43]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/EditorGeometrySmoke.cpp#L43
-[R:30]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/VisibleRowsTests.cpp#L30
-[R:45]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/VisibleRowsTests.cpp#L45
-[T:33]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/SampleVoiceTests.cpp#L33
-[T:252]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/SampleVoiceTests.cpp#L252
-[T:288]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/tests/SampleVoiceTests.cpp#L288
-[V:65]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L65
-[V:82]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L82
-[V:95]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L95
-[V:100]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L100
-[V:101]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L101
-[V:108]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L108
-[V:137]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L137
-[V:140]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L140
-[V:142]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L142
-[V:144]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L144
-[V:177]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L177
-[V:278]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L278
-[V:307]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L307
-[V:320]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L320
-[V:323]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L323
-[V:328]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L328
-[V:337]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L337
-[V:340]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L340
-[V:364]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L364
-[V:371]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/vst3/DrumatorView.cpp#L371
-[X:6]: https://github.com/challanger2000/125A-Drumator/blob/6b8fa5446512f89262c109866d1c5443faac1945/src/core/RowResizeTransaction.h#L6
+**Fehlende Regression:** 64 belegte Slots plus Chokehit, Ablehnungszähler und Ausgang vor/nach dem Hit gegen einen Referenzlauf ohne diesen Hit vergleichen. Außerdem mehrere Chokegruppen, wiederholte Ablehnungen und Rückkehr nach Freigabe eines Slots.
+
+## 6. Kitwechsel, Synchronisation und Echtzeit
+
+### 6.1 Was verbessert wurde
+
+[P:614] setzt eine explizite Restoresperre. Ein bereits aktiver Callback soll fertig werden; spätere Callbacks sollen nur Nullausgabe erzeugen. Nach vollständigem Statecommit erhöht sich die Revision [P:635]. Der nächste normale Audioblock setzt alte Stimmen zurück [P:405]. Dekodieren, Kernelvorbereitung, Speicherfreigabe und `kitMutex_` bleiben auf dem Controlthread. In `process()` befindet sich weder dieser Mutex noch ein Spinloop.
+
+Die SPSC-Ownership bleibt grundsätzlich nachvollziehbar: [S:131] veröffentlicht immutable Assets, [S:143] nimmt nur noch nicht konsumierte Pointer zurück, [S:169] übernimmt einen Pointer atomar vor Dereferenzierung, [S:195] gibt nicht mehr referenzierte Assets über die Rückgabequeue an den Controlthread. Alte Einzel-Sample-One-Shots halten weiterhin ihr eigenes Asset. Diese Pfade sind besser begrenzt als eine beliebige synchrone Freigabe im Audioaufruf.
+
+Das begründet **TEILWEISE**, keine pauschale Atomizitäts-/Echtzeitfreigabe.
+
+### 6.2 R01 – P1 / OFFEN: Zwei-Atomic-Barriere besitzt keinen ausreichenden Ordnungsnachweis
+
+Die Barriere besteht aus unterschiedlichen Atomics: Reader erhöht `active` mit acquire/release und liest `busy` mit acquire; Writer setzt `busy` mit release und liest `active` mit acquire [P:28]. Acquire/Release garantiert Sichtbarkeit bei einer tatsächlich gelesenen korrespondierenden Veröffentlichung. Es erzwingt hier keine gemeinsame sequentielle Ordnung zwischen beiden Atomics.
+
+Der relevante Store-Buffering-Einwand lautet:
+
+| Audio-/Readerthread | Control-/Writerthread |
+|---|---|
+| RMW `active:0→1` | `busy=true` release |
+| liest `busy=false` aus vorherigem Zustand | liest `active=0` aus vorherigem Zustand |
+| betritt normalen Produktpfad | betritt Installation |
+
+Die beiden alten Beobachtungen werden nicht durch eine erfolgreiche gegenseitige Acquire/Release-Synchronisation ausgeschlossen. Das Reader-RMW allein macht die Writerfolge `store(busy); load(active)` nicht zu einem gemeinsamen atomaren Eintrittsprotokoll. Ein Quellenargument „beides ist atomic“ genügt daher nicht zum Beweis, dass kein Audioblock eine Teilinstallation sehen kann. Einzelne Patternzellen, Mixfelder und pro-Row-Pendingpointer sind weiterhin separat atomar [A:24], [P:618], [P:537].
+
+**Einstufung:** Konkreter, zu klärender Memory-Ordering-Einwand; **kein hier beobachteter Windows-Race, kein behaupteter Use-after-free und keine behauptete Crashreproduktion**. Die starke Behauptung vollständiger Kitatomizität erhält bis zum Ordnungsnachweis kein PASS. Die Pointer-CAS-Ownership kann auch dann weiterhin korrekt sein, wenn ein gemischter Kitstand hörbar wird.
+
+**Nacharbeit:** Das tatsächliche Protokoll gegen das C++-Speichermodell und den Windows-x64-Zielbuild prüfen. Eine klar belegbare Eintritts-/Veröffentlichungsordnung oder eine begrenzte Generationstransaktion verwenden; keine Audio-Mutexe/Spinlocks ergänzen. Litmus-/Interleavingtests und generationseindeutige Audiosignaturen kombinieren. Nur Stresswiederholungen ohne passenden Fehleroracle beweisen den Ausschluss nicht.
+
+### 6.3 R02 – P1 / TEILWEISE: Sperre umfasst komplette Kernelvorbereitung und erzeugt Stummzeit
+
+Die Sperre wird **vor** `publishRestoredKit` genommen [P:614]. Diese Funktion bereitet alle16 Assets einschließlich WAV-Dekodierung und bis zu16 großen SRC-Kerneln erst danach vor [P:521]. Währenddessen schreibt jeder neue Audioblock Nullen und verwirft seine Events [P:356]. Die maximale Stummzeit ist weder spezifiziert noch gemessen. Auch eine am Ende abgelehnte Vorbereitung hat bis dahin die Wiedergabe unterbrochen.
+
+Eine begrenzte, lockfreie Nullausgabe kann das Callbackdeadline schützen. Sie ist aber kein Nachweis kontinuierlicher Audiowiedergabe, eines kurzen atomaren Umschaltpunkts oder verlustfreier MIDI-/Automationsverarbeitung. Zusätzlich kann der Controlthread in `yield()` warten, solange aktive Aufrufe nicht verschwinden. Das ist kein Audio-Spinlock, wohl aber ohne gemessenes Maximum eine mögliche UI-/Ladeverzögerung.
+
+**Nacharbeit:** Teure Vorbereitungen möglichst vor dem kurzen Commitfenster vollständig validieren; State-/Assetgeneration und Fehler-Rollback klar definieren. Lade-/Dropoutpolicy festlegen und messen, ohne die Audioownership zu verletzen. Testfall: großes16-Row-Kit, Maximalpitch/-ratio, volle Voices, alternierende gegensätzliche Kits, fehlgeschlagene Vorbereitung und sofortiger Stop. Nullblöcke, maximale Nullsequenz, verlorene Events und Wiederanlaufzeit zählen.
+
+### 6.4 Warum der neue Konkurrenztest nicht genügt
+
+[H:1010] startet einen Audioactor und lädt denselben gespeicherten Kitstand sechsmal. Im Audioactor wird nur `kResultOk` und `isfinite` geprüft. **Eine Implementierung, die während und nach dem Test ausschließlich Nullen liefert, kann bestehen.** Alte und neue Kits haben keine unterschiedlichen Audiosignaturen; kein Sample prüft, ob Assets, Grid, Pattern, Mix und Solomasken dieselbe Generation besitzen.
+
+Es gibt keine deterministische Start-/Überlappungsbarriere, keinen erforderlichen Audioblock pro Restore und keinen erfolgreichen Wiederanlauf nach jedem Restore. Der Actor kann bei4000 Blöcken bereits enden; verlangt wird nur `audioBlocks>0`. Keine Callbackzeiten, keine Stummblock-/Eventverlustzählung, kein Speicher-/Lifetimeinstrument. Das ist ein nützlicher Nichtabsturz-/Finite-Smoke, aber kein vollständiger Transaktionsnachweis und kein Echtzeittest.
+
+## 7. Audioengine, Performance, Import und Hostintegration
+
+### 7.1 Resamplingqualität
+
+Adaptive Taps bleiben gegenüber dem vorigen Audit unverändert. Die unabhängige Berechnung der tatsächlichen Koeffizientenformel mit Float32-Zwischenspeicherung, Phase0, ergibt für Ratio16:
+
+| Quellfrequenz, Zyklen/Frame | Aktuelle Amplitude relativ DC | Bedeutung |
+|---|---|---|
+| 0,04 | −47,678 dB | Der alte deutliche Aliasgegenfall ist stark verbessert. |
+| 0,06 | −92,328 dB | Zweiter alter Gegenfall ebenfalls stark verbessert. |
+| 0,028125 | −1,918 dB | Bei Ratio16 entspricht dies21,6kHz am48k-Ausgang: messbare Passbandrandabsenkung. |
+| 0,034375 | −14,064 dB |26,4kHz am48k-Ausgang faltet auf21,6kHz zurück; Übergangsband noch nicht stark gedämpft. |
+
+Berechnung: `cutoff=min(1,1/ratio)`, Blackmanfenster, `x=i-(taps/2-1)-phase/1024`, Sinc nach [K:35], DC-Normalisierung und `20log10(abs(sum(h[i]*exp(-j*2π*f*i))))`. Dies ist eine analytische Filtergegenprüfung, **keine gerenderte Plugin-FFT und kein Hörurteil**. Ohne festgelegte Bandgrenzen und zulässige Dämpfung wird aus dem Übergangsbandwert kein frei erfundenes Qualitäts-FAIL abgeleitet.
+
+Der neue beziehungsweise bestehende [T:33]-Test prüft nur Ratio16, Phase0, Frequenz0,04 gegen40dB. Fractional Ratios, alle relevanten Phasen, tatsächliche Audioaliasprodukte, Grenzimpulse, Passband-/DC-Verhalten, Stereo und realistische Drums sind nicht ausreichend vermessen. Pitch wirkt über SRC auf neue Stimmen; bestehende Voices behalten ihren Startkernel. Keine Samplelängen- oder Pitchkontrolle darf als Echtzeitgarantie ausgegeben werden.
+
+### 7.2 Was die vorhandenen p95-/p99-/Max-Messungen tatsächlich aussagen
+
+**Die Messung ist implementiert; ihre numerischen Ergebnisse sind im zugänglichen Repository/Runmaterial nicht vorhanden. Es werden keine Werte erfunden.**
+
+[T:252] erzeugt64 Voices mit Ratio16 und256 Taps,48kHz,256 Frames. `measuredRender` misst ausschließlich `SampleVoiceEngine::render` mit `steady_clock`. Pro fünf Zyklen werden36 Blöcke erfasst: **180 Messpunkte**, davon160 Blöcke mit laufenden Voices und20 vollständig leere Drainblöcke. Gesamte verarbeitete Audiolänge **0,96s**. Der nächste-Rang-p95 ist der171., p99 der179. sortierte Messwert; der Maxwert ist der180. Das ist für diesen kleinen Offline-Datensatz rechnerisch schlüssig.
+
+Die Blockdeadline beträgt **256/48000 = 5,333333ms**. Sie wird nur als Text daneben ausgegeben. Es wird weder eine Deadlineüberschreitung gezählt noch ein p95/p99-/Max-Limit verlangt. Der einzige Zeit-Abbruch bleibt die großzügige Gesamtlaufzeit `<20s` [T:308], inklusive anderer Arbeiten im Test. Ein deutlich zu langsamer Audiokern kann deshalb trotzdem grün sein. Der Testkommentar bezeichnet diesen Umstand korrekt als CI-Sicherheitsgrenze und nicht als Realtimequalifikation.
+
+**Fehlende Veröffentlichung:** Der Workflow verwendet `ctest --output-on-failure` [W:36]. stdout erfolgreicher CTests, also auch die gerade hinzugefügten p95-Zeilen, wird damit nicht im normalen erfolgreichen Workflowlog ausgegeben. CTest kann sie lokal im Runner unter `Testing/Temporary/LastTest.log` hinterlassen; hochgeladen wird jedoch nur `artifact/` mit dem VST3-Bundle [W:110]. Eine Messdatei oder dieser Testlog wird nicht archiviert. Somit ist nicht einmal eine nachprüfbare quantitative Auswertung des aktuellen Laufs verfügbar.
+
+**Grenzen des Versuchs:** ungepacte Offlinefolge; nur eine Blockgröße/eine Rate; Monoquelle und identischer Kernel für alleRows; kein vollständiger VST3-Prozesspfad; keine realen interleavten Stereoquellen/Multi-Out-Last; keine Kit-/UI-/Automationparallelität; keine CPU-/Takt-/Energiespar-/Lastmetadaten; kein Timer-Overheadvergleich; keine ausreichend lange Tail-Latency-Stichprobe. Auch ein zugänglicher Maxwert unter5,333ms wäre eine Stichprobenbeobachtung auf diesem Runner, keine garantierte Echtzeitfähigkeit.
+
+**Erforderlicher Nachweis:** Messwerte dauerhaft als CSV/JSON plus Metadaten speichern; vollständiges `IAudioProcessor::process` messen; end-to-end ungepacten Durchsatz und zeitlich getaktete Echtzeit getrennt erfassen. Für32/64/128/256/1024 Frames und44,1/48/96/192kHz auf festgelegter Zielhardware: mean/p95/p99/max, Deadline, Overrunzahl, Dropouts, Voice-/Eventdrops, Callback-Allokationen sowie Dauer-/Mehrinstanz-/UI-/Kitstress. Keine neue Messkampagne wurde für diesen Audit gestartet.
+
+### 7.3 Speicherverwaltung und Import
+
+WAV bleibt auf RIFF, Mono/Stereo, PCM8/16/24/32 und Float32 begrenzt; passende Extensible-GUIDs werden geprüft. Float32 NaN/Inf und Werte über Absolut16 werden abgewiesen, leere/zu lange Frames ebenfalls. RF64/RIFX, Float64 und abweichende ValidBits werden nicht behauptet. Fehlgeschlagene Dekodierung übergibt den Kandidaten nicht an den vorherigen Output. Dateigröße pro importierter Datei beziehungsweise behaltenem WAV maximal16MiB, gesamte eingebettete WAV-Daten maximal64MiB [B:24].
+
+FLAC wird off-audio in Blöcken gelesen. Ein bekannter Soll/Ist-Längenwiderspruch wird jetzt vor Austausch abgewiesen, N03. Bei `totalPCMFrameCount==0` fehlt naturgemäß dieser Vergleich: wie ein vorzeitig endender oder teilweise beschädigter Stream von einem zulässigen unbekannt langen Stream zu unterscheiden ist, benötigt zusätzliche Testfixtures und eine definierte Fehlerpolitik. „Jede beschädigte FLAC sicher abgelehnt“ ist nicht nachgewiesen.
+
+Die16/64MiB-Grenzen sind **keine Prozess-RAM-Grenzen**. PCM8 kann beim Floatdecode etwa auf das Vierfache wachsen; UI-Preflight, Nachrichtenkopien, behaltene WAVs, Kandidaten, alter/neuer Kit und alte Voiceassets können gleichzeitig existieren. Jeder nichtleere PreparedSample reserviert aktuell1024×256 Floatkoeffizienten, also1MiB, auch wenn32 Taps benutzt werden.16 aktuelle Kernel beanspruchen16MiB zusätzlich. Retire96/Return128 begrenzen Pointerzahlen, nicht ein einheitliches Bytebudget.
+
+Import, Pitchneuvorbereitung und komplette Kitvorbereitung sind synchron im UI-/Controlpfad. Das vermeidet Decoderarbeit im Audio, garantiert aber keine reaktionsfähige GUI bei großen Dateien. Peak-RAM, Ablehnung unter Speicherdruck, Rückgewinnung nach vielen Wechseln und maximaler Kitwechsel müssen gemessen werden. Für den gewöhnlichen Sampletausch ist die immutable Ownership nachvollziehbar; ein pauschales Lifetime-PASS der neuen Gesamtkitsperre folgt daraus nicht.
+
+### 7.4 Stimmen, Choke, Mute/Solo, Panorama und MIDI
+
+Der Voicepool hat64 feste Slots. Sampleende beendet Stimmen; Retrigger überlagert One-Shots. Gain/Pan/Pitch/Asset werden beim Start übernommen. Spätere Gain-/Panänderungen und Mute/Solo verändern neue Trigger, laufende Tails bleiben grundsätzlich erhalten; [T:96] verlangt dieses Verhalten ausdrücklich. Das ist keine neu erfundene Reparaturanforderung, sondern die aktuell getestete Policy. Stop setzt Tails dagegen zurück; N08 verletzt diesen vorhandenen Unterschied.
+
+Pan ist ein Stereo-Balancegesetz mit unverändertem Pegel pro Kanal in der Mitte und Absenkung der Gegenseite zum Rand. Gain linear0…2. Keine versteckte Normalisierung oder Limiter. Mehrere summierte Stimmen dürfen deshalb über0dBFS gehen; Headroom ist keine Fehlerbehebung durch nachträglichen Limiter.
+
+Choke verwendet2ms Fades. N09 betrifft die Kombination mit voller Kapazität. Die Anzahl verworfener Stimmen ist im Core-Ergebnis verfügbar, wird vom Prozessor aber nicht als Host-/GUI-Diagnose ausgewertet. Ebenso werden TriggerBatch-Überläufe nicht sichtbar gemacht. Belastungsgrenzen sollen dokumentiert und gemessen werden.
+
+MIDI NoteOn36…51 triggert16 Rows, Velocity wird auf1…127 abgebildet, NoteOff ist bei One-Shots ohne Gatefunktion. Alle Kanäle werden derzeit gleich behandelt; kein MIDI-Learn-/Notenzuordnungseditor. Es gibt nur den automationsfähigen Patternparameter1000; die übrigen UI-Felder arbeiten über Editnachrichten. Nicht vorhandene Automatisierung dieser Felder darf nicht als implementiert beworben werden.
+
+Scheduler: acht Patterns mit32 Sechzehnteln, absolutes Host-PPQ, begrenzte Boundaryarbeit, deterministisches Humanize, Swing auf ungeraden Steps. Das ist für reproduzierbares Offlineverhalten sinnvoll. Erforderlich bleiben Audio-/Timingabgleiche über Tempoänderungen, negative PPQ, Loop/Seek, Blockteilungen und Patternwechsel unmittelbar an geswingten/humanisierten Grenzen. Seek/Loop haben keinen eigenen expliziten Voiceflush; die gewünschte Tailpolicy ist festzulegen. Mehrere Parameterpunkte pro Block benötigen hörbare, nicht nur gespeicherte Assertions.
+
+### 7.5 Multi-Out und übriger VST3-Lifecycle
+
+Fester Vertrag: sichtbare Zeile1 auf MAIN, Zeilen2…16 auf ihre zugeordneten AUX-Busse, sofern aktiviert und gepuffert, sonst MAIN. Kein doppeltes MAIN-Signal für aktiv ausgelagerte Stimmen. Freie Ausgangswahl ist nicht implementiert.
+
+Der neue15-AUX-Test ist wesentlich aussagekräftiger als der alte Finite-Smoke. Seine erwarteten Pegel liegen aber nur **0,015** auseinander, die Toleranz ist **0,03** [H:951], [H:1001]. Ein Vertauschen benachbarter Busse kann damit bestehen. Nicht alle15 Signaturen werden unter dieser Toleranz eindeutig unterschieden. Die tatsächliche Implementierung [K:224] routet anhand der gespeicherten Row; aus der Testschwäche allein wird kein Routingdefekt behauptet. Für strenge Isolation: einzelne Rows schalten oder orthogonale Signaturen und aus der Numerik begründete Toleranzen verwenden; inaktive Lücken, AUX15, Rückfall auf MAIN und Reaktivierung getrennt prüfen.
+
+Es werden ausschließlich32-Bit-Samples unterstützt;64-Bit wird korrekt abgelehnt und darf nicht als unterstützt gelten. `setActive(false)` und `setProcessing(false)` setzen Voices zurück. `setupProcessing` bereitet vorhandene Samples für die neue Rate auf dem nicht verarbeitenden Thread neu vor; der vorhandene48→44,1kHz-Pakettest prüft danach wieder positiven Pegel [H:794]. Mehrfachzyklen, andere Raten, variable Hostblockgrößen, Offlineexport und tatsächliche Windows-Editorlebensdauer bleiben Praxisgates.
+
+`getTailSamples()` meldet bewusst unendlichen Tail für den selbstlaufenden Sequencer. Projektstate enthält eingebettete Samples, alle Patterns, Mix/Gates/Pitch/Choke/Swing/Humanize und sichtbare Zeilen. DMR4–9-Migrationen haben Codec-Assertions; DMR1–3-Controllerpfade und alle Legacyformate im tatsächlichen neuen Host-/GUI-Lifecycle nicht. Der neue DZM1-Controllerstate ist unabhängig vom Komponentensoundstate. Sein Restore in bereits geöffnete Editoren sowie ein alter leerer/nicht vorhandener Controllerstate benötigen Prüfung.
+
+## 8. Gesamte provisorische GUI: Kontroll- und Geometriematrix
+
+Dies ist die vollständige **Quellenzuordnung**, keine behauptete native GUI-Abnahme. Es gibt keine individuellen VSTGUI-Controltags: sämtliche folgenden Aktionen werden manuell in einer `DrumatorView` gezeichnet und getroffen. Für jede Zeile `r=0…visibleRows−1` und jeden Step `s=0…31` gelten die Formeln. Damit sind alle bis zu512 Step-Tasten erfasst; kein nicht geprüfter Einzelstep wird als praktisch bestanden ausgewiesen.
+
+Logische Größen: `y=108+29*r`, `xStep=560+21*s`, Breite1280, `H=max(300,172+29*visibleRows)`. Physische Anforderung: logisch × Benutzerzoom × Host-ContentScale. Rechtecke nachfolgend links/oben inklusive, rechts/unten für Hit-Tests überwiegend exklusiv.
+
+| Element / Anzahl | Position, Maße und tatsächlicher Klickbereich | Daten-/Funktionszuordnung, Rückmeldung, State und Auditstatus |
+|---|---|---|
+| Titel1 | x16…1000, y8…32; Schrift18, links | Anzeige, kein Klick. Keine native Font-/Clippingmessung. |
+| Patternhilfe1 | x16…320, y47…67, links | Anzeige `PATTERN A-H / SHIFT+STEP`; kein Parameter. Keine Stepnummern oder Lauflichtanzeige implementiert. |
+| Pattern A–H,8 | x340+62p…+54, y38…68;54×30;8px Zwischenräume ohne Aktion | `changePattern` → begin/perform/endEdit Parameter1000 → Hostqueue → Prozessor; Auswahlfarbe aus `currentPattern`; State selected. Aktuelle Abbildung N05 korrigiert; N06/N07 offen beziehungsweise FAIL. Native Audio-/Anzeigeinteraktion OFFEN. |
+| Zoom100,1 | x1070…1127,y39…69;57×30 | `setZoomChecked(1)` → rememberZoom → DZM1; Farbe vom Editorwert. N02 FAIL. Kein nativer Ablehnungstest. |
+| Zoom150,1 | x1136…1217,y39…69;81×30 | Entsprechend Faktor1,5. Wiederöffnung/HiDPI/Hostablehnung OFFEN beziehungsweise N02 FAIL. |
+| Swinganzeige/−/+,1 | Label16…182,y74…98; Bedienzone185…244, Teilung214 | Klick±5, Ctrl→0, Grenzen0…50; Nachricht `Drumator.Swing`, Prozessoratomik, DM10; Anzeige sofort bei Erfolg. Nur ±-Zone ist bedienbar. Native Reset-/Timingprüfung OFFEN. |
+| Humananzeige/−/+,1 | Label275…447,y74…98; Bedienzone448…505, Teilung477 | Klick±10, Ctrl→0, Grenzen0…100; `Drumator.Humanize`, deterministisches Timing/Velocity, DM10. Native Wirkung OFFEN. |
+| Zeilennummern,1…16 | x16…47,y…y+26; links | Anzeige; liegt im Sample-Klickbereich16…275 und öffnet daher bei Klick ebenfalls den Dateidialog. Kein unabhängiger Zeilenwahlparameter. |
+| Samplelabel/Load/Clear,1…16 | Text52…275,y…y+26; Klick16…275 über volle29px | Klick→WAV/FLAC-Picker→Controllerpreflight→WAV-Nachricht→PreparedSample→nächster Block; Alt→Clear, Steps bleiben. Filename statt unabhängigem Instrumentennamen; Erfolg/Fehler im Footer. Sample/Name im Kitstate. Native Auswahl/Abbruch/Drop/Unicode OFFEN. |
+| VOL,1…16 | Text/Klick x280…345; Hit volle29px, Text26px; Halbierung312,5 | ±10 linear, Ctrl100; RowMix→Gain0…2; neuer Voicegain, State; numerische Anzeige. Breiten-/Fontmessung OFFEN. |
+| PAN,1…16 | x350…415, Halbierung382,5; übrige y wie VOL | ±10, Ctrl0; RowMix→Balance−1…1, State; Vorzeichenanzeige. Laufende Voices behalten Startbalance. Native Wirkung OFFEN. |
+| P/Pitch,1…16 | x420…475, Halbierung447,5 | ±1 Halbton, Ctrl0, Grenzen±24; RowPitch→Assetneuvorbereitung→neue Voices, State; Anzeige mit Vorzeichen. Native Reaktionszeit OFFEN. |
+| Mute,1…16 | Gezeichnet478…500,y+3…y+24; Hit478…500 über volle29px | RowGate→Mute-Maske→Filter neuer Trigger, orange Rückmeldung; State. Größerer Hitbereich berührt keinen anderen Rowcontrol. Keine native Abnahme. |
+| Solo,1…16 | Gezeichnet507…529,y+3…y+24; Hit über volle29px | RowGate→Solo-Maske, cyan Rückmeldung; State und neue Recallmaskierung. F07 TEILWEISE. |
+| Choke,1…16 | Text535…558,y+3…y+24; Hit über volle29px | Klickzyklus0…4→RowChoke→neue Voicegruppe; numerische Anzeige/State. Kein eigener beschrifteter CHOKE-Header und kein eigener Ctrl-Resetpfad; N09 bei voller Kapazität. Native Zuordnung OFFEN. |
+| Step-Tasten,32 je sichtbarer Row | Zelle21×29; Füllung(x+2…x+18,y+4…y+22)=16×18; Viertelrahmen bei s%4=0 | Ganze zugehörige Zelle klickbar; Klick0↔127, Shift0/32/64/96/127; StepEdit→AtomicPatternBank→Scheduler→Voice; Farbe und Velocitybar aus aktuellem Pattern; im State alle8×16×32 Zellen. F01/F02 teilweise; native Tests jedes Steps bei beiden Zooms fehlen. |
+| Add,1 | x16…213, yA…yA+29, `yA=113+29*n` | Count+1→Hostresize→direkter alter Count bei Ablehnung; Status bei Max16/Fehler. Keine Datenlöschung. N01 Quellreparatur, native Verifikation fehlt. Rechter Randx=213 ist inklusiv getroffen. |
+| Hide,1 | x226…266, gleiche yA | Nur letzte leere/nichtsolo Row; prüft Steps in allen8Patterns. Bei Ablehnung Countrestore. Farbe aus `canHideLast`; Fehlermeldung erwähnt nur Steps/Sample, nicht Solo. Native Prüfung OFFEN; rechter Rand inklusiv. |
+| Zeilenzahl1 | x277…455, gleiche yA, links | Anzeige n/16, keine eigene Aktion; State visible. |
+| Status/Footer1 | x16…1240,y=147+29*n…+21, links | Import-/Edit-/Resizefehler und Erfolg. Keine eigene Interaktion; keine Messung der tatsächlichen langen Textbreite. |
+| Bedienhilfe1 | x545…1240,y74…98, links | Anzeige der Halbflächen-/Alt-Bedienung. Ctrl-Reset/Choke/Outputmapping werden nicht vollständig erklärt; kein automatischer Funktionsnachweis. |
+
+Die größeren Row- und Step-Hitflächen sind eindeutig einer Zeile/einem Step zugeordnet; sie werden nicht allein wegen Abweichung von Glyphen als Fehler deklariert. Headerlücken und falsche Zielzuordnung werden dagegen gesondert geprüft. Kein Scroll-, Drag-, Wheel-, Texteingabe- oder Keyboard-Editingpfad für diese numerischen Anzeigen ist implementiert. Die Engineering-Bedienanforderungen für präzise numerische Bedienung sind vor der Final-GUI verbindlich zu klären und nativ abzunehmen.
+
+### Größen- und Instrumentenzahlmatrix
+
+| Sichtbare Rows | Logische Größe100 % | Größe150 %, ohne zusätzliches DPI | Letzte Stepfüllung, y-Bereich | Add-/Hide-Oberkante | Footerunterkante |
+|---|---|---|---|---|---|
+|1|1280×300|1920×450|112…130|142|197|
+|4|1280×300|1920×450|199…217|229|284|
+|5|1280×317|1920×475,5|228…246|258|313|
+|8|1280×404|1920×606|315…333|345|400|
+|16|1280×636|1920×954|547…565|577|632|
+
+SDK-Resizeanforderungen runden physische Koordinaten mit `floor`; bei5Rows/150 % ist die halbe Pixelhöhe daher nativ nachzuprüfen. Letzter Step rechts: Füllungx1213…1229, Zelle1211…1232, innerhalb1280. Bei16Rows/150 % benötigt das Fenster1920×954 plus Hostrahmen; auf einem1920 breiten Monitor kann dies tatsächlich Ablehnungen oder Platzprobleme auslösen. Mit ContentScale1,5 kämen2880×1431 hinzu. Das sind geometrische Anforderungen, keine Behauptung über das tatsächliche Verhalten eines konkreten Studio-One-Fensters.
+
+**Weiteres offenes Layoutproblem:** Nach gültigem16-Row-Recall kann [C:105] bereits16Rows anzeigen wollen, während [V:88] eine Vergrößerung anfordert. Bei Hostablehnung bleibt die kleine View; es gibt keinen Scroll-/Fit-Fallback. N01 behandelt nur Add/Hide-Rollback und löst diesen Lifecyclefall nicht. Ebenso kann `Controller::setState` die Zoompräferenz ändern, ohne einen bereits geöffneten Editor zu aktualisieren. Beide Wege benötigen echte Hosttests und gegebenenfalls eine definierte Bedienstrategie.
+
+**Noch offene Produktziele:** Eigenständige Instrumentennamen, frei wählbare Outputs, Lauflicht/Stepnummern, Samplepreview, Copy/Paste, Undo und optionaler Vintage-Samplercharakter sind im Draft `docs/V1-SCOPE.md` genannt, aber nicht vollständig implementiert. Der Draft ist ausdrücklich keine gesperrte Spezifikation. Daraus werden keine erfundenen neuen Pflichtbugs abgeleitet; vor „funktionale Entwicklung abgeschlossen“ muss der Owner den tatsächlichen V1-Umfang festlegen.
+
+## 9. Regressionstests: geeignete Assertions und wesentliche Lücken
+
+| Testpfad | Was er tatsächlich belegt | Was er übersehen kann / notwendige Ergänzung |
+|---|---|---|
+|[H:115], [H:882], [R:52] Pattern | Hosttexte an Zwischenwerten; echte Prozessor-Flushwerte im serialisierten State;1001 mathematische Punkte im Helper | Alte Automationssemantik N06, hörbare Auswahl, mehrere Punkte im laufenden Block, Grenznachbarn und Flush unter Restore N07. |
+|[H:777] FLAC | Bekannte deklarierte256/actual128-Differenz wird abgelehnt; vorheriger Output unverändert | Native Controllerlade-/Dropkette, unbekannte Länge, realer Decode-Oversize, alle Korruptionsarten, Peak-RAM/Decodezeit. |
+|[H:127] Zoomstate | DZM1-Fünfbytestate wird im selben Controller gelesen/geschrieben | Neuer Controller, tatsächliches Attach/Reopen, vorhandener Editor bei setState, Ablehnung N02, ContentScale und Dirty. |
+|[R:31] Resize | Generische Edit/Resize/Revert-Reihenfolge mit unbedingtem Integer++/-- | Echte `restoreVisibleRows`, Nachrichtenausfall, versteckt belegte Row, Host-Ablehnung und Custom-View-Lifecycle. Der ursprüngliche fehlerhafte Controllerrevert könnte wieder eingeführt werden, ohne dass dieser Test zwingend scheitert. |
+|[R:64] Header | Zwei lokal definierte y-Prädikate | Die gezeichneten und tatsächlich geklickten Produktrechtecke werden nicht aufgerufen. Eine Änderung nur in `DrumatorView` wird dadurch nicht abgesichert. |
+|[R:46] Dirty | Booltrue führt einen Lambda aus | `IComponentHandler2`, Controlleredits, Ablehnung, tatsächliches Hostmodified. |
+|[H:1056], [L:14] HiddenSolo | Paketstate verliert ein verstecktes Solo-Bit, Zahl sichtbarer Rows bleibt4 | Hörbares sichtbares Instrument, tatsächlicher Hide, Maskenmischung aus sichtbaren und versteckten Solos,16Rows-Editor. |
+|[H:928]15AUX | Jeder AUX liefert einen positiven Pegel bei Null-MAIN | Benachbarte Busvertauschung kann wegen0,03-Toleranz bei0,015-Abstand bestehen; separate Isolation/Single-Row-Signaturen fehlen. |
+|[H:1010] Konkurrenz | Wiederholtes `setState` und Audioactor enden ohne nichtfinite Werte oder Rückgabefehler | Kein beweiskräftiger Überlappungs-/Generations-/Wiederanlauf-/Pegel-/Eventoracle. All-zero-Implementierung kann bestehen. |
+|[T:252] p95/p99/max | Zeitmessung von180 ungepacten Core-Renderaufrufen und Hanggrenze | Keine archivierten Zahlen, kein Overrun-Gate, keine vollständige Callback-/Realtime-/Systemlastmessung. |
+|[T:134], Kapazitätstests | Choke bei verfügbaren Slots;64-Voice-Grenze in anderer Konfiguration | Kombinationsfehler N09; abgelehnter Trigger verändert alten Sound. |
+|[H:817], [Q:45] Editor | Ressourcenrect und ungeöffnete Editorobjekte existieren | Kein HWND/`attached`, kein wirklicher `DrumatorView`-Listener, kein Render, keine Pixel-/Klick-/Dropprüfung. |
+|KitState-/WAV-/Exchange-/Coretests | Relevante lokale Codec-, Grenz-, Ownership- und Timingfälle | Nicht automatisch VST3-Controller-Migration, nativer Lifecycle, Gesamtkitsynchronisation oder Studio-One-Projektrecall. |
+
+Die8 CTests sind echte Tests mit Assertions; sie sind nicht wertlos. Umgekehrt schließen neue Logzeilen mit dem Wort „PASS“ keine größeren Pfade ein als die dahinterstehenden Assertions. Erfolgreiches CI schützt nur die tatsächlich geprüften Oracles.
+
+## 10. Priorisierte notwendige Nacharbeiten und Freigabekriterien
+
+### Vor einer technischen Freigabe für die endgültige GUI
+
+1. **P1 N06:** Kompatiblen Patternvertrag/Migrationsweg festlegen und alte Automationsfixtures vor/nach Update hörbar vergleichen.
+2. **P1 N07:** Reihenfolge Restore/Automation und verlustfreien letzten Flushwert absichern; deterministische Paketregression.
+3. **P1 R01/R02:** Kit-Atomizität formal nachvollziehbar absichern; generationseindeutigen Audiooracle, garantierte Überlappung und Wiederanlaufassertion ergänzen. Stumm-/Dropout-/Fehlerpolitik und maximalen Umschalt-/Vorbereitungsaufwand messen.
+4. **P2 N02:** Zoomzustände über echten Frame-/Hosterfolg einschließlich initialisiertem Reopen und ContentScale behandeln; keine Cachegleichheit als ausreichendes Erfolgskriterium.
+5. **P2 N08/N09:** Die konkreten Transport-/Kapazitätskombinationen entsprechend dem vorhandenen Vertrag reparieren und durch echte Regressionsfälle absichern.
+6. **P2 Testqualität:** Echte attachte GUI und tatsächliche Controller-/Dirty-/Resizepfade testen;15-AUX-Isolation mit unterscheidbaren Signaturen; DMR1–3-Controllerdefaults und State-/Zoomrecall bei offenem Editor.
+7. **P2 Performance/SRC/Import:** Numerische Messartefakte zugänglich machen, Echtzeitmessung auf Zielhardware durchführen, SRC-Qualitätsgrenzen und Import-/Peak-RAM-Politik begründen.
+8. **Produktumfang:** Offene V1-Bedienfunktionen aus dem Draft ausdrücklich entscheiden. Die endgültige GUI darf nicht als Ersatz für noch fehlende Funktionsverträge dienen.
+
+**Objektives GUI-Startgate:** Keine offenen P1-Funktions-/Synchronisationsfehler; behobene P2-Interaktions-/Lifecyclefehler mit geeigneten Regressionen; vollständige native100/150%-Kontrollmatrix; nachgewiesene Project-/Automation-Kompatibilität; belegbarer16-Row-/Multi-Out-/Kit-Wiederanlauf; zugängliche Messwerte und ein ausreichend definierter Realtime-/SRC-Vertrag. Owner-Abnahme und späterer Releasegate bleiben davon getrennt.
+
+## 11. Konkrete letzte Studio-One-Praxistests
+
+Diese Fälle sind **OFFEN** und wurden hier nicht durchgeführt. Automatisch reproduzierbare Gegenfälle sollen zuvor im Windows-Paketharness abgesichert werden; ein Studio-One-Test ersetzt diese Regressionen nicht.
+
+1. **Saubere Installation/Baseline:** Paketcommit und DLL-Hash dokumentieren; genau eine geladene Pluginversion. Windows11 x64, konkrete Studio-One-/Studio-Pro-Version, Audiointerface/ASIO, CPU, Energieprofil und DPI festhalten.
+2. **Vollständige Bedienmatrix:** Bei1/4/5/8/16Rows und100/150 % jeden A–H-/Zoom-/Add-/Hide-Button, alle32Steps jeder sichtbaren Row, Shiftvelocity, VOL/PAN/Pitch beide Hälften und Ctrlreset, M/S/Choke, Load/Altclear bedienen. Vorher/nachherwerte, hörbaren Effekt, Anzeige und Save/Reopen protokollieren. Lücken und Ränder ausdrücklich negativ testen.
+3. **Zoom/Hostablehnung:** Song mit150 % speichern, Editor schließen/öffnen und100 % wählen; reale Fenster-/Transformationsgröße gegen Markierung vergleichen. Kontrolliert ablehnenden nativen Testhost für beide Richtungen verwenden. Windows100/150/200 %-DPI, Monitorwechsel, kleine Arbeitsfläche,16Rows und bereits geöffneten Editor beim Projekt-/Controllerstate-Recall testen.
+4. **Automation/Kompatibilität:** Alte und neue Paketversion mit fester Kurve0,10/0,124/0,125/0,875/0,90/0,929 und allen Schwellen vergleichen. Acht unverwechselbare Pattern verwenden; Hosttext, GUI, Audio und gespeicherte Auswahl abgleichen. Nullframeflush, Stopp/Resume, mehrere Punkte pro Block, Loop, Offlineexport und Save/Reopen. Restoreüberlappung aus N07 gezielt im Harness synchronisieren.
+5. **Livekit und Stop:** Zwei Kits mit gegensätzlichen Audiosignaturen, anderen Steps, Mixen und Gates unter laufendem Transport mehrfach wechseln. Kleine/große Kits, Fehlerkandidat und volle Voices; Stummstrecken/Dropouts und Events aufzeichnen. Restore→genau ein laufender Block→Stop für N08. Alle16Samples nach neuem Instanz-/Songreload messen; Samplepfade dürfen nicht erneut benötigt werden.
+6. **Import/Erhalt:** WAV PCM8/16/24/32, Float32, Extensible und FLAC mono/stereo; fremde/hohe Samplerates, unbekannte FLAC-Länge, deklarierter Längenwiderspruch, beschädigter letzter Frame, Nearlimit/Oversize und Gesamtkits knapp unter/über64MiB. Fehlversuch darf bisherigen Sampleklang, Namen und Steps nicht verlieren. Pickerabbruch, Explorer- sowie interner Browserdrop separat testen, inklusive Unicode/langer Namen und Zielrow bei150 %.
+7. **Routing/Gates:** Alle15AUX aktiv, MAIN aus, AUX15 allein, inaktive Lücken, Busaktivierung/Reaktivierung und Songrecall. Einzelne Rows nacheinander mit eindeutigen Signaturen: korrekter Bus, kein Übersprechen, keine MAIN-Doppelung. Mute/Solo-Kombinationen, versteckter Solo-Recall und64-Voice-Choke testen.
+8. **Echtzeit/Dauer:** Kleine und wechselnde Buffer,44,1/48/96/192kHz,64 lange Stereo-Voices, hohe SRC-Ratio und mehrere Instanzen bei UI-/Import-/Automationstress. Daueraufzeichnung plus mean/p95/p99/max, Deadline, Overruns, Dropouts, verlorene Trigger und RAM-Verlauf. Ungepacten Bounce gesondert vergleichen. Eine CTest-Gesamtlaufzeit oder allein niedrige ASIO-Mittellast genügt nicht.
+9. **Dirty/Lifecycle/Legacy:** Unveränderten Song mit jedem nichtautomatisierten Edit verändern; Modified-/Autosave-/Undoverhalten prüfen. Zoom-only-Änderung und Projektzoomrecall. Wiederholtes tatsächliches Attach/Close/Reopen, Deactivate/Activate,48→44,1kHz und zurück. DMR1–DM10 mit vorher verstellten modernen Controllerfeldern laden; Anzeige, nächster Edit und Audio müssen zusammenpassen.
+
+## 12. Arbeitsprotokoll und Grenzen
+
+Die Auditgrundlage wurde aus dem tatsächlichen Branchcommit isoliert gelesen; Produktions-/Testdateien wurden nicht verändert. Beide vorigen Berichte und alle acht späteren Commits wurden verglichen. Der Branch-HEAD wurde vor Veröffentlichung erneut geprüft. Veröffentlicht wird ausschließlich diese Markdown-Datei mit einem Dokumentationscommit und CI-Skip; es wurden weder Reparaturen, Teständerungen, PRs noch Builds ausgelöst.
+
+Die Definition eines PASS ist absichtlich enger als „Source sieht plausibel aus“. Ein ausführlicher Quellen-Audit ist möglich, eine vollständige praktische Funktionsfreigabe in dieser Umgebung nicht. Alle nicht ausgeführten Windows-/Studio-One-/Realtimepfade sind deshalb ausgewiesen. Dieser Bericht ersetzt den vorherigen Status zum Entwicklungscommit6b8fa54; dessen historischer Inhalt bleibt über die Commit-URL zugänglich.
+
+## Quellen
+
+[original]: https://github.com/challanger2000/125A-Drumator/blob/491f45ebcb3028e607897cf838f5b9e5eba702da/TECHNISCHER-AUDIT.md
+[previous]: https://github.com/challanger2000/125A-Drumator/blob/04e8b285afe0b5b151ef9d4d275201ea0fc144ff/CODEX-FINAL-AUDIT.md
+[issue]: https://github.com/challanger2000/125A-Drumator/issues/1
+[run]: https://github.com/challanger2000/125A-Drumator/actions/runs/39085666516
+[job]: https://github.com/challanger2000/125A-Drumator/actions/runs/39085666516/job/117551579655
+[sdk-open]: https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/plugin-bindings/vst3editor.cpp#L2053
+[sdk-frame-cache]: https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/lib/cframe.cpp#L89
+[sdk-frame-zoom]: https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/lib/cframe.cpp#L248
+[sdk-pattern]: https://github.com/steinbergmedia/vst3_pluginterfaces/blob/4f547e8e102b47de4a8b8aaf343c73b700786372/base/futils.h#L93
+[sdk-state]: https://github.com/steinbergmedia/vst3_pluginterfaces/blob/4f547e8e102b47de4a8b8aaf343c73b700786372/vst/ivstcomponent.h#L197
+[sdk-scale]: https://github.com/steinbergmedia/vstgui/blob/5db272256172557818b6158cf0bb2c4410bddb25/vstgui/plugin-bindings/vst3editor.cpp#L588
+
+Zusätzliche Primärverträge: [SDK-Normalwert→diskreter Plainwert][sdk-pattern], [setState auf UI-Thread auch im Processing-Zustand][sdk-state], [SDK-ContentScale-Implementierung][sdk-scale].
+
+[A:24]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/AtomicPatternBank.h#L24
+[B:24]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/KitState.h#L24
+[C:23]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L23
+[C:32]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L32
+[C:38]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L38
+[C:51]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L51
+[C:71]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L71
+[C:105]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L105
+[C:110]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L110
+[C:120]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L120
+[C:135]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L135
+[C:144]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L144
+[C:155]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L155
+[C:164]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L164
+[C:170]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L170
+[C:192]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L192
+[C:214]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorController.cpp#L214
+[E:11]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorEditor.h#L11
+[E:14]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorEditor.h#L14
+[E:18]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorEditor.h#L18
+[F:27]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/FlacImport.cpp#L27
+[F:36]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/FlacImport.cpp#L36
+[F:46]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/FlacImport.cpp#L46
+[F:49]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/FlacImport.cpp#L49
+[F:57]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/FlacImport.cpp#L57
+[G:6]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/PatternQuantization.h#L6
+[H:107]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L107
+[H:115]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L115
+[H:127]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L127
+[H:765]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L765
+[H:777]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L777
+[H:794]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L794
+[H:817]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L817
+[H:851]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L851
+[H:882]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L882
+[H:928]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L928
+[H:951]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L951
+[H:1001]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L1001
+[H:1010]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L1010
+[H:1056]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/PackagedAudioHostSmoke.cpp#L1056
+[K:35]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleVoiceEngine.h#L35
+[K:39]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleVoiceEngine.h#L39
+[K:160]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleVoiceEngine.h#L160
+[K:224]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleVoiceEngine.h#L224
+[K:261]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleVoiceEngine.h#L261
+[K:269]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleVoiceEngine.h#L269
+[K:293]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleVoiceEngine.h#L293
+[L:14]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/VisibleRows.h#L14
+[P:28]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L28
+[P:355]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L355
+[P:356]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L356
+[P:372]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L372
+[P:382]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L382
+[P:394]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L394
+[P:400]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L400
+[P:405]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L405
+[P:408]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L408
+[P:451]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L451
+[P:468]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L468
+[P:521]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L521
+[P:537]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L537
+[P:588]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L588
+[P:610]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L610
+[P:614]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L614
+[P:618]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L618
+[P:635]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorProcessor.cpp#L635
+[Q:45]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/EditorGeometrySmoke.cpp#L45
+[R:31]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/VisibleRowsTests.cpp#L31
+[R:46]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/VisibleRowsTests.cpp#L46
+[R:52]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/VisibleRowsTests.cpp#L52
+[R:64]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/VisibleRowsTests.cpp#L64
+[S:131]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleExchange.h#L131
+[S:143]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleExchange.h#L143
+[S:169]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleExchange.h#L169
+[S:195]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/core/SampleExchange.h#L195
+[T:33]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/SampleVoiceTests.cpp#L33
+[T:96]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/SampleVoiceTests.cpp#L96
+[T:134]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/SampleVoiceTests.cpp#L134
+[T:252]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/SampleVoiceTests.cpp#L252
+[T:268]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/SampleVoiceTests.cpp#L268
+[T:308]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/SampleVoiceTests.cpp#L308
+[T:310]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/tests/SampleVoiceTests.cpp#L310
+[V:65]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L65
+[V:84]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L84
+[V:87]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L87
+[V:88]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L88
+[V:96]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L96
+[V:100]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L100
+[V:108]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L108
+[V:137]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L137
+[V:177]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L177
+[V:277]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L277
+[V:307]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L307
+[V:314]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L314
+[V:320]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L320
+[V:323]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L323
+[V:329]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L329
+[V:334]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L334
+[V:347]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L347
+[V:348]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L348
+[V:362]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L362
+[V:376]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L376
+[V:384]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L384
+[V:388]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/src/vst3/DrumatorView.cpp#L388
+[W:31]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/.github/workflows/core-ci.yml#L31
+[W:36]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/.github/workflows/core-ci.yml#L36
+[W:110]: https://github.com/challanger2000/125A-Drumator/blob/32f68ca7b2c3dc395c5a68efeb991760c373d4ac/.github/workflows/core-ci.yml#L110
