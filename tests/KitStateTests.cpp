@@ -71,10 +71,10 @@ int main() {
     for(int i=0;i<4;++i)
       tamperedBus[tamperedBus.size()-4+static_cast<std::size_t>(i)]=
           static_cast<std::uint8_t>(correctedCrc>>(8*i));
-    KitState preserved=copy;
+    KitState preservedRouting=copy;
     check(!KitCodec::decode(tamperedBus.data(),tamperedBus.size(),copy),
           "out-of-range DM11 bus accepted despite valid checksum");
-    check(copy.output==preserved.output&&copy.grid==preserved.grid,
+    check(copy.output==preservedRouting.output&&copy.grid==preservedRouting.grid,
           "rejected bus changed previously loaded kit");
     // Remove the DM11 output table to create a legitimate DM10 fixture.
     auto legacyBase=encoded;
