@@ -322,8 +322,8 @@ bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
  if(!data.drag||data.drag->getCount()!=1)return false;
  auto position=data.pos;
  frameToLocal(position);
- if(position.y<kGridY||position.y>=kGridY+controller_.visibleRows()*kRowHeight)return false;
- const auto row=static_cast<std::size_t>((position.y-kGridY)/kRowHeight);
+ if(position.y<kGridY||position.y>=kGridY+displayedRows()*kRowHeight)return false;
+ const auto row=firstRow_+static_cast<std::size_t>((position.y-kGridY)/kRowHeight);
  if(row>=kRows)return false;
  const void* bytes=nullptr;
  VSTGUI::IDataPackage::Type type=VSTGUI::IDataPackage::kError;
