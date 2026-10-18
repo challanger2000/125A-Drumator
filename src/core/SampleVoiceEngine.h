@@ -257,16 +257,19 @@ private:
         const auto& row=rows_[event.row];
         if(row.mute||!row.sample.left||!row.sample.frames||
            !row.kernel||!row.kernel->ready())return;
-        // Choke only when a valid new sound is actually triggered.
-        if(row.chokeGroup)for(auto& v:voices_) {
-            if(v.active&&v.group==row.chokeGroup&&v.releaseTotal==0) {
-                v.releaseTotal=fadeFrames_;
-                v.releaseLeft=fadeFrames_;
+        // Select capacity before applying choke: a rejected hit must not
+        // alter any voice already sounding.
+        Voice* freeVoice=nullptr;
+        for(auto& voice:voices_)if(!voice.active) {freeVoice=&voice;break;}
+        if(!freeVoice){++result.rejectedCapacity;return;}
+        if(row.chokeGroup)for(auto& voice:voices_) {
+            if(voice.active&&voice.group==row.chokeGroup&&voice.releaseTotal==0) {
+                voice.releaseTotal=fadeFrames_;
+                voice.releaseLeft=fadeFrames_;
             }
         }
-        // No abrupt voice-stealing click. On polyphony exhaustion count a
-        // dropped trigger, leaving active sound intact.
-        for(auto& v:voices_)if(!v.active) {
+        {
+            auto& v=*freeVoice;
             constexpr double pi=3.141592653589793238462643383279502884;
             const double pan=static_cast<double>(row.pan);
             const double velocity=static_cast<double>(event.velocity)/127.0;
@@ -290,7 +293,6 @@ private:
             ++result.accepted;
             return;
         }
-        ++result.rejectedCapacity;
     }
     std::array<RowSound,kRows> rows_{};
     std::array<Voice,kVoiceLimit> voices_{};

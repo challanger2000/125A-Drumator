@@ -405,7 +405,6 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  const auto revision=kitRevision_.load(std::memory_order_acquire);
  if(revision!=lastAudioKitRevision_) {
    voices_.reset();
-   wasPlaying_=false;
    lastAudioKitRevision_=revision;
  }
  // Adopt only complete prepared assets, without deleting on audio.
