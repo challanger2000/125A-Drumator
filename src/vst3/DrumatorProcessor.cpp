@@ -25,27 +25,7 @@ constexpr double kPi=3.141592653589793238462643383279502884;
 constexpr Steinberg::uint32 kStateMagic=0x31524D44u; // legacy "DMR1"
 constexpr Steinberg::uint32 kStateMagicV2=0x32524D44u; // "DMR2", 4096 step bytes
 constexpr auto kStateMagicV3Local=kStateMagicV3; // plus visible row count
-class ActiveAudioCall {
- std::atomic<std::uint32_t>& active_;
-public:
- explicit ActiveAudioCall(std::atomic<std::uint32_t>& active) noexcept : active_(active) {
-   active_.fetch_add(1,std::memory_order_acq_rel);
- }
- ~ActiveAudioCall() {active_.fetch_sub(1,std::memory_order_release);}
-};
-class KitRestoreBarrier {
- std::atomic<bool>& busy_;
-public:
- KitRestoreBarrier(std::atomic<bool>& busy,
-                   const std::atomic<std::uint32_t>& active) noexcept : busy_(busy) {
-   busy_.store(true,std::memory_order_release);
-   // Only the control thread spins. A new audio block immediately returns
-   // bounded zero output while restoration is in progress.
-   while(active.load(std::memory_order_acquire)!=0)
-     std::this_thread::yield();
- }
- ~KitRestoreBarrier() {busy_.store(false,std::memory_order_release);}
-};
+
 }
 Processor::Processor() {
  setControllerClass(kControllerCID);
@@ -352,8 +332,8 @@ Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
  return Steinberg::Vst::kInfiniteTail;
 }
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
- ActiveAudioCall currentCall(activeAudioCalls_);
- if(kitRestoreInProgress_.load(std::memory_order_acquire)) {
+ AudioGateEntry currentCall(restoreGate_);
+ if(!currentCall.allowed()) {
    // Even a zero-frame flush must survive restore. The counter distinguishes
    // host automation from the kit's own selected pattern.
    if(data.inputParameterChanges) {
@@ -365,12 +345,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          if(q->getPoint(j,offset,v)!=Steinberg::kResultTrue||
             offset<0||!std::isfinite(v))continue;
          const auto pattern=patternFromNormalized(v);
-         auto old=restorePatternEvent_.load(std::memory_order_relaxed);
-         std::uint64_t updated=0;
-         do {
-           updated=((old>>4)+1u)*16u|pattern;
-         }while(!restorePatternEvent_.compare_exchange_weak(
-             old,updated,std::memory_order_acq_rel,std::memory_order_relaxed));
+         restorePatternValue_.store(pattern,std::memory_order_relaxed);
+         restorePatternRevision_.fetch_add(1,std::memory_order_release);
          selected_.store(pattern,std::memory_order_release);
        }
      }
@@ -631,8 +607,8 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  const auto rate=outputRate_.load(std::memory_order_acquire);
  {
     std::lock_guard<std::mutex> guard(kitMutex_);
-    const auto overrideAtStart=restorePatternEvent_.load(std::memory_order_acquire);
-    KitRestoreBarrier restoreGate(kitRestoreInProgress_,activeAudioCalls_);
+    const auto overrideAtStart=restorePatternRevision_.load(std::memory_order_acquire);
+    ControlRestoreEntry restoreGate(restoreGate_);
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
     kit_=std::move(candidate);
@@ -655,9 +631,9 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     }
     // Commit kit selection first; then replay any automation received while
     // restore was busy. No further kit selection writes after this replay.
-    const auto overrideAfter=restorePatternEvent_.load(std::memory_order_acquire);
+    const auto overrideAfter=restorePatternRevision_.load(std::memory_order_acquire);
     if(overrideAfter!=overrideAtStart)
-      selected_.store(static_cast<std::uint32_t>(overrideAfter&15u),
+      selected_.store(restorePatternValue_.load(std::memory_order_acquire),
                       std::memory_order_release);
     kitRevision_.fetch_add(1,std::memory_order_release);
  }
