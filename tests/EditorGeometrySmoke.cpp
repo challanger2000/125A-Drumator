@@ -4,6 +4,7 @@
 #include "pluginterfaces/base/ipluginbase.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/gui/iplugview.h"
+#include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "vst3/PluginIDs.h"
 #include <windows.h>
 #include <filesystem>
@@ -51,6 +52,21 @@ int main(int argc,char** argv) {
               <<rect.right-rect.left<<" x "<<rect.bottom-rect.top<<"\n";
     if(rect.left!=0||rect.top!=0||rect.right!=1280||rect.bottom!=300)
         fail("GUI resource or template was not loaded as 1280 x 300");
+    Steinberg::IPlugViewContentScaleSupport* scale=nullptr;
+    if(editor->queryInterface(
+         Steinberg::IPlugViewContentScaleSupport::iid,
+         reinterpret_cast<void**>(&scale))!=Steinberg::kResultOk||!scale)
+        fail("N10 editor lacks IPlugViewContentScaleSupport");
+    if(scale->setContentScaleFactor(1.5)!=Steinberg::kResultTrue||
+       editor->getSize(&rect)!=Steinberg::kResultOk||
+       rect.getWidth()!=1920||rect.getHeight()!=450)
+        fail("N10 preattach 150-percent host DPI did not resize getSize");
+    if(scale->setContentScaleFactor(1.0)!=Steinberg::kResultTrue||
+       editor->getSize(&rect)!=Steinberg::kResultOk||
+       rect.getWidth()!=1280||rect.getHeight()!=300)
+        fail("N10 preattach DPI reset did not restore editor dimensions");
+    scale->release();
+    std::cout<<"N10 preattach 100/150 percent host DPI geometry PASS\\n";
     editor->release();
     controller->terminate();
     controller->release();
