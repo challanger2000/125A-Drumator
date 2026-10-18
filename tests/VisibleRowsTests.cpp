@@ -1,9 +1,13 @@
 #include "core/VisibleRows.h"
+#include "core/KitRestoreGate.h"
 #include "core/RowResizeTransaction.h"
 #include "core/HostEditDirty.h"
 #include "core/PatternQuantization.h"
 #include "core/AtomicPatternBank.h"
 #include <iostream>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <stdexcept>
 using namespace drumator;
 static void check(bool ok,const char* msg){if(!ok)throw std::runtime_error(msg);}
@@ -67,6 +71,36 @@ int main(){
    check(patternHit(38.5)&&!patternHit(68.5),"N04 pattern hit margin");
    check(!zoomHit(38.5)&&zoomHit(68.5),"N04 zoom hit margin");
    std::cout<<"N04 header draw/hit vertical ranges PASS\\n";
+   // Gate integration: a restore cannot race an already admitted audio block.
+   // New callbacks are rejected without waiting while the writer owns the gate.
+   KitRestoreGate gate;
+   check(gate.audioEnter(),"Gate blocked first audio reader");
+   std::atomic<bool> writerStarted{false},writerEntered{false};
+   std::thread restore([&](){
+     writerStarted.store(true,std::memory_order_release);
+     gate.controlBegin();
+     writerEntered.store(true,std::memory_order_release);
+     gate.controlEnd();
+   });
+   while(!writerStarted.load(std::memory_order_acquire))
+     std::this_thread::yield();
+   bool rejectedDuringRestore=false;
+   const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+   while(std::chrono::steady_clock::now()<deadline) {
+     const bool allowed=gate.audioEnter();
+     gate.audioLeave();
+     if(!allowed){rejectedDuringRestore=true;break;}
+     std::this_thread::yield();
+   }
+   const bool waitedForExistingReader=!writerEntered.load(std::memory_order_acquire);
+   gate.audioLeave();
+   restore.join();
+   check(rejectedDuringRestore&&waitedForExistingReader&&
+         writerEntered.load(std::memory_order_acquire),
+         "Restore/audio gate did not serialize callbacks");
+   check(gate.audioEnter(),"Gate remained closed after restore");
+   gate.audioLeave();
+   std::cout<<"R01 single-atomic restore and audio admission PASS\\n";
    std::cout<<"Visible-row UX preservation checks PASS\n";
    return 0;
  } catch(const std::exception& e){

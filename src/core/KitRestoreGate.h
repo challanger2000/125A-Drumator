@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <thread>
 namespace drumator {
+static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
+              "Kit restore audio gate requires lock-free uint64 atomics");
 class KitRestoreGate final {
  static constexpr std::uint64_t kBusy=std::uint64_t{1}<<63;
  std::atomic<std::uint64_t> state_{0};
