@@ -90,6 +90,24 @@ int main(){
   }
   writer.join();
   (void)samples;
+  // Invalid complete replacements must not partially change a live pattern.
+  AtomicPatternBank guarded;
+  std::array<std::uint8_t,kRows*kSteps> good{},bad{},readback{};
+  good.fill(72);
+  bad.fill(43);
+  bad.back()=128;
+  check(guarded.replacePattern(3,good.data(),good.size()),
+        "valid bulk pattern was rejected");
+  check(!guarded.replacePattern(3,bad.data(),bad.size()),
+        "invalid bulk velocity accepted");
+  check(guarded.coherentPattern(3,readback)&&readback==good,
+        "invalid bulk replacement partially changed pattern");
+  check(!guarded.replacePattern(3,nullptr,good.size()),
+        "null pattern payload accepted");
+  check(!guarded.replacePattern(kPatterns,good.data(),good.size()),
+        "out-of-range destination accepted");
+  check(guarded.coherentPattern(3,readback)&&readback==good,
+        "invalid bulk calls changed live pattern");
   // Audit B01: concurrent full-pattern replacement must never expose
   // a hybrid of two generations to the scheduler's coherent reader.
   AtomicPatternBank transactionBank;
