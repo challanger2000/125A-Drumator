@@ -253,7 +253,9 @@ int main() {
     // Both independent caps must reject, without modifying an earlier result.
     const auto previous=encoded;
     full.wav[0].resize(kMaxSingleWav+1,0);
+    const auto previousAgain=again;
     check(!KitCodec::encode(full,again),"Oversized single WAV accepted");
+    check(again==previousAgain,"Rejected single WAV modified output buffer");
     check(encoded==previous,"Rejected single WAV modified prior bytes");
     for(std::size_t row=4;row<kRows;++row) {full.wav[row].clear();full.names[row].clear();}
     full.wav[0].resize(kMaxSingleWav,0);
