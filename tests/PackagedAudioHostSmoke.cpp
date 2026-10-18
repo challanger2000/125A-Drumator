@@ -114,7 +114,7 @@ int main(int argc,char** argv) {
  }
  for(double v:{0.10,0.124,0.125,0.40,0.874,0.875,0.90,0.929,1.0}) {
    String128 label{};
-   const auto expected=static_cast<int>((std::floor(v*8.0)>7.0?7.0:std::floor(v*8.0)));
+   const auto expected=static_cast<int>(std::lround(v*7.0));
    require(ctrl->getParamStringByValue(drumator::kPatternParam,v,label)==kResultOk,
            "N05 host pattern display query");
    require(label[0]==static_cast<TChar>('A'+expected)&&label[1]==0&&

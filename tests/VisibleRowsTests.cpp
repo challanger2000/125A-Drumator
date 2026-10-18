@@ -52,7 +52,7 @@ int main(){
    for(int i=0;i<=1000;++i) {
      const double n=static_cast<double>(i)/1000.;
      check(patternFromNormalized(n)==
-           static_cast<unsigned>(std::min(7.0,std::floor(n*8.))),
+           static_cast<unsigned>(std::lround(n*7.)),
            "N05 quantization mismatch");
    }
    check(RowVisibility::visibleSolo(0xffffu,4)==0x000fu,

@@ -20,6 +20,22 @@
 #include <vector>
 
 namespace drumator {
+// Maintain pre-existing saved host automation thresholds while exposing
+// coherent A-H text and normalized-to-plain mapping.
+class LegacyPatternParameter final : public Steinberg::Vst::StringListParameter {
+public:
+ using Steinberg::Vst::StringListParameter::StringListParameter;
+ Steinberg::Vst::ParamValue toPlain(Steinberg::Vst::ParamValue n) const override {
+   return static_cast<Steinberg::Vst::ParamValue>(patternFromNormalized(n));
+ }
+ void toString(Steinberg::Vst::ParamValue n,Steinberg::Vst::String128 out) const override {
+   const auto index=patternFromNormalized(n);
+   const auto* label=strings[index];
+   std::size_t i=0;
+   while(i<127&&label[i]){out[i]=label[i];++i;}
+   out[i]=0;
+ }
+};
 void Controller::registerView(DrumatorView* view) {
  if(view)views_.push_back(view);
 }
@@ -68,7 +84,7 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
  const auto result=EditController::initialize(context);
  if(result!=Steinberg::kResultOk)return result;
- auto* patterns=new Steinberg::Vst::StringListParameter(STR16("Pattern"),kPatternParam);
+ auto* patterns=new LegacyPatternParameter(STR16("Pattern"),kPatternParam);
  patterns->appendString(STR16("A"));patterns->appendString(STR16("B"));
  patterns->appendString(STR16("C"));patterns->appendString(STR16("D"));
  patterns->appendString(STR16("E"));patterns->appendString(STR16("F"));
