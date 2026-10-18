@@ -2,6 +2,7 @@
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "core/SequencerCore.h"
+#include "core/PatternOperations.h"
 #include "core/VisibleRows.h"
 #include "core/KitState.h"
 #include <array>
@@ -44,6 +45,11 @@ public:
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
+ bool copyCurrentPattern();
+ bool pasteCurrentPattern();
+ bool duplicateCurrentPattern();
+ bool clearCurrentPattern();
+ bool fillRow(std::size_t row,RowFill mode);
  bool adjustSwing(int delta);
  bool adjustHumanize(int delta);
  unsigned humanizePercent() const noexcept {return humanizePercent_;}
@@ -68,6 +74,9 @@ private:
  std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
+ PatternSteps clipboard_{};
+ bool clipboardValid_{false};
+ bool replacePattern(std::size_t p,const PatternSteps& data);
  std::array<std::string,kRows> labels_{};
  std::array<bool,kRows> muted_{};
  std::array<bool,kRows> solo_{};

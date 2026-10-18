@@ -99,6 +99,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  const auto* id=msg->getMessageID();
  if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
     std::strcmp(id,"Drumator.StepEdit")!=0&&
+    std::strcmp(id,"Drumator.PatternReplace")!=0&&
     std::strcmp(id,"Drumator.VisibleRows")!=0&&
     std::strcmp(id,"Drumator.RowGate")!=0&&
     std::strcmp(id,"Drumator.RowMix")!=0&&
@@ -220,6 +221,19 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    // visible count but intentionally retains all 16 DSP slots/steps.
    visibleRows_.store(static_cast<std::uint8_t>(count),
                       std::memory_order_relaxed);
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.PatternReplace")==0) {
+   Steinberg::int64 target=-1;const void* bytes=nullptr;Steinberg::uint32 count=0;
+   if(attrs->getInt("Pattern",target)!=Steinberg::kResultOk||
+      target<0||target>=static_cast<Steinberg::int64>(kPatterns)||
+      attrs->getBinary("Steps",bytes,count)!=Steinberg::kResultOk||
+      !bytes||count!=kRows*kSteps)return Steinberg::kInvalidArgument;
+   const auto* values=static_cast<const std::uint8_t*>(bytes);
+   for(std::size_t i=0;i<kRows*kSteps;++i)if(values[i]>127)return Steinberg::kInvalidArgument;
+   for(std::size_t row=0;row<kRows;++row)for(std::size_t step=0;step<kSteps;++step)
+     if(!patterns_.set(static_cast<std::size_t>(target),row,step,values[row*kSteps+step]))
+       return Steinberg::kResultFalse;
    return Steinberg::kResultOk;
  }
  if(std::strcmp(msg->getMessageID(),"Drumator.StepEdit")==0) {

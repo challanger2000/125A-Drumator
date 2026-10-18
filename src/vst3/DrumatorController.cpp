@@ -202,6 +202,39 @@ bool Controller::changePattern(std::size_t pattern) {
  setParamNormalized(kPatternParam,value);
  return true;
 }
+bool Controller::replacePattern(std::size_t p,const PatternSteps& data) {
+ if(p>=kPatterns)return false;
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.PatternReplace");
+ auto* a=msg->getAttributes();
+ if(!a||a->setInt("Pattern",static_cast<Steinberg::int64>(p))!=Steinberg::kResultOk||
+    a->setBinary("Steps",data.data(),static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk) {
+   msg->release();return false;
+ }
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;msg->release();
+ if(ok){std::copy(data.begin(),data.end(),grid_.begin()+p*kRows*kSteps);notifyViews(false);}
+ return ok;
+}
+bool Controller::copyCurrentPattern() {
+ const auto p=currentPattern();
+ std::copy_n(grid_.begin()+p*kRows*kSteps,clipboard_.size(),clipboard_.begin());
+ clipboardValid_=true;return true;
+}
+bool Controller::pasteCurrentPattern(){return clipboardValid_&&replacePattern(currentPattern(),clipboard_);}
+bool Controller::duplicateCurrentPattern(){
+ const auto p=currentPattern();if(p+1>=kPatterns)return false;
+ PatternSteps data{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
+ return replacePattern(p+1,data)&&changePattern(p+1);
+}
+bool Controller::clearCurrentPattern(){return replacePattern(currentPattern(),{});}
+bool Controller::fillRow(std::size_t row,RowFill mode){
+ if(row>=visibleRows_)return false;
+ const auto p=currentPattern();
+ PatternSteps data{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
+ return replacePattern(p,fillInstrument(data,row,mode));
+}
 bool Controller::canHideLast() const noexcept {
  if(visibleRows_<=1||visibleRows_>kRows)return false;
  const auto row=static_cast<std::size_t>(visibleRows_-1);

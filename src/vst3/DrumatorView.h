@@ -20,6 +20,7 @@ public:
 private:
  Controller& controller_;
  VSTGUI::VST3Editor& editor_;
+ int fillMenuRow_{-1};
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
  void load(std::size_t row);
  bool adjustEditorHeight();
