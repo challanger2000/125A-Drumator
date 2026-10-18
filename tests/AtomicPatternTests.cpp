@@ -118,9 +118,11 @@ int main(){
         }
       } stable{coherent};
       unsigned events=0;
+      const auto expectedVelocity=coherent[0];
       const auto scheduled=StepScheduler::run(stable,Clock{0,120,48000,256,true},
           [&](Trigger hit) {
-            check(hit.velocity==15||hit.velocity==115,"mixed velocity generation");
+            check(hit.velocity==expectedVelocity,
+                  "scheduler emitted mixed pattern generations");
             ++events;
           });
       check(scheduled.status==ScheduleStatus::Ok&&events==kRows,
