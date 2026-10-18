@@ -1,5 +1,6 @@
 #include "DrumatorView.h"
 #include "DrumatorEditor.h"
+#include "core/RowResizeTransaction.h"
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "vstgui/lib/cdrawcontext.h"
@@ -332,22 +333,29 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=16&&x<=213) {
      if(controller_.visibleRows()>=kRows)
        status_="MAXIMAL 16 ZEILEN";
-     else if(controller_.addRow()) {
-       if(!adjustEditorHeight()) {
-         if(!controller_.hideLastEmptyRow())status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
-       }
+     else {
+       const auto result=tryRowResizeTransaction(
+           [&](){return controller_.addRow();},
+           [&](){return adjustEditorHeight();},
+           [&](){return controller_.hideLastEmptyRow();});
+       if(result==RowResizeResult::EditRejected)
+         status_="INSTRUMENT KONNTE NICHT HINZUGEFUEGT WERDEN";
+       else if(result==RowResizeResult::RollbackFailed)
+         status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
      }
      else status_="INSTRUMENT KONNTE NICHT HINZUGEFUEGT WERDEN";
      invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=226&&x<=266) {
-     if(controller_.hideLastEmptyRow()) {
-       if(!adjustEditorHeight()) {
-         if(!controller_.addRow())status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
-       }
-     }
-     else status_="ZEILE ENTHAELT STEPS/SAMPLE - NICHT ENTFERNBAR";
+     const auto result=tryRowResizeTransaction(
+         [&](){return controller_.hideLastEmptyRow();},
+         [&](){return adjustEditorHeight();},
+         [&](){return controller_.addRow();});
+     if(result==RowResizeResult::EditRejected)
+       status_="ZEILE ENTHAELT STEPS/SAMPLE - NICHT ENTFERNBAR";
+     else if(result==RowResizeResult::RollbackFailed)
+       status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
      invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
