@@ -425,6 +425,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  const auto revision=kitRevision_.load(std::memory_order_acquire);
  if(revision!=lastAudioKitRevision_) {
    voices_.reset();
+   audioPatternValid_.fill(false); // Never replay an old kit's cached rhythm.
    lastAudioKitRevision_=revision;
  }
  // Adopt only complete prepared assets, without deleting on audio.
