@@ -334,10 +334,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      if(controller_.visibleRows()>=kRows)
        status_="MAXIMAL 16 ZEILEN";
      else {
+       const auto previous=controller_.visibleRows();
        const auto result=tryRowResizeTransaction(
            [&](){return controller_.addRow();},
            [&](){return adjustEditorHeight();},
-           [&](){return controller_.hideLastEmptyRow();});
+           [&](){return controller_.restoreVisibleRows(previous);});
        if(result==RowResizeResult::EditRejected)
          status_="INSTRUMENT KONNTE NICHT HINZUGEFUEGT WERDEN";
        else if(result==RowResizeResult::RollbackFailed)
@@ -347,10 +348,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=226&&x<=266) {
+     const auto previous=controller_.visibleRows();
      const auto result=tryRowResizeTransaction(
          [&](){return controller_.hideLastEmptyRow();},
          [&](){return adjustEditorHeight();},
-         [&](){return controller_.addRow();});
+         [&](){return controller_.restoreVisibleRows(previous);});
      if(result==RowResizeResult::EditRejected)
        status_="ZEILE ENTHAELT STEPS/SAMPLE - NICHT ENTFERNBAR";
      else if(result==RowResizeResult::RollbackFailed)

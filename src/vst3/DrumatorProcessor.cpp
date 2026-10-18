@@ -1,4 +1,5 @@
 #include "DrumatorProcessor.h"
+#include "core/PatternQuantization.h"
 #include "PluginIDs.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
@@ -342,7 +343,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          if(queue->getPoint(j,offset,value)==Steinberg::kResultTrue&&
             offset>=0&&std::isfinite(value))
            selected_.store(static_cast<std::uint32_t>(
-               std::lround(std::clamp(value,0.0,1.0)*7.0)),
+               patternFromNormalized(value)),
                std::memory_order_relaxed);
        }
      }
@@ -404,7 +405,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
             sampleOffset>=data.numSamples||sampleOffset<cursor)continue;
          scheduleRange(sampleOffset);
          activePattern=static_cast<std::uint32_t>(
-             std::lround(std::clamp(value,0.0,1.0)*7.0));
+             patternFromNormalized(value));
        }
      }
    }
@@ -421,7 +422,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          if(queue->getPoint(j,offset,value)==Steinberg::kResultTrue&&
             std::isfinite(value)&&offset>=0&&offset<data.numSamples)
            selected_.store(static_cast<std::uint32_t>(
-             std::lround(std::clamp(value,0.0,1.0)*7.0)),
+             patternFromNormalized(value)),
              std::memory_order_relaxed);
        }
      }

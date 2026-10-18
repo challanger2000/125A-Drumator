@@ -1,6 +1,7 @@
 #include "core/VisibleRows.h"
 #include "core/RowResizeTransaction.h"
 #include "core/HostEditDirty.h"
+#include "core/PatternQuantization.h"
 #include "core/AtomicPatternBank.h"
 #include <iostream>
 #include <stdexcept>
@@ -48,6 +49,13 @@ int main(){
    markSuccessfulHostEdit(true,[&](){++dirtyCalls;});
    check(dirtyCalls==1,"F05 accepted edit did not dirty host project");
    std::cout<<"F05 successful-edit dirty notification policy PASS\\n";
+   for(int i=0;i<=1000;++i) {
+     const double n=static_cast<double>(i)/1000.;
+     check(patternFromNormalized(n)==
+           static_cast<unsigned>(std::min(7.0,std::floor(n*8.))),
+           "N05 quantization mismatch");
+   }
+   std::cout<<"N05 1001 discrete pattern values PASS\\n";
    std::cout<<"Visible-row UX preservation checks PASS\n";
    return 0;
  } catch(const std::exception& e){

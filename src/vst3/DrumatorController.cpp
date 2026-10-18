@@ -6,6 +6,7 @@
 #include "core/FlacImport.h"
 #include "core/StepVelocity.h"
 #include "core/HostEditDirty.h"
+#include "core/PatternQuantization.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstattributes.h"
@@ -149,7 +150,7 @@ std::uint8_t Controller::velocity(std::size_t p,std::size_t r,std::size_t s) con
 std::size_t Controller::currentPattern() noexcept {
  const double value=getParamNormalized(kPatternParam);
  if(!std::isfinite(value))return 0;
- return static_cast<std::size_t>(std::lround(std::clamp(value,0.0,1.0)*7.0));
+ return static_cast<std::size_t>(patternFromNormalized(value));
 }
 const std::string& Controller::label(std::size_t row) const noexcept {
  static const std::string empty;
@@ -188,6 +189,20 @@ bool Controller::addRow() {
  const auto good=sendEditMessage(message)==Steinberg::kResultOk;
  message->release();
  if(good)++visibleRows_;
+ return good;
+}
+bool Controller::restoreVisibleRows(std::size_t previous) {
+ if(previous<1||previous>kRows)return false;
+ if(previous==visibleRows_)return true;
+ auto* message=allocateMessage();
+ if(!message)return false;
+ message->setMessageID("Drumator.VisibleRows");
+ auto* attrs=message->getAttributes();
+ if(!attrs){message->release();return false;}
+ attrs->setInt("Count",static_cast<Steinberg::int64>(previous));
+ const bool good=sendEditMessage(message)==Steinberg::kResultOk;
+ message->release();
+ if(good)visibleRows_=static_cast<std::uint8_t>(previous);
  return good;
 }
 bool Controller::hideLastEmptyRow() {

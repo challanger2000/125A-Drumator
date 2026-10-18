@@ -43,6 +43,7 @@ bool flacToWav(const std::uint8_t* data,std::size_t size,
    if(decoder->totalPCMFrameCount)
      samples.reserve(static_cast<std::size_t>(decoder->totalPCMFrameCount)*channels);
    std::array<float,4096*2> chunk{};
+   const auto declaredFrames=decoder->totalPCMFrameCount;
    std::size_t framesRead=0;
    while(true) {
      const auto count=drflac_read_pcm_frames_f32(decoder,4096,chunk.data());
@@ -53,7 +54,7 @@ bool flacToWav(const std::uint8_t* data,std::size_t size,
                     chunk.data()+static_cast<std::size_t>(count)*channels);
    }
    close();
-   if(framesRead==0)return false;
+   if(framesRead==0||(declaredFrames&&framesRead!=declaredFrames))return false;
    const std::size_t frames=framesRead;
 
    const auto payload=static_cast<std::size_t>(frames)*channels*4u;

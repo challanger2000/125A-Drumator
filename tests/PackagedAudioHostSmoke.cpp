@@ -15,6 +15,7 @@
 #include "core/KitState.h"
 #include "core/AtomicPatternBank.h"
 #include "core/FlacImport.h"
+#include "core/PatternQuantization.h"
 #include "public.sdk/source/vst/utility/memoryibstream.h"
 #include <windows.h>
 #include <array>
@@ -109,6 +110,16 @@ int main(int argc,char** argv) {
    require(label[0]==static_cast<TChar>('A'+i)&&label[1]==0,
        "Host must display pattern letter A-H");
  }
+ for(double v:{0.10,0.124,0.125,0.40,0.874,0.875,0.90,0.929,1.0}) {
+   String128 label{};
+   const auto expected=static_cast<int>(std::min(7.0,std::floor(v*8.0)));
+   require(ctrl->getParamStringByValue(drumator::kPatternParam,v,label)==kResultOk,
+           "N05 host pattern display query");
+   require(label[0]==static_cast<TChar>('A'+expected)&&label[1]==0&&
+           static_cast<int>(drumator::patternFromNormalized(v))==expected,
+           "N05 host and processor discrete pattern mismatch");
+ }
+ std::cout<<"N05 host/DSP noncanonical pattern values PASS\\n";
  std::cout<<"F16 host pattern labels A-H PASS\\n";
 
  require(controlPoint->connect(processorPoint)==kResultOk,"Controller connection");
@@ -745,6 +756,14 @@ int main(int argc,char** argv) {
          imported==retainedImport,
          "F13 oversized FLAC metadata allocated or changed output");
  std::cout<<"F13 oversized compressed FLAC guard PASS\\n";
+ auto shortFlac=std::vector<std::uint8_t>(
+     flacFixture,flacFixture+sizeof(flacFixture));
+ shortFlac[21]=static_cast<std::uint8_t>(shortFlac[21]&0xf0);
+ shortFlac[22]=0;shortFlac[23]=0;
+ shortFlac[24]=1;shortFlac[25]=0; // declared 256, actual 128
+ require(!drumator::flacToWav(shortFlac.data(),shortFlac.size(),imported)&&
+         imported==retainedImport,"N03 truncated FLAC accepted");
+ std::cout<<"N03 FLAC declared-frame mismatch rejected PASS\\n";
  require(send(retainedImport,0)==kResultOk,
          "FLAC-derived WAV rejected by packaged VST3");
  for(int i=0;i<7;++i)run(-1);

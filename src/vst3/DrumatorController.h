@@ -48,6 +48,7 @@ public:
  unsigned swingPercent() const noexcept {return swingPercent_;}
  bool addRow();
  bool hideLastEmptyRow();
+ bool restoreVisibleRows(std::size_t previous);
  std::size_t visibleRows() const noexcept {return visibleRows_;}
  bool canHideLast() const noexcept;
  enum class LoadStatus {
