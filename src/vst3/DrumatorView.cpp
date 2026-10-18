@@ -138,17 +138,17 @@ private:
  DrumatorView& view_;
 };
 VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
- // VSTGUI delivers IDropTarget positions in the receiving view's coordinate system.
- // frameToLocal() here applied a second conversion and rejected valid drops.
- const auto local=data.pos;
  std::string path;
- return local.x>=kLabelX&&local.x<=kGridRight&&
-   local.y>=kGridY&&local.y<kGridY+displayedRows()*kRowHeight&&
-   DrumatorDropTarget::extractSamplePath(data.drag,path)
-   ?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
+ const bool hasPath=DrumatorDropTarget::extractSamplePath(data.drag,path);
+ status_=hasPath?"D&D: DATEIPFAD ERKANNT - AUF INSTRUMENTENZEILE ZIEHEN":
+                 "D&D: EREIGNIS EMPFANGEN, ABER KEIN WAV/FLAC-DATEIPFAD";
+ invalid();
+ return hasPath?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
 }
 VSTGUI::DragOperation DrumatorView::onDragMove(VSTGUI::DragEventData data) {
- return onDragEnter(data);
+ std::string path;
+ return DrumatorDropTarget::extractSamplePath(data.drag,path)
+   ?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
 }
 void DrumatorView::onDragLeave(VSTGUI::DragEventData) {}
 bool DrumatorView::onDrop(VSTGUI::DragEventData data) {
@@ -393,17 +393,26 @@ void DrumatorView::loadPath(std::size_t row,const std::string& path) {
  invalid();
 }
 bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
- if(!data.drag)return false;
+ if(!data.drag) {
+   status_="D&D FEHLER: KEINE DATEN VOM HOST";invalid();return false;
+ }
  const auto position=data.pos;
  if(position.x<kLabelX||position.x>kGridRight||
-    position.y<kGridY||position.y>=kGridY+displayedRows()*kRowHeight)
-    return false;
+    position.y<kGridY||position.y>=kGridY+displayedRows()*kRowHeight) {
+   status_="D&D FEHLER: AUSSERHALB DER INSTRUMENTENZEILEN";
+   invalid();return false;
+ }
  const auto row=firstRow_+static_cast<std::size_t>((position.y-kGridY)/kRowHeight);
- if(row>=kRows)return false;
+ if(row>=kRows) {
+   status_="D&D FEHLER: ZEILE NICHT VORHANDEN";invalid();return false;
+ }
  std::string path;
- if(!DrumatorDropTarget::extractSamplePath(data.drag,path))return false;
+ if(!DrumatorDropTarget::extractSamplePath(data.drag,path)) {
+   status_="D&D FEHLER: HOST UEBERGIBT KEINEN WAV/FLAC-DATEIPFAD";
+   invalid();return false;
+ }
  loadPath(row,path);
- return true; // The actual import result is displayed in the status text.
+ return true;
 }
 
 void DrumatorView::load(std::size_t row) {
