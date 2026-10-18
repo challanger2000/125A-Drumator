@@ -110,6 +110,21 @@ int main(){
     if(transactionBank.coherentPattern(0,coherent)){
       check(coherent==oldPattern||coherent==newPattern,
             "torn pattern generation during replacement");
+      struct StablePattern {
+        const std::array<std::uint8_t,kRows*kSteps>& data;
+        std::uint8_t selected() const noexcept {return 0;}
+        std::uint8_t get(std::size_t p,std::size_t row,std::size_t step) const noexcept {
+          return p==0?data[row*kSteps+step]:0;
+        }
+      } stable{coherent};
+      unsigned events=0;
+      const auto scheduled=StepScheduler::run(stable,Clock{0,120,48000,256,true},
+          [&](Trigger hit) {
+            check(hit.velocity==15||hit.velocity==115,"mixed velocity generation");
+            ++events;
+          });
+      check(scheduled.status==ScheduleStatus::Ok&&events==kRows,
+            "coherent scheduler lost events");
       ++verified;
     }
   }
