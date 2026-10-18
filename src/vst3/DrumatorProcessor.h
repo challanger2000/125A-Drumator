@@ -37,6 +37,12 @@ public:
 private:
  bool publishRestoredKit(const KitState& state,double rate); // control only
  std::mutex kitMutex_{};
+ // Restore barrier: no audio callback may consume a partially installed kit.
+ // The audio callback never waits; only control-side setState waits for a block.
+ std::atomic<bool> kitRestoreInProgress_{false};
+ std::atomic<std::uint32_t> activeAudioCalls_{0};
+ std::atomic<std::uint32_t> kitRevision_{0};
+ std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
  AtomicPatternBank patterns_;
  SampleVoiceEngine voices_;

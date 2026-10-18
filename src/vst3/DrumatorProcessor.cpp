@@ -13,6 +13,7 @@
 #include <limits>
 #include <new>
 #include <mutex>
+#include <thread>
 #include <vector>
 #include <string>
 #include <memory>
@@ -24,6 +25,27 @@ constexpr double kPi=3.141592653589793238462643383279502884;
 constexpr Steinberg::uint32 kStateMagic=0x31524D44u; // legacy "DMR1"
 constexpr Steinberg::uint32 kStateMagicV2=0x32524D44u; // "DMR2", 4096 step bytes
 constexpr auto kStateMagicV3Local=kStateMagicV3; // plus visible row count
+class ActiveAudioCall {
+ std::atomic<std::uint32_t>& active_;
+public:
+ explicit ActiveAudioCall(std::atomic<std::uint32_t>& active) noexcept : active_(active) {
+   active_.fetch_add(1,std::memory_order_acq_rel);
+ }
+ ~ActiveAudioCall() {active_.fetch_sub(1,std::memory_order_release);}
+};
+class KitRestoreBarrier {
+ std::atomic<bool>& busy_;
+public:
+ KitRestoreBarrier(std::atomic<bool>& busy,
+                   const std::atomic<std::uint32_t>& active) noexcept : busy_(busy) {
+   busy_.store(true,std::memory_order_release);
+   // Only the control thread spins. A new audio block immediately returns
+   // bounded zero output while restoration is in progress.
+   while(active.load(std::memory_order_acquire)!=0)
+     std::this_thread::yield();
+ }
+ ~KitRestoreBarrier() {busy_.store(false,std::memory_order_release);}
+};
 }
 Processor::Processor() {
  setControllerClass(kControllerCID);
@@ -330,6 +352,21 @@ Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
  return Steinberg::Vst::kInfiniteTail;
 }
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
+ ActiveAudioCall currentCall(activeAudioCalls_);
+ if(kitRestoreInProgress_.load(std::memory_order_acquire)) {
+   if(data.symbolicSampleSize==Steinberg::Vst::kSample32&&
+      data.numSamples>0&&data.outputs) {
+     for(Steinberg::int32 bus=0;bus<data.numOutputs;++bus) {
+       auto& out=data.outputs[bus];
+       if(!out.channelBuffers32)continue;
+       for(Steinberg::int32 ch=0;ch<out.numChannels;++ch)
+         if(out.channelBuffers32[ch])
+           std::fill_n(out.channelBuffers32[ch],data.numSamples,0.f);
+       out.silenceFlags=3;
+     }
+   }
+   return Steinberg::kResultOk;
+ }
  if(data.numSamples<0)return Steinberg::kInvalidArgument;
  // Hosts may flush discrete automation without providing any audio buffers.
  if(data.numSamples==0||data.numOutputs==0) {
@@ -364,6 +401,13 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);
  if(wasPlaying_&&!playing)voices_.reset(); // stop old sequencer tails once
  wasPlaying_=playing;
+ // The first full block after a kit commit starts with no old-kit voices.
+ const auto revision=kitRevision_.load(std::memory_order_acquire);
+ if(revision!=lastAudioKitRevision_) {
+   voices_.reset();
+   wasPlaying_=false;
+   lastAudioKitRevision_=revision;
+ }
  // Adopt only complete prepared assets, without deleting on audio.
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
  triggers_.clear();
@@ -564,6 +608,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  const auto rate=outputRate_.load(std::memory_order_acquire);
  {
     std::lock_guard<std::mutex> guard(kitMutex_);
+    KitRestoreBarrier restoreGate(kitRestoreInProgress_,activeAudioCalls_);
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
     kit_=std::move(candidate);
@@ -584,6 +629,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
       rowGain_[row].store(kit_.gain[row]/100.f,std::memory_order_relaxed);
       rowPan_[row].store((static_cast<int>(kit_.pan[row])-100)/100.f,std::memory_order_relaxed);
     }
+    kitRevision_.fetch_add(1,std::memory_order_release);
  }
  return Steinberg::kResultOk;
 }

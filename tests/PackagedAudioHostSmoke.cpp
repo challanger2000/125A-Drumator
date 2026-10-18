@@ -26,6 +26,8 @@
 #include <filesystem>
 #include <iostream>
 #include <vector>
+#include <atomic>
+#include <thread>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -903,6 +905,52 @@ int main(int argc,char** argv) {
  require(component->activateBus(kAudio,kOutput,0,true)==kResultOk,
          "F08 reenable MAIN");
  std::cout<<"F08 packaged auxiliary processing without MAIN PASS\\n";
+ // P1 kit-recall interleaving regression: VST3 setState remains supported
+ // while a separate realtime actor repeatedly invokes process().
+ Steinberg::ResizableMemoryIBStream runningKitState;
+ require(component->getState(&runningKitState)==kResultOk,
+         "Concurrent state fixture save");
+ std::atomic<bool> stopAudio{false},audioFailed{false};
+ std::atomic<unsigned> audioBlocks{0};
+ std::thread audioActor([&](){
+   std::array<float,256> rtLeft{},rtRight{};
+   float* rtPtrs[2]{rtLeft.data(),rtRight.data()};
+   AudioBusBuffers rtBus{};
+   rtBus.numChannels=2;rtBus.channelBuffers32=rtPtrs;
+   EventList rtEvents(2);
+   Event hit{};hit.type=Event::kNoteOnEvent;
+   hit.noteOn.pitch=36;hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+   rtEvents.addEvent(hit);
+   ProcessContext rtContext{};rtContext.state=0;
+   ProcessData rtData{};
+   rtData.numSamples=256;rtData.numOutputs=1;rtData.outputs=&rtBus;
+   rtData.symbolicSampleSize=kSample32;rtData.processMode=kRealtime;
+   rtData.inputEvents=&rtEvents;rtData.processContext=&rtContext;
+   while(!stopAudio.load(std::memory_order_acquire)&&
+         audioBlocks.load(std::memory_order_relaxed)<4000) {
+     if(audio->process(rtData)!=kResultOk) {
+       audioFailed.store(true);break;
+     }
+     for(int n=0;n<256;++n) {
+       if(!std::isfinite(rtLeft[n])||!std::isfinite(rtRight[n])) {
+         audioFailed.store(true);break;
+       }
+     }
+     audioBlocks.fetch_add(1,std::memory_order_relaxed);
+     if(audioFailed.load())break;
+   }
+ });
+ for(int n=0;n<6;++n) {
+   runningKitState.rewind();
+   require(component->setState(&runningKitState)==kResultOk,
+           "P1 concurrent complete kit restore failed");
+   std::this_thread::yield();
+ }
+ stopAudio.store(true,std::memory_order_release);
+ audioActor.join();
+ require(!audioFailed.load()&&audioBlocks.load()>0,
+         "P1 concurrent kit processing returned invalid data");
+ std::cout<<"P1 concurrent complete kit recall and live audio PASS\\n";
  require(audio->setProcessing(false)==kResultOk,"Stop processing");
  require(component->setActive(false)==kResultOk,"Deactivate final");
  require(controlPoint->disconnect(processorPoint)==kResultOk,"Disconnect controller");
