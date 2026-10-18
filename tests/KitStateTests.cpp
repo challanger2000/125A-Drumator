@@ -264,8 +264,11 @@ int main() {
     check(KitCodec::encode(full,again),"Exact 64 MiB kit boundary rejected");
     check(again.size()>kMaxKitWavs,"State header not accounted for");
     full.names[4]="Excess.wav";full.wav[4]=wav16();
+    const auto atBudgetLimit=again;
     check(!KitCodec::encode(full,again),
           "Total kit above 64 MiB accepted");
+    check(again==atBudgetLimit,
+          "Rejected 64 MiB budget overflow modified previous encoded kit");
     std::cout<<"M11 sixteen-row recall and WAV size boundaries PASS\n";
     std::cout<<"Embedded Drumator kit DMR4 encode/decode and rollback: PASS\n";
  }catch(const std::exception& e){
