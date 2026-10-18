@@ -1,6 +1,7 @@
 #include "DrumatorView.h"
 #include "DrumatorEditor.h"
 #include "core/RowResizeTransaction.h"
+#include "core/CompactRowViewport.h"
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "core/RowMixControl.h"
@@ -83,10 +84,7 @@ std::size_t DrumatorView::visibleRowsForHit() const noexcept {
  return displayedRows();
 }
 std::size_t DrumatorView::displayedRows() const noexcept {
- const auto total=controller_.visibleRows();
- if(!compactViewport_)return total;
- if(total==0)return 0;
- return std::min<std::size_t>(4,total-std::min(firstRow_,total-1));
+ return compactViewport_?CompactRowViewport::count(controller_.visibleRows(),firstRow_):controller_.visibleRows();
 }
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
@@ -107,7 +105,7 @@ bool DrumatorView::adjustEditorHeight() {
  const auto effectiveScale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
    compactViewport_=true;
-   firstRow_=std::min(firstRow_,controller_.visibleRows()-1);
+   firstRow_=CompactRowViewport::first(controller_.visibleRows(),firstRow_);
    fillMenuRow_=-1;
    status_="HOST-RESIZE ABGELEHNT: ZEILEN MIT < > WECHSELN";
    invalid();return false;
@@ -375,8 +373,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
 
  if(compactViewport_&&y>=39&&y<69&&x>=1005&&x<1060) {
-   if(x<1032)firstRow_=firstRow_>=4?firstRow_-4:0;
-   else if(firstRow_+4<controller_.visibleRows())firstRow_+=4;
+   if(x<1032)firstRow_=CompactRowViewport::previous(controller_.visibleRows(),firstRow_);
+   else firstRow_=CompactRowViewport::next(controller_.visibleRows(),firstRow_);
    fillMenuRow_=-1;invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
