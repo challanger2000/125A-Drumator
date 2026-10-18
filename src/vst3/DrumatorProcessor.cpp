@@ -31,6 +31,7 @@ Processor::Processor() {
  setControllerClass(kControllerCID);
  for(auto& gain:rowGain_)gain.store(1.f,std::memory_order_relaxed);
  for(auto& pan:rowPan_)pan.store(0.f,std::memory_order_relaxed);
+ for(std::size_t row=0;row<kRows;++row)rowOutput_[row].store(static_cast<std::uint8_t>(row));
  // The initial test pattern is supplied by AtomicPatternBank.
 }
 Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context) {
@@ -105,6 +106,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.RowMix")!=0&&
     std::strcmp(id,"Drumator.RowPitch")!=0&&
     std::strcmp(id,"Drumator.RowChoke")!=0&&
+    std::strcmp(id,"Drumator.RowOutput")!=0&&
     std::strcmp(id,"Drumator.Swing")!=0&&
     std::strcmp(id,"Drumator.Humanize")!=0&&
     std::strcmp(id,"Drumator.ClearSample")!=0)
@@ -145,6 +147,16 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    if(attrs->getInt("Percent",percent)!=Steinberg::kResultOk||
       percent<0||percent>50)return Steinberg::kInvalidArgument;
    swingPercent_.store(static_cast<std::uint8_t>(percent),std::memory_order_relaxed);
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.RowOutput")==0) {
+   Steinberg::int64 rowIndex=-1,bus=-1;
+   if(attrs->getInt("Row",rowIndex)!=Steinberg::kResultOk||
+      attrs->getInt("Bus",bus)!=Steinberg::kResultOk||
+      rowIndex<0||rowIndex>=static_cast<Steinberg::int64>(kRows)||
+      bus<0||bus>=static_cast<Steinberg::int64>(kRows))
+      return Steinberg::kInvalidArgument;
+   rowOutput_[static_cast<std::size_t>(rowIndex)].store(static_cast<std::uint8_t>(bus),std::memory_order_relaxed);
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.RowChoke")==0) {
@@ -493,7 +505,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  for(std::size_t row=0;row<kRows;++row)
    if(!voices_.setRowMix(row,rowGain_[row].load(std::memory_order_relaxed),
                            rowPan_[row].load(std::memory_order_relaxed))||
-      !voices_.setRowChoke(row,rowChoke_[row].load(std::memory_order_relaxed)))
+      !voices_.setRowChoke(row,rowChoke_[row].load(std::memory_order_relaxed))||
+       !voices_.setRowOutput(row,rowOutput_[row].load(std::memory_order_relaxed)))
      return Steinberg::kResultFalse;
  triggers_.applyMuteSolo(muteMask_.load(std::memory_order_relaxed),
                          soloMask_.load(std::memory_order_relaxed));
@@ -558,7 +571,7 @@ Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
    kit_.solo=static_cast<std::uint16_t>(soloMask_.load(std::memory_order_relaxed));
    kit_.swing=swingPercent_.load(std::memory_order_relaxed);
    kit_.humanize=humanizePercent_.load(std::memory_order_relaxed);
-   for(std::size_t row=0;row<kRows;++row)kit_.choke[row]=rowChoke_[row].load();
+   for(std::size_t row=0;row<kRows;++row){kit_.choke[row]=rowChoke_[row].load();kit_.output[row]=rowOutput_[row].load();}
    for(std::size_t row=0;row<kRows;++row) {
      kit_.gain[row]=static_cast<std::uint8_t>(std::lround(rowGain_[row].load()*100.f));
      kit_.pan[row]=static_cast<std::uint8_t>(std::lround(rowPan_[row].load()*100.f+100.f));
@@ -580,7 +593,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
  KitState candidate;
- if(magic==kKitMagic||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -636,7 +649,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     soloMask_.store(kit_.solo,std::memory_order_relaxed);
     swingPercent_.store(kit_.swing,std::memory_order_relaxed);
     humanizePercent_.store(kit_.humanize,std::memory_order_relaxed);
-    for(std::size_t row=0;row<kRows;++row)rowChoke_[row].store(kit_.choke[row]);
+    for(std::size_t row=0;row<kRows;++row){rowChoke_[row].store(kit_.choke[row]);rowOutput_[row].store(kit_.output[row]);}
     for(std::size_t row=0;row<kRows;++row) {
       rowGain_[row].store(kit_.gain[row]/100.f,std::memory_order_relaxed);
       rowPan_[row].store((static_cast<int>(kit_.pan[row])-100)/100.f,std::memory_order_relaxed);

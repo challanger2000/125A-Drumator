@@ -187,8 +187,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        ++suffixBegin;
      visibleName=name.substr(0,prefixEnd)+"..."+name.substr(suffixBegin);
    }
-   c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,275,y+26),
+   c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,230,y+26),
                  VSTGUI::kLeftText);
+   char busLabel[16]{};
+   if(controller_.rowOutput(row)==0)std::snprintf(busLabel,sizeof(busLabel),"MAIN");
+   else std::snprintf(busLabel,sizeof(busLabel),"O%02u",controller_.rowOutput(row)+1);
+   c->setFontColor(accent);
+   c->drawString(busLabel,VSTGUI::CRect(230,y,275,y+26));
    char value[32]{};
    c->setFontColor(accent);
    std::snprintf(value,sizeof(value),"VOL %u",controller_.rowGain(row));
@@ -455,6 +460,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
    if(x>=535&&x<558) {
       if(!controller_.cycleRowChoke(row))status_="CHOKE NICHT UEBERNOMMEN";
+      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=230&&x<275&&(buttons&VSTGUI::kAlt)==0) {
+      if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kLabelX&&x<275&&(buttons&VSTGUI::kAlt)!=0) {

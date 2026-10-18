@@ -34,6 +34,8 @@ public:
  bool clearSample(std::size_t row);
  bool toggleRowGate(std::size_t row,bool solo);
  bool cycleRowChoke(std::size_t row);
+ bool cycleRowOutput(std::size_t row);
+ unsigned rowOutput(std::size_t row) const noexcept {return row<kRows?output_[row]:0;}
  unsigned rowChoke(std::size_t row) const noexcept {return row<kRows?choke_[row]:0;}
  bool adjustRowMix(std::size_t row,bool adjustPan,int delta);
  bool adjustRowPitch(std::size_t row,int delta);
@@ -84,6 +86,7 @@ private:
  std::array<std::uint8_t,kRows> pan_{};
  std::array<std::uint8_t,kRows> pitch_{};
  std::array<std::uint8_t,kRows> choke_{};
+ std::array<std::uint8_t,kRows> output_{};
  std::uint8_t visibleRows_{kDefaultVisibleRows};
  double preferredZoom_{1.0};
  std::uint8_t swingPercent_{0};

@@ -33,6 +33,7 @@ int main() {
     original.muted=0x8001;original.solo=0x0006;original.swing=35;original.humanize=70;
     original.gain[0]=50;original.pan[0]=0;original.pitch[0]=36;
     original.choke[0]=1;original.choke[15]=4;
+    original.output[0]=7;original.output[15]=0;
     original.gain[15]=200;original.pan[15]=200;
     original.grid[AtomicPatternBank::index(5,2,31)]=95;
     original.grid[AtomicPatternBank::index(0,15,0)]=127;
@@ -48,7 +49,8 @@ int main() {
     check(copy.muted==0x8001&&copy.solo==0x0006&&copy.swing==35&&copy.humanize==70,
           "Mute/solo/swing state lost");
     check(copy.gain==original.gain&&copy.pan==original.pan&&
-          copy.pitch==original.pitch&&copy.choke==original.choke,
+          copy.pitch==original.pitch&&copy.choke==original.choke&&
+          copy.output==original.output,
           "Volume/pan/pitch/choke state lost");
     check(copy.visible==6&&copy.selected==5,"Song layout/program not restored");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
@@ -57,8 +59,22 @@ int main() {
     std::vector<std::uint8_t> again;
     check(KitCodec::encode(copy,again)&&encoded==again,
           "Roundtrip must produce deterministic DMR4");
+    // Remove the DM11 output table to create a legitimate DM10 fixture.
+    auto legacyBase=encoded;
+    legacyBase.erase(legacyBase.begin()+78,legacyBase.begin()+94);
+    for(int i=0;i<4;++i)
+      legacyBase[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV10>>(8*i));
+    const auto oldLength=static_cast<std::uint32_t>(legacyBase.size()-8);
+    for(int i=0;i<4;++i)
+      legacyBase[4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(oldLength>>(8*i));
+    const auto oldCrc=KitCodec::hash(legacyBase.data()+8,legacyBase.size()-12);
+    for(int i=0;i<4;++i)
+      legacyBase[legacyBase.size()-4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(oldCrc>>(8*i));
+    KitState v10{};
+    check(KitCodec::decode(legacyBase.data(),legacyBase.size(),v10)&&
+          v10.output[0]==0&&v10.output[15]==15,"DM10 output migration");
     // Old DMR4 projects have no row masks and must reopen with both off.
-    auto legacy=encoded;
+    auto legacy=legacyBase;
     legacy.erase(legacy.begin()+10,legacy.begin()+80);
     for(int i=0;i<4;++i)
       legacy[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV4>>(8*i));
@@ -74,7 +90,7 @@ int main() {
           "Legacy DMR4 project cannot reopen");
     check(prior.muted==0&&prior.solo==0&&prior.wav==original.wav&&
           prior.grid==original.grid,"Legacy migration damaged kit");
-    auto priorV5=encoded;
+    auto priorV5=legacyBase;
     priorV5.erase(priorV5.begin()+14,priorV5.begin()+80);
     for(int i=0;i<4;++i)
       priorV5[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV5>>(8*i));
@@ -91,7 +107,7 @@ int main() {
     check(migrated.muted==original.muted&&migrated.solo==original.solo&&
           migrated.gain[0]==100&&migrated.pan[0]==100,
           "DMR5 migration lost gates or neutral row mix");
-    auto priorV6=encoded;
+    auto priorV6=legacyBase;
     priorV6.erase(priorV6.begin()+46,priorV6.begin()+80);
     for(int i=0;i<4;++i)
        priorV6[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV6>>(8*i));
@@ -107,7 +123,7 @@ int main() {
           "Legacy DMR6 project cannot reopen");
     check(migrated6.pitch[0]==24&&migrated6.gain==original.gain&&
           migrated6.pan==original.pan,"DMR6 migration changed row mix");
-    auto priorV7=encoded;
+    auto priorV7=legacyBase;
     priorV7.erase(priorV7.begin()+62,priorV7.begin()+80);
     for(int i=0;i<4;++i)
       priorV7[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV7>>(8*i));
@@ -123,7 +139,7 @@ int main() {
           "Legacy DMR7 project cannot reopen");
     check(migrated7.choke[0]==0&&migrated7.pitch[0]==original.pitch[0],
           "DMR7 migration did not preserve pitch and disable choke");
-    auto priorV8=encoded;
+    auto priorV8=legacyBase;
     // Keep checksum bytes; remove only swing byte at offset 78.
     priorV8.erase(priorV8.begin()+78,priorV8.begin()+80);
     for(int i=0;i<4;++i)
@@ -140,8 +156,8 @@ int main() {
           "Legacy DMR8 project cannot reopen");
     check(migrated8.swing==0&&migrated8.choke==original.choke,
           "DMR8 migration lost choke or did not reset swing");
-    auto priorV9=encoded;
-    priorV9.erase(priorV9.begin()+79);
+    auto priorV9=legacyBase;
+    priorV9.erase(priorV9.begin()+79,priorV9.begin()+80);
     for(int i=0;i<4;++i)
       priorV9[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV9>>(8*i));
     const auto len9=static_cast<std::uint32_t>(priorV9.size()-8);

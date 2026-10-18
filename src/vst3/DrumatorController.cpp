@@ -96,6 +96,7 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
      grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
  for(auto& name:labels_)name="LEER - WAV LADEN";
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
+ for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream* state) {
@@ -104,7 +105,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -126,7 +127,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
           solo_[row]=(RowVisibility::visibleSolo(candidate.solo,candidate.visible)&
                       (1u<<row))!=0;
           gain_[row]=candidate.gain[row];pan_[row]=candidate.pan[row];
-          pitch_[row]=candidate.pitch[row];choke_[row]=candidate.choke[row];
+          pitch_[row]=candidate.pitch[row];choke_[row]=candidate.choke[row];output_[row]=candidate.output[row];
        }
        for(std::size_t row=0;row<kRows;++row)
           labels_[row]=candidate.names[row].empty()
@@ -336,6 +337,19 @@ bool Controller::clearSample(std::size_t row) {
  msg->release();
  if(ok)labels_[row]="LEER - WAV LADEN";
  return ok;
+}
+bool Controller::cycleRowOutput(std::size_t row) {
+ if(row>=kRows)return false;
+ const auto bus=static_cast<std::uint8_t>((output_[row]+1)%kRows);
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.RowOutput");
+ auto* attrs=msg->getAttributes();
+ if(!attrs){msg->release();return false;}
+ attrs->setInt("Row",static_cast<Steinberg::int64>(row));
+ attrs->setInt("Bus",static_cast<Steinberg::int64>(bus));
+ const bool accepted=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();if(accepted)output_[row]=bus;
+ return accepted;
 }
 bool Controller::cycleRowChoke(std::size_t row) {
  if(row>=kRows)return false;
