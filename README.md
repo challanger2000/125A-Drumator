@@ -1,5 +1,7 @@
 # 125A Drumator
 
+**Current development checkpoint (2026-10-19):** Clickable per-row sample preview added in [source `959ce18`](https://github.com/challanger2000/125A-Drumator/commit/959ce183ba8b55637c66ac8d77f076eba5e44a22). [Windows Actions #39310135488](https://github.com/challanger2000/125A-Drumator/actions/runs/39310135488) SUCCESS: 10/10 CTests, 47/47 Steinberg Validator, packaged VST3 one-shot stopped-transport audio-host smoke PASS. Use the **P** button beside an instrument name. Host-specific Studio One UI/stop state requires manual QA; not final. Details: [Sample Preview](docs/FEATURE-SAMPLE-PREVIEW.md).
+
 **Current development checkpoint (2026-10-19):** Independent per-instrument naming implemented in DM14 source `c62b8fa`, [Windows Actions #39307595099](https://github.com/challanger2000/125A-Drumator/actions/runs/39307595099) SUCCESS: 10/10 CTests, Steinberg Validator 47/47, packaged GUI/audio host smoke PASS. Use **Shift+click on row name** to rename. Manual Studio One text editing and project-open tests remain outstanding. Details: [DM14 Row Names](docs/FEATURE-ROW-NAMES-DM14.md). **Not final.**
 
 Vintage-inspired multi-format drum sampler with a 32-step running-light sequencer. Focus: **drop a sample onto a drum row, program steps, play.**
