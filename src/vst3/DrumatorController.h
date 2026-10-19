@@ -59,6 +59,9 @@ public:
  bool pasteCurrentPattern();
  bool duplicateCurrentPattern(bool* selectedCopy=nullptr);
  bool clearCurrentPattern();
+ bool varyPatternVelocity();
+ bool resetPatternVelocity();
+ std::uint32_t velocityVariation_{0};
  bool fillRow(std::size_t row,RowFill mode);
  bool adjustSwing(int delta);
  bool adjustHumanize(int delta);

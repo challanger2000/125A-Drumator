@@ -438,6 +438,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double x=480+i*115.;
    drawControl(c,{x,buttonsY,x+109,buttonsY+29},actions[i]);
  }
+ drawControl(c,{844,buttonsY,1014,buttonsY+29},"VELOCITY VARIIEREN");
+ drawControl(c,{1024,buttonsY,1220,buttonsY+29},"VELOCITY RESET 100");
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
     const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-150.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR"};
@@ -667,6 +669,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  const double actionsY=kGridY+displayedRows()*kRowHeight+5.0;
  if(y>=actionsY&&y<actionsY+29) {
+   if(x>=844&&x<1220){
+     const bool ok=x<1014?controller_.varyPatternVelocity():
+                            (x>=1024?controller_.resetPatternVelocity():true);
+     if(!ok)status_="VELOCITY-AKTION NICHT UEBERNOMMEN";
+     else status_=x<1014?"AKTIVE STEPS: VELOCITY VARIIERT":"AKTIVE STEPS: VELOCITY 100";
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
    if(x>=480&&x<825) {
      const int action=static_cast<int>((x-480)/115.);
      if(action>=0&&action<3&&x<480+action*115.+109) {

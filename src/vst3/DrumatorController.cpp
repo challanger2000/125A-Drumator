@@ -297,6 +297,34 @@ bool Controller::duplicateCurrentPattern(bool* selectedCopy){
  return true; // the copy exists even if host refuses selecting it
 }
 bool Controller::clearCurrentPattern(){return replacePattern(currentPattern(),{});}
+bool Controller::varyPatternVelocity(){
+ const auto p=currentPattern();
+ PatternSteps data{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
+ // Deterministic per edit: changes stored velocities only, never note placement.
+ const auto variation=velocityVariation_+1u;
+ for(std::size_t row=0;row<kRows;++row)
+  for(std::size_t step=0;step<kSteps;++step){
+   const auto index=row*kSteps+step;
+   if(data[index]==0)continue;
+   std::uint32_t hash=static_cast<std::uint32_t>((row+1u)*0x9e3779b9u)^
+       static_cast<std::uint32_t>((step+1u)*0x85ebca6bu)^(variation*0xc2b2ae35u);
+   hash^=hash>>16;hash*=0x7feb352du;hash^=hash>>15;hash*=0x846ca68bu;hash^=hash>>16;
+   const int offset=static_cast<int>(hash%49u)-24;
+   const int value=std::clamp(static_cast<int>(data[index])+offset,1,127);
+   data[index]=static_cast<std::uint8_t>(value);
+  }
+ if(!replacePattern(p,data))return false;
+ velocityVariation_=variation;
+ return true;
+}
+bool Controller::resetPatternVelocity(){
+ const auto p=currentPattern();
+ PatternSteps data{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
+ for(auto& value:data)if(value!=0)value=100;
+ return replacePattern(p,data);
+}
 bool Controller::fillRow(std::size_t row,RowFill mode){
  if(row>=visibleRows_)return false;
  const auto p=currentPattern();
