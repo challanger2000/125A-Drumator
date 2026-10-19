@@ -80,7 +80,19 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  Steinberg::uint8 zoom=0;
  if(!stream.readInt32u(magic)||magic!=kZoomControllerState||
     !stream.readInt8u(zoom)||zoom>1)return Steinberg::kResultFalse;
- preferredZoom_=zoom?1.5:1.0;
+ const double requested=zoom?1.5:1.0;
+ const auto oldZoom=preferredZoom_;
+ if(requested==oldZoom)return Steinberg::kResultOk;
+ std::size_t updated=0;
+ for(auto* view:views_) {
+   if(view&&!view->applyZoomFromState(requested)) {
+     for(std::size_t i=0;i<updated;++i)
+       if(views_[i])views_[i]->applyZoomFromState(oldZoom);
+     return Steinberg::kResultFalse;
+   }
+   ++updated;
+ }
+ preferredZoom_=requested;
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
@@ -172,6 +184,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  patternLengths_.fill(32);
  customNames_.fill({});
  undo_.reset();
+ strokePattern_=kPatterns; // A recalled kit invalidates an in-progress GUI stroke.
  clipboardValid_=false;
  samplePaths_.fill({});
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
@@ -441,6 +454,22 @@ bool Controller::hideLastEmptyRow() {
  if(good)--visibleRows_;
  return good;
 }
+void Controller::beginVelocityStroke(std::size_t p) {
+ if(p>=kPatterns)return;
+ if(strokePattern_<kPatterns)endVelocityStroke(true);
+ strokePattern_=p;
+ std::copy_n(grid_.begin()+p*kRows*kSteps,strokeBefore_.size(),strokeBefore_.begin());
+}
+void Controller::endVelocityStroke(bool commit) {
+ if(strokePattern_>=kPatterns)return;
+ const auto p=strokePattern_;
+ strokePattern_=kPatterns;
+ PatternSteps after{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,after.size(),after.begin());
+ if(!commit&&after!=strokeBefore_&&replacePattern(p,strokeBefore_,false))
+   return;
+ undo_.capture(p,strokeBefore_,after);
+}
 void Controller::rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next) {
  PatternSteps old{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,old.size(),old.begin());
@@ -462,7 +491,7 @@ bool Controller::setStepVelocity(std::size_t p,std::size_t r,std::size_t s,std::
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok) {
-   rememberUndoStep(p,r,s,next);
+   if(strokePattern_!=p)rememberUndoStep(p,r,s,next);
    grid_[(p*kRows+r)*kSteps+s]=next;
    notifyViews(false);
  }

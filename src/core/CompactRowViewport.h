@@ -5,6 +5,12 @@ namespace drumator {
 // Row paging for a host that refuses to enlarge the plugin editor.
 struct CompactRowViewport {
  static constexpr std::size_t pageSize=4;
+  // Number of instrument rows whose FULL footer fits the host's real height.
+  static std::size_t fittingRows(double client,double gridTop,
+                                 double rowPitch,double footer) noexcept {
+    if(!(rowPitch>0.0)||client<gridTop+footer+rowPitch)return 0;
+    return std::min(pageSize,static_cast<std::size_t>((client-gridTop-footer)/rowPitch));
+  }
  static std::size_t first(std::size_t total,std::size_t requested) noexcept {
    return total==0?0:std::min(requested,total-1);
  }

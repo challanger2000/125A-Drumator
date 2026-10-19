@@ -264,13 +264,15 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
  return UiOverlayHitZones::canDrop(x,y,displayedRows(),songEditorOpen_,fill,top);
 }
 std::size_t DrumatorView::displayedRows() const noexcept {
- return compactViewport_?CompactRowViewport::count(controller_.visibleRows(),firstRow_):controller_.visibleRows();
+ return compactViewport_?std::min(compactPageRows_,controller_.visibleRows()-firstRow_):controller_.visibleRows();
 }
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
+ if(laneDragActive_){controller_.endVelocityStroke(false);laneDragActive_=false;}
  if(nameEdit_){
+   nameEdit_->unregisterTextEditListener(this);
    if(auto* frame=getFrame())frame->removeView(nameEdit_);
    nameEdit_=nullptr;
    editingNameRow_=kRows;
@@ -282,6 +284,7 @@ void DrumatorView::editName(std::size_t row) {
  const double y=kGridY+(row-firstRow_)*kRowHeight;
  if(!nameEdit_){
    nameEdit_=new VSTGUI::CTextEdit({81,y+2,202,y+26},this,1001,controller_.label(row).c_str());
+   nameEdit_->registerTextEditListener(this);
    getFrame()->addView(nameEdit_);
  }
  editingNameRow_=row;
@@ -299,6 +302,23 @@ void DrumatorView::valueChanged(VSTGUI::CControl* control) {
  nameEdit_->setVisible(false);
  editingNameRow_=kRows;
  invalid();
+}
+void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
+ if(edit!=nameEdit_)return;
+ nameEdit_->setVisible(false);
+ editingNameRow_=kRows;
+ invalid();
+}
+bool DrumatorView::applyZoomFromState(double factor) {
+ auto& editor=static_cast<DrumatorEditor&>(editor_);
+ const double previous=editor.getZoomFactor();
+ if(!editor.setZoomChecked(factor))return false;
+ if(getParentView()&&!adjustEditorHeight()){
+   editor.setZoomChecked(previous);
+   adjustEditorHeight();
+   return false;
+ }
+ invalid();return true;
 }
 void DrumatorView::refreshFromHost(bool relayout) {
  if(controller_.visibleRows()>0)
@@ -318,6 +338,14 @@ bool DrumatorView::adjustEditorHeight() {
  const auto effectiveScale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
    compactViewport_=true;
+   const auto clientHeight=getViewSize().getHeight();
+   if(velocityLaneOpen_&&clientHeight<kGridY+kRowHeight+VelocityLane::kFooterHeight)
+     velocityLaneOpen_=false;
+   auto fit=CompactRowViewport::fittingRows(clientHeight,kGridY,kRowHeight,
+      velocityLaneOpen_?VelocityLane::kFooterHeight:VelocityLane::kClosedFooterHeight);
+   // A host smaller than one complete row+footer is outside our minimum;
+   // keep first row accessible instead of losing every control.
+   compactPageRows_=std::max(std::size_t{1},fit);
    firstRow_=CompactRowViewport::first(controller_.visibleRows(),firstRow_);
    fillMenuRow_=-1;
    status_="HOST-RESIZE ABGELEHNT: ZEILEN MIT < > WECHSELN";
@@ -699,8 +727,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
 
  if(compactViewport_&&y>=39&&y<69&&x>=1005&&x<1060) {
-   if(x<1032)firstRow_=CompactRowViewport::previous(controller_.visibleRows(),firstRow_);
-   else firstRow_=CompactRowViewport::next(controller_.visibleRows(),firstRow_);
+   if(x<1032)firstRow_=firstRow_>=compactPageRows_?firstRow_-compactPageRows_:0;
+   else if(firstRow_+compactPageRows_<controller_.visibleRows())
+     firstRow_+=compactPageRows_;
    fillMenuRow_=-1;invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
@@ -821,12 +850,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  if(velocityLaneOpen_&&!songEditorOpen_&&
     VelocityLane::hit(x,y,gridBottom)) {
+    laneDragPattern_=controller_.currentPattern();
+    controller_.beginVelocityStroke(laneDragPattern_);
     laneDragActive_=true;
     laneErase_=(buttons&VSTGUI::kControl)!=0;
     const auto step=static_cast<std::size_t>(VelocityLane::stepAt(x));
     velocityStep_=step;
     const auto vel=VelocityLane::valueAt(y,gridBottom,laneErase_);
-    if(!controller_.setStepVelocity(controller_.currentPattern(),velocityRow_,step,vel))
+    if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,step,vel))
       status_="VELOCITY-BALKEN NICHT UEBERNOMMEN";
     invalid();
     return VSTGUI::kMouseEventHandled;
@@ -986,7 +1017,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
  if(!(buttons&VSTGUI::kLButton)){
-   laneDragActive_=false;return VSTGUI::kMouseEventHandled;
+   laneDragActive_=false;
+   controller_.endVelocityStroke(true);
+   return VSTGUI::kMouseEventHandled;
  }
  const double bottom=kGridY+displayedRows()*kRowHeight;
  const auto step=VelocityLane::stepAt(pos.x);
@@ -994,7 +1027,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
    return VSTGUI::kMouseEventHandled;
  const auto mapped=VelocityLane::valueAt(pos.y,bottom,laneErase_);
  velocityStep_=static_cast<std::size_t>(step);
- if(!controller_.setStepVelocity(controller_.currentPattern(),velocityRow_,
+ if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,
                                  velocityStep_,mapped))
    status_="VELOCITY-ZIEHEN NICHT UEBERNOMMEN";
  invalid();
@@ -1004,10 +1037,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
     VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
  laneDragActive_=false;
+ controller_.endVelocityStroke(true);
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel() {
  laneDragActive_=false;
+ controller_.endVelocityStroke(false);
  return VSTGUI::kMouseEventHandled;
 }
 }

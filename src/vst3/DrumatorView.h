@@ -1,6 +1,7 @@
 #pragma once
 #include "vstgui/lib/cview.h"
 #include "vstgui/lib/controls/icontrollistener.h"
+#include "vstgui/lib/controls/itexteditlistener.h"
 #include "vstgui/lib/dragging.h"
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include <string>
@@ -9,7 +10,7 @@ namespace VSTGUI {class CTextEdit;}
 namespace drumator {
 class Controller;
 class DrumatorView final : public VSTGUI::CView, public VSTGUI::IDropTarget,
-                           public VSTGUI::IControlListener {
+                           public VSTGUI::IControlListener, public VSTGUI::ITextEditListener {
 public:
  ~DrumatorView() override;
  void refreshFromHost(bool relayout);
@@ -19,6 +20,9 @@ public:
  bool attached(VSTGUI::CView* parent) override;
  bool removed(VSTGUI::CView* parent) override;
  void valueChanged(VSTGUI::CControl* control) override;
+ void onTextEditPlatformControlTookFocus(VSTGUI::CTextEdit*) override {}
+ void onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit*) override;
+ bool applyZoomFromState(double factor);
  VSTGUI::CMouseEventResult onMouseDown(
      VSTGUI::CPoint& point,const VSTGUI::CButtonState& buttons) override;
  VSTGUI::CMouseEventResult onMouseMoved(
@@ -48,8 +52,10 @@ private:
  bool songEditorOpen_{false};
  bool velocityLaneOpen_{false};
  bool laneDragActive_{false};
+ std::size_t laneDragPattern_{0};
  bool laneErase_{false};
  bool compactViewport_{false};
+ std::size_t compactPageRows_{4};
  std::size_t displayedRows() const noexcept;
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
  void load(std::size_t row);

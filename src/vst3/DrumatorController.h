@@ -49,6 +49,8 @@ public:
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool setStepVelocity(std::size_t pattern,std::size_t row,std::size_t step,std::uint8_t velocity);
+ void beginVelocityStroke(std::size_t p);
+ void endVelocityStroke(bool commit);
  bool changePattern(std::size_t pattern);
  bool togglePatternLength(std::size_t pattern);
  std::uint8_t patternLength(std::size_t p) const noexcept {return p<kPatterns?patternLengths_[p]:32;}
@@ -109,6 +111,8 @@ private:
  std::array<std::uint8_t,kPatterns> patternLengths_{{32,32,32,32,32,32,32,32}};
  PatternSteps clipboard_{};
  PatternUndo undo_{};
+ PatternSteps strokeBefore_{};
+ std::size_t strokePattern_{kPatterns};
  bool clipboardValid_{false};
  bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true);
  void rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next);

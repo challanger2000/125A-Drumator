@@ -2,6 +2,7 @@
 #include "core/KitRestoreGate.h"
 #include "core/AtomicPatternSelection.h"
 #include "core/RowResizeTransaction.h"
+#include "core/CompactRowViewport.h"
 #include "core/HostEditDirty.h"
 #include "core/PatternQuantization.h"
 #include "core/AtomicPatternBank.h"
@@ -48,6 +49,16 @@ int main(){
    check(tryRowResizeTransaction([]{return false;},[]{return true;},[]{return true;})==
          RowResizeResult::EditRejected,"F10 edit rejection not preserved");
    std::cout<<"F10 resize reject/rollback regression PASS\\n";
+   check(CompactRowViewport::fittingRows(300,108,29,105)==3,
+         "A06 300px host fallback must fit only 3 complete rows");
+   check(CompactRowViewport::fittingRows(357,108,29,220)==1,
+         "A06 357px host with velocity lane must fit 1 row");
+   check(CompactRowViewport::fittingRows(357,108,29,105)==4,
+         "A06 collapsed lane permits 4 rows");
+   check(CompactRowViewport::fittingRows(792,108,29,220)==4,
+         "A06 normal pageable four-row cap");
+   check(CompactRowViewport::fittingRows(200,108,29,105)==0,
+         "A06 impossible host height must be explicitly identified");
    int dirtyCalls=0;
    markSuccessfulHostEdit(false,[&](){++dirtyCalls;});
    check(dirtyCalls==0,"F05 rejected edit dirtied host project");
