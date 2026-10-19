@@ -12,7 +12,7 @@ Interpretation: **Implemented** means a concrete UI/controller/processor path ex
 | Independent instrument names | Implemented DM14 | #39307595099 SUCCESS; actual in-host Shift+label text entry remains owner QA |
 | Per-row volume, pan, pitch, mute, solo, four choke groups | Implemented | Host control/state and voice-engine QA; user-reported +100 pan interaction needs owner regression |
 | 16 stereo output buses including MAIN and selectable per-row destinations | Implemented | Packaged multiple-stem host test PASS; actual bus activation/routing visibility in Studio One needs owner QA |
-| Step velocity: per-step data, step color, Shift+step cycling and +/- adjustments | Implemented basic | Packaged step edit and project recall; **dedicated graphical 32-step velocity lane/editor still not implemented** |
+| Step velocity: per-step data, step color, Shift+step cycling, +/- and 32-bar graphical editor | **Implemented; Windows QA PASS** | 32-bar click/drag/Ctrl-erase lane in source `3944ed2`, Actions #39314206625 SUCCESS (11/11 CTests); manual Studio One mouse QA outstanding |
 | Swing + deterministic humanize and per-row velocity randomization | Implemented | Deterministic split-buffer core QA; user-reported swing drift needs real DAW test |
 | Sample retrigger, voice cap, choke fades | Implemented | 64-voice engine and choke QA; extended paced realtime soak not run |
 | FILL 2/4/8/ALL/CLEAR, Snare 2+4, hat offbeat, gallop, ghost | Implemented | Core fill tests and GUI/menu handlers; owner mouse interaction gate |
@@ -30,9 +30,9 @@ Interpretation: **Implemented** means a concrete UI/controller/processor path ex
 ## Priorities before final-branded VSTGUI
 
 1. DM15 1T/2T functional pattern length is now Windows-verified; complete native Studio One interaction and project-reopen QA.
-2. Implement a genuine visual velocity editor (32 bars per selected instrument) without interfering with FL-style step workflow.
+2. The graphical 32-bar per-instrument velocity editor is now implemented and Windows-QA verified; test native Studio One mouse-drag, Ctrl+erase, zoom and resize.
 3. Reproduce and close owner-reported swing timing and host position at bar 2, output activation/pan limit, and native sample preview/renaming interaction.
 4. Scope and design final VSTGUI using official master branding; no new effects or speculative DSP without explicit scope acceptance.
 5. Perform full Windows VST3 QA and Studio One acceptance, verify exact artifact provenance before release.
 
-**No code-backed evidence that optional SP-1200-style coloration or a dedicated velocity-lane GUI already exists.** Do not reimplement confirmed working Fill, Multi-Out, Copy/Paste, names or preview.
+**Optional SP-1200-style coloration remains unimplemented.** The dedicated 32-bar velocity lane is now implemented in the functional VSTGUI prototype, but not yet user-approved in Studio One. Do not reimplement confirmed working Fill, Multi-Out, Copy/Paste, names or preview.
