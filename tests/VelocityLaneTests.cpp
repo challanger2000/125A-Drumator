@@ -3,7 +3,7 @@
 using drumator::VelocityLane;
 int main() {
  constexpr double bottom=224.0;
- static_VERIFY(VelocityLane::kBarCount==32);
+ static_assert(VelocityLane::kBarCount==32);
  VERIFY(VelocityLane::stepAt(621.99)==-1);
  VERIFY(VelocityLane::stepAt(622.0)==0);
  VERIFY(VelocityLane::stepAt(622.0+19.*15.+9.)==15);
