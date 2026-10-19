@@ -463,15 +463,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{1072,buttonsY+34,1142,buttonsY+64},"+1");
  drawControl(c,{1150,buttonsY+34,1220,buttonsY+64},"+10");
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-    const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-150.0));
-    const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR"};
-    for(int i=0;i<6;++i) {
-      const double y=top+i*25.;
-      c->setFillColor(panel);
-      c->drawRect({650,y,755,y+24},VSTGUI::kDrawFilled);
-      c->setFontColor(letters);
-      c->drawString(names[i],VSTGUI::CRect(650,y,755,y+24));
-    }
+    const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-230.0));
+    const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HIHAT","GALOPP","SNARE + GHOST"};
+    for(int i=0;i<9;++i){const double y=top+i*25.;drawControl(c,{650,y,819,y+24},names[i]);}
  }
  // Full 64-slot chain board. Pattern and length choices are direct buttons.
  // Board overlays the step matrix, leaving drag-and-drop behavior untouched
@@ -590,13 +584,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
  if(fillMenuRow_>=0) {
-   const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-150.0));
+   const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-230.0));
    const int row=fillMenuRow_;
    fillMenuRow_=-1;
-   if(x>=650&&x<755&&y>=top&&y<top+150) {
+   if(x>=650&&x<819&&y>=top&&y<top+225) {
      const int option=static_cast<int>((y-top)/25.);
-     const RowFill items[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,RowFill::Snare24,RowFill::All,RowFill::Clear};
-     if(option>=0&&option<6&&!controller_.fillRow(static_cast<std::size_t>(row),items[option]))
+     const RowFill items[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,RowFill::Snare24,RowFill::All,RowFill::Clear,RowFill::Offbeat8,RowFill::Gallop,RowFill::SnareGhost};
+     if(option>=0&&option<9&&!controller_.fillRow(static_cast<std::size_t>(row),items[option]))
        status_="FILL NICHT UEBERNOMMEN";
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }

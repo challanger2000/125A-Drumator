@@ -1,4 +1,5 @@
 #include "core/SequencerCore.h"
+#include "core/RowFill.h"
 #include "core/SongChain.h"
 #include "core/SampleFolderNavigation.h"
 #include "core/CompactRowViewport.h"
@@ -10,6 +11,11 @@
 #include <vector>
 using namespace drumator;
 static void check(bool ok,const char* msg){if(!ok)throw std::runtime_error(msg);}
+static_assert(filledRow(RowFill::Offbeat8)[1]==127&&filledRow(RowFill::Offbeat8)[0]==0);
+static_assert(filledRow(RowFill::Gallop)[2]==95&&filledRow(RowFill::Gallop)[3]==84);
+static_assert(filledRow(RowFill::SnareGhost)[4]==127&&filledRow(RowFill::SnareGhost)[11]==42);
+static_assert(filledRow(RowFill::Clear)[0]==0);
+
 static std::vector<Trigger> get(const PatternBank& b,Clock t,
    ScheduleStatus expected=ScheduleStatus::Ok){
  std::vector<Trigger> a;
