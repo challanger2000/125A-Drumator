@@ -729,6 +729,8 @@ int main(int argc,char** argv) {
        barLevels[frame/96000]=magnitude/140.0;
      }
    }
+   std::cout<<"PACKAGED ABA measured levels: A="<<barLevels[0]
+            <<" B="<<barLevels[1]<<" A="<<barLevels[2]<<'\\n';
    require(barLevels[0]>0.1&&barLevels[1]>0.04&&barLevels[2]>0.1,
            "Actual packaged VST3 ABA song omitted a bar onset");
    require(barLevels[1]<barLevels[0]*0.75&&
