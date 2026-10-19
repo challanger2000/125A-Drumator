@@ -612,9 +612,16 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  std::array<std::uint8_t,kRows> variation{};
  for(std::size_t i=0;i<kRows;++i)
    variation[i]=randomVelocity_[i].load(std::memory_order_relaxed);
- const auto ppqNow=context&&std::isfinite(context->projectTimeMusic)?
-     static_cast<std::int64_t>(std::floor(context->projectTimeMusic*4.0)):0;
- triggers_.varyVelocity(variation,ppqNow);
+ const auto validTiming=context&&
+     (context->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                      Steinberg::Vst::ProcessContext::kTempoValid))==
+                     (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                      Steinberg::Vst::ProcessContext::kTempoValid)&&
+     std::isfinite(context->projectTimeMusic)&&
+     std::isfinite(context->tempo)&&context->tempo>0.0;
+ triggers_.varyVelocity(variation,validTiming?context->projectTimeMusic:0.0,
+                        validTiming?context->tempo:120.0,
+                        processSetup.sampleRate);
  triggers_.sort();
  std::array<float*,kRows> stemsL{},stemsR{};
  for(Steinberg::int32 bus=1;bus<data.numOutputs&&

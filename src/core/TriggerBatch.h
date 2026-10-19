@@ -47,12 +47,17 @@ public:
     // Absolute PPQ position plus pattern/row/step yield identical velocity
     // regardless of the number of host audio callbacks.
     void varyVelocity(const std::array<std::uint8_t,kRows>& amount,
-                      std::int64_t absoluteBlockStep) noexcept {
+                      double startPpq,double bpm,double sampleRate) noexcept {
         for(std::size_t i=0;i<size_;++i) {
             auto& hit=events_[i];
             const auto depth=amount[hit.row];
             if(depth==0)continue;
-            std::uint32_t hash=static_cast<std::uint32_t>(absoluteBlockStep)*
+            const double musicalStep=(startPpq+
+                static_cast<double>(hit.sampleOffset)*bpm/(60.0*sampleRate))*4.0;
+            const auto stepIndex=std::isfinite(musicalStep)&&
+                musicalStep>-1.0e12&&musicalStep<1.0e12?
+                static_cast<std::int64_t>(std::floor(musicalStep+1.e-7)):0;
+            std::uint32_t hash=static_cast<std::uint32_t>(stepIndex)*
                 0x9e3779b9u^static_cast<std::uint32_t>(hit.pattern+1)*0x85ebca6bu^
                 static_cast<std::uint32_t>(hit.row+1)*0xc2b2ae35u^
                 static_cast<std::uint32_t>(hit.step+1)*0x27d4eb2fu;

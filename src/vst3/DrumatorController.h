@@ -65,6 +65,8 @@ public:
  bool fillRow(std::size_t row,RowFill mode);
  bool adjustSwing(int delta);
  bool adjustHumanize(int delta);
+ bool adjustMasterVolume(int delta);
+ unsigned masterVolume() const noexcept {return masterVolume_;}
  bool adjustRandomVelocity(std::size_t row,int delta);
  unsigned rowRandomVelocity(std::size_t row) const noexcept {
    return row<kRows?randomVelocity_[row]:0;
@@ -109,6 +111,7 @@ private:
  double preferredZoom_{1.0};
  std::uint8_t swingPercent_{0};
  std::uint8_t humanizePercent_{0};
+ std::uint8_t masterVolume_{100};
  std::array<std::uint8_t,kRows> randomVelocity_{};
  SongChain songChain_{};
  bool songEnabled_{false};

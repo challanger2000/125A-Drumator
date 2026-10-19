@@ -32,6 +32,9 @@ int main() {
     original.visible=6;original.selected=5;
     original.muted=0x8001;original.solo=0x0006;original.swing=35;original.humanize=70;
     original.songEnabled=1;
+    original.randomVelocity[0]=45;
+    original.randomVelocity[15]=80;
+    original.masterVolume=73;
     check(original.chain.setCount(3)&&original.chain.configure(0,0,16)&&
           original.chain.configure(1,1,8)&&original.chain.configure(2,2,32),
           "DM12 chain setup");
@@ -61,6 +64,8 @@ int main() {
           copy.chain.entry(0).steps==16&&copy.chain.entry(1).pattern==1&&
           copy.chain.entry(1).steps==8&&copy.chain.entry(2).steps==32,
           "DM12 chain roundtrip");
+    check(copy.randomVelocity==original.randomVelocity&&copy.masterVolume==73,
+          "DM13 random velocity/master roundtrip");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
     check(copy.names==original.names,"Sample names not restored");
     check(copy.wav==original.wav,"Source WAV bytes not identical");
@@ -84,8 +89,24 @@ int main() {
           "out-of-range DM11 bus accepted despite valid checksum");
     check(copy.output==preservedRouting.output&&copy.grid==preservedRouting.grid,
           "rejected bus changed previously loaded kit");
-    // Remove the DM11 output table to create a legitimate DM10 fixture.
-    auto legacyBase=encoded;
+    // Create a genuine DM12 fixture, migrating its absent mix/random fields.
+    auto old12=encoded;
+    old12.erase(old12.begin()+226,old12.begin()+243);
+    for(int i=0;i<4;++i)old12[static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(kKitMagicV12>>(8*i));
+    const auto old12Size=static_cast<std::uint32_t>(old12.size()-8);
+    for(int i=0;i<4;++i)old12[4+static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(old12Size>>(8*i));
+    const auto old12Hash=KitCodec::hash(old12.data()+8,old12.size()-12);
+    for(int i=0;i<4;++i)old12[old12.size()-4+static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(old12Hash>>(8*i));
+    KitState restored12{};
+    check(KitCodec::decode(old12.data(),old12.size(),restored12)&&
+          restored12.masterVolume==100&&restored12.randomVelocity[0]==0&&
+          restored12.songEnabled==1&&restored12.chain.count()==3,
+          "DM12 migration must preserve SONG and default new controls");
+    // Remove DM11 output table to create legitimate DM10 fixture.
+    auto legacyBase=old12;
     // Remove DM12 song data at offset 96 before deriving older fixtures.
     legacyBase.erase(legacyBase.begin()+96,legacyBase.begin()+226);
     legacyBase.erase(legacyBase.begin()+78,legacyBase.begin()+94);

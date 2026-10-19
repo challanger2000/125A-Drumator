@@ -125,6 +125,8 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        visibleRows_=candidate.visible;
        swingPercent_=candidate.swing;
        humanizePercent_=candidate.humanize;
+       masterVolume_=candidate.masterVolume;
+       randomVelocity_=candidate.randomVelocity;
        songEnabled_=candidate.songEnabled!=0;
        songChain_=candidate.chain;
        for(std::size_t row=0;row<kRows;++row) {
@@ -165,6 +167,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  visibleRows_=candidateRows;
  samplePaths_.fill({});
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
+ randomVelocity_.fill(0);masterVolume_=100;
  songEnabled_=false;songChain_=SongChain{};
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
@@ -415,6 +418,19 @@ bool Controller::adjustRandomVelocity(std::size_t row,int delta) {
  const auto ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok){randomVelocity_[row]=static_cast<std::uint8_t>(value);notifyViews(false);}
+ return ok;
+}
+bool Controller::adjustMasterVolume(int delta) {
+ const auto value=std::clamp(static_cast<int>(masterVolume_)+delta,0,200);
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.MasterVolume");
+ auto* attrs=msg->getAttributes();
+ if(!attrs||attrs->setInt("Percent",value)!=Steinberg::kResultOk){
+   msg->release();return false;
+ }
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok){masterVolume_=static_cast<std::uint8_t>(value);notifyViews(false);}
  return ok;
 }
 bool Controller::adjustHumanize(int delta) {

@@ -340,11 +340,17 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
              controller_.songEnabled());
  drawControl(c,{652,74,850,98},songEditorOpen_?"ZURUECK ZUM PATTERN":"SONG-KETTE EDITIEREN",
              songEditorOpen_);
+ char masterLabel[32]{};
+ std::snprintf(masterLabel,sizeof(masterLabel),"MASTER %u%%",controller_.masterVolume());
+ c->setFontColor(accent);
+ c->drawString(masterLabel,VSTGUI::CRect(1037,74,1135,98),VSTGUI::kLeftText);
+ drawControl(c,{1140,74,1180,98},"-");
+ drawControl(c,{1184,74,1228,98},"+");
  char songSummary[64]{};
  std::snprintf(songSummary,sizeof(songSummary),"CHAIN: %u EINTRAEGE  |  1/2 / 1 / 2 TAKTE",
                static_cast<unsigned>(controller_.songCount()));
  c->setFontColor(accent);
- c->drawString(songSummary,VSTGUI::CRect(866,74,1244,98),VSTGUI::kLeftText);
+ c->drawString(songSummary,VSTGUI::CRect(866,74,1030,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
    const double y=kGridY+(row-firstRow_)*kRowHeight;
@@ -592,6 +598,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    else firstRow_=CompactRowViewport::next(controller_.visibleRows(),firstRow_);
    fillMenuRow_=-1;invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
+ if(y>=74&&y<98&&x>=1140&&x<1228){
+   const int amount=(buttons&VSTGUI::kControl)?
+     -static_cast<int>(controller_.masterVolume()):(x<1182?-5:5);
+   if(!controller_.adjustMasterVolume(amount))status_="MASTER LEVEL NICHT UEBERNOMMEN";
+   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
  if(y>=74&&y<98&&x>=540&&x<850) {
    bool ok=true;
