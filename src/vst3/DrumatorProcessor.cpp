@@ -109,6 +109,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.RowOutput")!=0&&
     std::strcmp(id,"Drumator.Swing")!=0&&
     std::strcmp(id,"Drumator.Humanize")!=0&&
+    std::strcmp(id,"Drumator.SongConfig")!=0&&
     std::strcmp(id,"Drumator.ClearSample")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
@@ -133,6 +134,30 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       return Steinberg::kResultFalse;
    kit_.wav[static_cast<std::size_t>(index)].clear();
    kit_.names[static_cast<std::size_t>(index)].clear();
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.SongConfig")==0) {
+   Steinberg::int64 enabled=-1,count=-1;
+   if(attrs->getInt("Enabled",enabled)!=Steinberg::kResultOk||
+      attrs->getInt("Count",count)!=Steinberg::kResultOk||
+      (enabled!=0&&enabled!=1)||count<1||
+      count>static_cast<Steinberg::int64>(SongChain::kCapacity))
+      return Steinberg::kInvalidArgument;
+   const void* bytes=nullptr;
+   Steinberg::uint32 size=0;
+   if(attrs->getBinary("Entries",bytes,size)!=Steinberg::kResultOk||
+      !bytes||size!=static_cast<Steinberg::uint32>(count*2))
+      return Steinberg::kInvalidArgument;
+   SongChain candidate;
+   if(!candidate.setCount(static_cast<std::size_t>(count)))return Steinberg::kInvalidArgument;
+   const auto* entries=static_cast<const std::uint8_t*>(bytes);
+   for(std::size_t i=0;i<static_cast<std::size_t>(count);++i)
+     if(!candidate.configure(i,entries[2*i],entries[2*i+1]))
+       return Steinberg::kInvalidArgument;
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   kit_.songEnabled=static_cast<std::uint8_t>(enabled);
+   kit_.chain=candidate;
+   songMailbox_.publish(candidate,enabled!=0);
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.Humanize")==0) {
@@ -457,6 +482,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    const auto rate=processSetup.sampleRate;
    const auto swing=swingPercent_.load(std::memory_order_relaxed)/100.0;
    const auto humanize=humanizePercent_.load(std::memory_order_relaxed)/100.0;
+   (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_);
    std::uint32_t activePattern=selected_.load(std::memory_order_relaxed);
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
@@ -484,10 +510,37 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      } read{consistent,static_cast<std::uint8_t>(activePattern)};
      const Clock clock{initialPpq+static_cast<double>(cursor)*tempo/(60.0*rate),
                        tempo,rate,finish-cursor,true,swing,humanize,phaseOriginStep_};
-     const auto scheduled=StepScheduler::run(read,clock,[&](Trigger hit){
+     std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> songPrograms{};
+     struct SongRead {
+       const std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns>& values;
+       const SongChain& chain;
+       std::uint8_t selected() const noexcept {return 0;}
+       SongChain::Position mapStep(std::int64_t step,std::int64_t origin) const noexcept {
+         return chain.at(step,origin);
+       }
+       std::uint8_t get(std::size_t program,std::size_t row,std::size_t step) const noexcept {
+         return program<kPatterns&&row<kRows&&step<kSteps?
+            values[program][row*kSteps+step]:0;
+       }
+     } songRead{songPrograms,audioSongChain_};
+     if(audioSongEnabled_) {
+       for(std::size_t program=0;program<kPatterns;++program){
+         std::array<std::uint8_t,kRows*kSteps> coherent{};
+         if(patterns_.coherentPattern(program,coherent)){
+           audioPatternCache_[program]=coherent;
+           audioPatternValid_[program]=true;
+         }
+         if(audioPatternValid_[program])
+           songPrograms[program]=audioPatternCache_[program];
+       }
+     }
+     auto emitTrigger=[&](Trigger hit){
        hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
        triggers_.appendStep(hit);
-     });
+     };
+     const auto scheduled=audioSongEnabled_?
+           StepScheduler::run(songRead,clock,emitTrigger):
+           StepScheduler::run(read,clock,emitTrigger);
      if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
      cursor=finish;
    };
@@ -671,6 +724,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
     kit_=std::move(candidate);
+    songMailbox_.publish(kit_.chain,kit_.songEnabled!=0);
     // Publish restored rhythms per complete pattern generation. A live
     // scheduler must never observe a half-restored pattern.
     for(std::size_t p=0;p<kPatterns;++p)
