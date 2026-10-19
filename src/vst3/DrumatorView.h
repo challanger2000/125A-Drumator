@@ -28,6 +28,7 @@ private:
  int fillMenuRow_{-1};
  std::size_t firstRow_{0};
  std::size_t songSlot_{0};
+ bool songEditorOpen_{false};
  bool compactViewport_{false};
  std::size_t displayedRows() const noexcept;
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};

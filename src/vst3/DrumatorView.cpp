@@ -329,25 +329,18 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
  c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
  c->setFillColor(controller_.songEnabled()?accent:panel);
- c->drawRect({540,74,635,98},VSTGUI::kDrawFilled);
+ c->drawRect({540,74,638,98},VSTGUI::kDrawFilled);
  c->setFontColor(controller_.songEnabled()?background:letters);
- c->drawString(controller_.songEnabled()?"SONG ON":"SONG OFF",VSTGUI::CRect(540,74,635,98));
- c->setFontColor(letters);
- c->drawString("COUNT - +",VSTGUI::CRect(641,74,730,98));
- c->drawString("<",VSTGUI::CRect(738,74,760,98));
- c->drawString(">",VSTGUI::CRect(762,74,784,98));
- const auto slot=std::min(songSlot_,controller_.songCount()-1);
- const auto entry=controller_.songEntry(slot);
- char chainText[52]{};
- std::snprintf(chainText,sizeof(chainText),"%02u/%02u  %c  %s",
-    static_cast<unsigned>(slot+1),static_cast<unsigned>(controller_.songCount()),
-    static_cast<char>('A'+entry.pattern),
-    entry.steps==8?"1/2":(entry.steps==16?"1 BAR":"2 BAR"));
+ c->drawString(controller_.songEnabled()?"SONG ON":"SONG OFF",VSTGUI::CRect(540,74,638,98));
+ c->setFillColor(songEditorOpen_?accent:panel);
+ c->drawRect({652,74,850,98},VSTGUI::kDrawFilled);
+ c->setFontColor(songEditorOpen_?background:letters);
+ c->drawString(songEditorOpen_?"PATTERN-ANSICHT":"SONG-KETTE BEARBEITEN",VSTGUI::CRect(652,74,850,98));
+ char songSummary[64]{};
+ std::snprintf(songSummary,sizeof(songSummary),"CHAIN: %u EINTRAEGE  |  1/2 / 1 / 2 TAKTE",
+               static_cast<unsigned>(controller_.songCount()));
  c->setFontColor(accent);
- c->drawString(chainText,VSTGUI::CRect(790,74,1030,98));
- c->setFontColor(letters);
- c->drawString("PAT - +",VSTGUI::CRect(1032,74,1124,98));
- c->drawString("LEN - +",VSTGUI::CRect(1134,74,1230,98));
+ c->drawString(songSummary,VSTGUI::CRect(866,74,1244,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
    const double y=kGridY+(row-firstRow_)*kRowHeight;
@@ -463,6 +456,64 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
       c->drawString(names[i],VSTGUI::CRect(650,y,755,y+24));
     }
  }
+ // Full 64-slot chain board. Pattern and length choices are direct buttons.
+ // Board overlays the step matrix, leaving drag-and-drop behavior untouched
+ // in normal PATTERN view.
+ if(songEditorOpen_) {
+   c->setFillColor(background);
+   c->drawRect({8,101,1252,contentHeight(controller_.visibleRows())-1},VSTGUI::kDrawFilled);
+   c->setFont(VSTGUI::kNormalFont,13);
+   c->setFontColor(letters);
+   c->drawString("SONG-ABLAUF  |  POSITION ANKLICKEN  |  PATTERN UND LAENGE UNTEN DIREKT WAEHLEN",
+                 VSTGUI::CRect(16,105,1240,126),VSTGUI::kLeftText);
+   const auto count=controller_.songCount();
+   for(std::size_t index=0;index<SongChain::kCapacity;++index) {
+     const double sx=16+static_cast<double>(index%16)*76.0;
+     const double sy=134+static_cast<double>(index/16)*32.0;
+     const bool available=index<count,selected=index==songSlot_;
+     c->setFillColor(selected?accent:(available?panel:background));
+     c->drawRect({sx,sy,sx+73,sy+29},VSTGUI::kDrawFilled);
+     c->setFontColor(selected?background:(available?letters:border));
+     char cell[32]{};
+     if(available) {
+       const auto e=controller_.songEntry(index);
+       std::snprintf(cell,sizeof(cell),"%02u %c %s",
+           static_cast<unsigned>(index+1),static_cast<char>('A'+e.pattern),
+           e.steps==8?"1/2":(e.steps==16?"1":"2"));
+     }else std::snprintf(cell,sizeof(cell),"%02u +",static_cast<unsigned>(index+1));
+     c->drawString(cell,VSTGUI::CRect(sx,sy,sx+73,sy+29));
+   }
+   c->setFont(VSTGUI::kNormalFont,12);
+   c->setFontColor(accent);
+   c->drawString("PATTERN:",VSTGUI::CRect(16,277,120,301),VSTGUI::kLeftText);
+   for(std::size_t idx=0;idx<8;++idx) {
+     const auto chosen=controller_.songEntry(std::min(songSlot_,count-1)).pattern==idx;
+     const double bx=115+idx*56.0;
+     c->setFillColor(chosen?accent:panel);
+     c->drawRect({bx,277,bx+50,303},VSTGUI::kDrawFilled);
+     char letter[2]{static_cast<char>('A'+idx),0};
+     c->setFontColor(chosen?background:letters);
+     c->drawString(letter,VSTGUI::CRect(bx,277,bx+50,303));
+   }
+   c->setFontColor(accent);
+   c->drawString("LAENGE:",VSTGUI::CRect(594,277,681,303),VSTGUI::kLeftText);
+   const char* lenNames[]={"1/2 TAKT","1 TAKT","2 TAKTE"};
+   const std::uint8_t lenSteps[]={8,16,32};
+   for(int idx=0;idx<3;++idx) {
+     const auto chosen=controller_.songEntry(std::min(songSlot_,count-1)).steps==lenSteps[idx];
+     const double bx=678+idx*106.;
+     c->setFillColor(chosen?accent:panel);
+     c->drawRect({bx,277,bx+100,303},VSTGUI::kDrawFilled);
+     c->setFontColor(chosen?background:letters);
+     c->drawString(lenNames[idx],VSTGUI::CRect(bx,277,bx+100,303));
+   }
+   c->setFillColor(panel);
+   c->drawRect({1012,277,1110,303},VSTGUI::kDrawFilled);
+   c->drawRect({1118,277,1239,303},VSTGUI::kDrawFilled);
+   c->setFontColor(letters);
+   c->drawString("+ EINTRAG",VSTGUI::CRect(1012,277,1110,303));
+   c->drawString("LETZTEN LOESCHEN",VSTGUI::CRect(1118,277,1239,303));
+ }
  setDirty(false);
 }
 bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
@@ -552,17 +603,49 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    fillMenuRow_=-1;invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
- if(y>=74&&y<98&&x>=540&&x<1230) {
+ if(y>=74&&y<98&&x>=540&&x<850) {
    bool ok=true;
-   const auto slot=std::min(songSlot_,controller_.songCount()-1);
-   if(x<635)ok=controller_.toggleSongMode();
-   else if(x>=641&&x<730)ok=controller_.adjustSongCount(x<685?-1:1);
-   else if(x>=738&&x<760)songSlot_=slot==0?controller_.songCount()-1:slot-1;
-   else if(x>=762&&x<784)songSlot_=(slot+1)%controller_.songCount();
-   else if(x>=1032&&x<1124)ok=controller_.editSongEntry(slot,x<1078?-1:1,0);
-   else if(x>=1134&&x<1230)ok=controller_.editSongEntry(slot,0,x<1182?-1:1);
-   if(songSlot_>=controller_.songCount())songSlot_=controller_.songCount()-1;
-   if(!ok)status_="SONG-EINSTELLUNG NICHT UEBERNOMMEN";
+   if(x<638)ok=controller_.toggleSongMode();
+   else songEditorOpen_=!songEditorOpen_;
+   if(!ok)status_="SONG-MODUS NICHT UEBERNOMMEN";
+   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
+ if(songEditorOpen_&&y>=101) {
+   bool ok=true;
+   const auto count=controller_.songCount();
+   if(y>=134&&y<262&&x>=16&&x<1232) {
+     const auto col=static_cast<std::size_t>((x-16)/76.);
+     const auto row=static_cast<std::size_t>((y-134)/32.);
+     const auto slot=row*16+col;
+     if(slot<SongChain::kCapacity) {
+       if(slot>=count) {
+         // Clicking the next free slot extends the chain in one action.
+         if(slot==count)ok=controller_.adjustSongCount(1);
+         else status_="BITTE ZUERST DEN NAECHSTEN FREIEN EINTRAG WAEHLEN";
+       }
+       if(slot<controller_.songCount())songSlot_=slot;
+     }
+   }else if(y>=277&&y<303) {
+     const auto slot=std::min(songSlot_,count-1);
+     const auto current=controller_.songEntry(slot);
+     if(x>=115&&x<563) {
+       const auto index=static_cast<std::size_t>((x-115)/56.);
+       if(index<8)ok=controller_.setSongEntry(slot,static_cast<std::uint8_t>(index),current.steps);
+     }else if(x>=678&&x<996) {
+       const auto index=static_cast<std::size_t>((x-678)/106.);
+       if(index<3) {
+         const std::uint8_t lengths[]={8,16,32};
+         ok=controller_.setSongEntry(slot,current.pattern,lengths[index]);
+       }
+     }else if(x>=1012&&x<1110) {
+       ok=controller_.adjustSongCount(1);
+       if(ok)songSlot_=controller_.songCount()-1;
+     }else if(x>=1118&&x<1239) {
+       if(count>1)ok=controller_.adjustSongCount(-1);
+       if(songSlot_>=controller_.songCount())songSlot_=controller_.songCount()-1;
+     }
+   }
+   if(!ok)status_="SONG-EINTRAG NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
  if(y>=74&&y<98&&x>=448&&x<505) {

@@ -232,6 +232,12 @@ bool Controller::adjustSongCount(int delta){
  if(!candidate.setCount(static_cast<std::size_t>(next)))return false;
  return configureSong(songEnabled_,candidate.count(),candidate);
 }
+bool Controller::setSongEntry(std::size_t slot,std::uint8_t pattern,std::uint8_t steps){
+ if(slot>=songChain_.count()||pattern>=kPatterns||!SongChain::validLength(steps))return false;
+ SongChain candidate=songChain_;
+ if(!candidate.configure(slot,pattern,steps))return false;
+ return configureSong(songEnabled_,candidate.count(),candidate);
+}
 bool Controller::editSongEntry(std::size_t slot,int patternDelta,int lengthDelta){
  if(slot>=songChain_.count())return false;
  SongChain candidate=songChain_;

@@ -50,6 +50,7 @@ public:
  bool configureSong(bool enabled,std::size_t count,const SongChain& chain);
  bool toggleSongMode();
  bool editSongEntry(std::size_t slot,int patternDelta,int lengthDelta);
+ bool setSongEntry(std::size_t slot,std::uint8_t pattern,std::uint8_t steps);
  bool adjustSongCount(int delta);
  bool songEnabled() const noexcept {return songEnabled_;}
  std::size_t songCount() const noexcept {return songChain_.count();}
