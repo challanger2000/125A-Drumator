@@ -704,6 +704,40 @@ int main(int argc,char** argv) {
    require(component->setActive(true)==kResultOk,"Pattern activate");
    require(audio->setProcessing(true)==kResultOk,"Pattern resume");
  };
+ // Actual packaged VST3 SONG playback, not merely scheduler simulation:
+ // three successive bars must sound A (loud), B (quiet), A (loud).
+ {
+   patternKit.grid[drumator::AtomicPatternBank::index(1,0,0)]=64;
+   patternKit.songEnabled=1;
+   require(patternKit.chain.setCount(3)&&
+           patternKit.chain.configure(0,0,16)&&
+           patternKit.chain.configure(1,1,16)&&
+           patternKit.chain.configure(2,0,16),
+           "Packaged song ABA configuration");
+   loadPattern(0);
+   context.tempo=120.;
+   context.state=ProcessContext::kPlaying|
+                 ProcessContext::kProjectTimeMusicValid|
+                 ProcessContext::kTempoValid;
+   std::array<double,3> barLevels{};
+   for(std::uint32_t frame=0;frame<288000;frame+=256){
+     context.projectTimeMusic=static_cast<double>(frame)/24000.0;
+     run(-1);
+     if(frame==0||frame==96000||frame==192000){
+       double magnitude=0;
+       for(int n=50;n<190;++n)magnitude+=std::abs(left[n]);
+       barLevels[frame/96000]=magnitude/140.0;
+     }
+   }
+   require(barLevels[0]>0.1&&barLevels[1]>0.04&&barLevels[2]>0.1,
+           "Actual packaged VST3 ABA song omitted a bar onset");
+   require(barLevels[1]<barLevels[0]*0.75&&
+           std::abs(barLevels[2]-barLevels[0])<0.08,
+           "Actual packaged VST3 ABA audio failed pattern A/B/A levels");
+   patternKit.songEnabled=0;
+   patternKit.grid[drumator::AtomicPatternBank::index(1,0,0)]=0;
+   std::cout<<"Packaged VST3 three-bar ABA audio playback PASS\\n";
+ }
  loadPattern(0);
  context.tempo=120.;
  context.projectTimeMusic=0.;
