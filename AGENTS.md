@@ -1,5 +1,9 @@
 # 125A Drumator — development instructions
 
+## Aktueller Entwicklungsstand nach Codex A01–A09 (19.10.2026)
+
+Quellcode `dbd9106f7af48b23ad4874a1a4c74395baa14173`, [GitHub Actions #39335925418](https://github.com/challanger2000/125A-Drumator/actions/runs/39335925418) **SUCCESS**: 15/15 CTests, Steinberg Validator 47/47 und paketierte VST3-Audio-/Editor-Smokes. Alle neun identifizierten Codex-Befunde sind im Quellcode bearbeitet; Details und noch offene **native Studio-One-Gates** in [docs/CODEX-FINDINGS-REPAIR-2026-10-19.md](docs/CODEX-FINDINGS-REPAIR-2026-10-19.md). Keine finale 125A-Drumator-GUI, keine Freigabe als V1; die bisherigen Statusabschnitte darunter sind historische Fixpunkte.
+
 ## Stand nach Fehlerkorrektur (19.10.2026)
 
 **Aktueller geprüfter Produktionscode: `b6c40d0c918f92c0d63e343dc72caa0793528fb5`, [Windows Actions #39324490951](https://github.com/challanger2000/125A-Drumator/actions/runs/39324490951) SUCCESS.** 13/13 CTests einschließlich echter Song-Chain-Release-Checks, absichtlichem Negativtest und Header-Hitbox-Test; Steinberg Validator 47/47 PASS; paketierter GUI-/Audio-Host-Smoke PASS. P1-01, P2-03 (UIDESC-Obergrenze), konkrete P2-06-Headerlücken, P3-08 und die zwei eigenen Compilerwarnungen wurden im Quellcode behoben.
