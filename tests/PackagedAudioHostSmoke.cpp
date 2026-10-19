@@ -12,6 +12,7 @@
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "vst3/PluginIDs.h"
+#include "core/Utf8Path.h"
 #include "core/KitState.h"
 #include "core/AtomicPatternBank.h"
 #include "core/FlacImport.h"
@@ -73,7 +74,7 @@ std::vector<std::uint8_t> makeWav(int bits,bool float32,float amplitude) {
 }
 int main(int argc,char** argv) {
  require(argc==2,"expected packaged .vst3 binary argument");
- auto* dll=LoadLibraryW(std::filesystem::u8path(argv[1]).c_str());
+ auto* dll=LoadLibraryW(drumator::pathFromUtf8(argv[1]).c_str());
  require(dll!=nullptr,"LoadLibraryW failed");
  using PluginInit=bool (*)();
  auto* init=reinterpret_cast<PluginInit>(GetProcAddress(dll,"InitDll"));
