@@ -44,6 +44,25 @@ public:
         }
         size_=kept;
     }
+    // Absolute PPQ position plus pattern/row/step yield identical velocity
+    // regardless of the number of host audio callbacks.
+    void varyVelocity(const std::array<std::uint8_t,kRows>& amount,
+                      std::int64_t absoluteBlockStep) noexcept {
+        for(std::size_t i=0;i<size_;++i) {
+            auto& hit=events_[i];
+            const auto depth=amount[hit.row];
+            if(depth==0)continue;
+            std::uint32_t hash=static_cast<std::uint32_t>(absoluteBlockStep)*
+                0x9e3779b9u^static_cast<std::uint32_t>(hit.pattern+1)*0x85ebca6bu^
+                static_cast<std::uint32_t>(hit.row+1)*0xc2b2ae35u^
+                static_cast<std::uint32_t>(hit.step+1)*0x27d4eb2fu;
+            hash^=hash>>16;hash*=0x7feb352du;hash^=hash>>15;
+            const int deviation=static_cast<int>(hash%201u)-100;
+            const int offset=deviation*static_cast<int>(depth)/100;
+            hit.velocity=static_cast<std::uint8_t>(
+                std::clamp(static_cast<int>(hit.velocity)+offset,1,127));
+        }
+    }
     void sort() noexcept {
         std::sort(events_.begin(),events_.begin()+size_,
             [](const Trigger& a,const Trigger& b){

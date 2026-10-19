@@ -402,6 +402,21 @@ bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
  return ok;
 }
+bool Controller::adjustRandomVelocity(std::size_t row,int delta) {
+ if(row>=kRows)return false;
+ const auto value=std::clamp(static_cast<int>(randomVelocity_[row])+delta,0,100);
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.RowRandomVelocity");
+ auto* attrs=msg->getAttributes();
+ if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk||
+    attrs->setInt("Percent",value)!=Steinberg::kResultOk) {
+   msg->release();return false;
+ }
+ const auto ok=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok){randomVelocity_[row]=static_cast<std::uint8_t>(value);notifyViews(false);}
+ return ok;
+}
 bool Controller::adjustHumanize(int delta) {
  const auto next=std::clamp(static_cast<int>(humanizePercent_)+delta,0,100);
  auto* msg=allocateMessage();if(!msg)return false;

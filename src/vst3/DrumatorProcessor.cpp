@@ -109,6 +109,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.RowOutput")!=0&&
     std::strcmp(id,"Drumator.Swing")!=0&&
     std::strcmp(id,"Drumator.Humanize")!=0&&
+    std::strcmp(id,"Drumator.RowRandomVelocity")!=0&&
     std::strcmp(id,"Drumator.SongConfig")!=0&&
     std::strcmp(id,"Drumator.ClearSample")!=0)
     return AudioEffect::notify(msg);
@@ -158,6 +159,16 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    kit_.songEnabled=static_cast<std::uint8_t>(enabled);
    kit_.chain=candidate;
    songMailbox_.publish(candidate,enabled!=0);
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.RowRandomVelocity")==0) {
+   Steinberg::int64 row=-1,percent=-1;
+   if(attrs->getInt("Row",row)!=Steinberg::kResultOk||
+      attrs->getInt("Percent",percent)!=Steinberg::kResultOk||
+      row<0||row>=static_cast<Steinberg::int64>(kRows)||
+      percent<0||percent>100)return Steinberg::kInvalidArgument;
+   randomVelocity_[static_cast<std::size_t>(row)].store(
+       static_cast<std::uint8_t>(percent),std::memory_order_relaxed);
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.Humanize")==0) {
@@ -597,6 +608,13 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      return Steinberg::kResultFalse;
  triggers_.applyMuteSolo(muteMask_.load(std::memory_order_relaxed),
                          soloMask_.load(std::memory_order_relaxed));
+ // Apply realtime-safe per-row random velocity without touching saved steps.
+ std::array<std::uint8_t,kRows> variation{};
+ for(std::size_t i=0;i<kRows;++i)
+   variation[i]=randomVelocity_[i].load(std::memory_order_relaxed);
+ const auto ppqNow=context&&std::isfinite(context->projectTimeMusic)?
+     static_cast<std::int64_t>(std::floor(context->projectTimeMusic*4.0)):0;
+ triggers_.varyVelocity(variation,ppqNow);
  triggers_.sort();
  std::array<float*,kRows> stemsL{},stemsR{};
  for(Steinberg::int32 bus=1;bus<data.numOutputs&&
