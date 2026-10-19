@@ -31,6 +31,28 @@ int main(){
        "mute did not filter expected row");
   batch.applyMuteSolo(0,1u<<15);
   need(batch.size()==1&&batch.data()[0].row==15,"solo isolation failed");
+  // RND velocity: 0% is bit-identical and enabled amounts never create
+  // triggers or modify stored patterns. A callback split must not alter hits.
+  batch.clear();
+  const Trigger reference{0,3,0,100,1};
+  need(batch.appendStep(reference),"random test append");
+  std::array<std::uint8_t,kRows> depth{};
+  batch.varyVelocity(depth,8.0,120.0,48000.0);
+  need(batch.data()[0].velocity==100,"random zero must preserve velocity");
+  depth[3]=100;
+  batch.varyVelocity(depth,8.0,120.0,48000.0);
+  const auto first=batch.data()[0].velocity;
+  need(first>=1&&first<=127,"random must stay in MIDI velocity range");
+  batch.clear();
+  need(batch.appendStep({100,3,0,100,1}),"split callback append");
+  // 100 samples corresponds to the exact offset of the second callback.
+  const double ppq=8.0+100.0*120.0/(60.0*48000.0);
+  batch.varyVelocity(depth,ppq,120.0,48000.0);
+  need(batch.data()[0].velocity==first,"random changed across host blocks");
+  batch.clear();
+  need(batch.appendStep(reference),"random fixed-seed append");
+  batch.varyVelocity(depth,8.0,120.0,48000.0);
+  need(batch.data()[0].velocity==first,"random value must be reproducible");
   batch.clear();
   need(batch.size()==0,"clear");
   for(std::size_t i=0;i<TriggerBatch::kCapacity;++i)
