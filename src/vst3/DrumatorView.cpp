@@ -444,10 +444,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                static_cast<unsigned>(controller_.visibleRows()));
  c->drawString(rowsLabel,VSTGUI::CRect(277,buttonsY,455,buttonsY+29),
                VSTGUI::kLeftText);
- const char* actions[]={"COPY","PASTE","CLEAR"};
- for(int i=0;i<3;++i) {
-   const double x=480+i*115.;
-   drawControl(c,{x,buttonsY,x+109,buttonsY+29},actions[i]);
+ const char* actions[]={"COPY","PASTE","CLEAR","UNDO"};
+ for(int i=0;i<4;++i) {
+   const double x=480+i*90.;
+   drawControl(c,{x,buttonsY,x+85,buttonsY+29},actions[i],
+               i==3&&controller_.canUndoCurrentPattern());
  }
  drawControl(c,{844,buttonsY,1014,buttonsY+29},"VELOCITY VARIIEREN");
  drawControl(c,{1024,buttonsY,1220,buttonsY+29},"VELOCITY RESET 100");
@@ -713,13 +714,15 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      else status_=x<1014?"AKTIVE STEPS: VELOCITY VARIIERT":"AKTIVE STEPS: VELOCITY 100";
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=480&&x<825) {
-     const int action=static_cast<int>((x-480)/115.);
-     if(action>=0&&action<3&&x<480+action*115.+109) {
+   if(x>=480&&x<835) {
+     const int action=static_cast<int>((x-480)/90.);
+     if(action>=0&&action<4&&x<480+action*90.+85) {
        const bool ok=action==0?controller_.copyCurrentPattern():
           action==1?controller_.pasteCurrentPattern():
-          controller_.clearCurrentPattern();
-       status_=ok?"PATTERN-AKTION ERFOLGREICH":"PATTERN-AKTION NICHT MOEGLICH";
+          action==2?controller_.clearCurrentPattern():
+                    controller_.undoCurrentPattern();
+       status_=ok?(action==3?"LETZTE PATTERN-AKTION RUECKGAENGIG":
+                     "PATTERN-AKTION ERFOLGREICH"):"PATTERN-AKTION NICHT MOEGLICH";
        invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
      }
    }

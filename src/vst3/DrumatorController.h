@@ -3,6 +3,7 @@
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "core/SequencerCore.h"
 #include "core/PatternOperations.h"
+#include "core/PatternUndo.h"
 #include "core/VisibleRows.h"
 #include "core/KitState.h"
 #include <array>
@@ -60,6 +61,8 @@ public:
  bool pasteCurrentPattern();
  bool duplicateCurrentPattern(bool* selectedCopy=nullptr);
  bool clearCurrentPattern();
+ bool undoCurrentPattern();
+ bool canUndoCurrentPattern() noexcept {return undo_.available(currentPattern());}
  bool varyPatternVelocity();
  bool resetPatternVelocity();
  std::uint32_t velocityVariation_{0};
@@ -96,8 +99,10 @@ private:
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
  PatternSteps clipboard_{};
+ PatternUndo undo_{};
  bool clipboardValid_{false};
- bool replacePattern(std::size_t p,const PatternSteps& data);
+ bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true);
+ void rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next);
  std::array<std::string,kRows> labels_{};
  // Filesystem navigation is session-only. Embedded WAV data remains self-contained.
  std::array<std::string,kRows> samplePaths_{};

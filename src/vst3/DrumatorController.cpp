@@ -121,6 +121,8 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
           !KitCodec::decode(encoded.data(),encoded.size(),candidate))
           return Steinberg::kResultFalse;
        grid_=candidate.grid;
+       undo_.reset();
+       clipboardValid_=false;
        samplePaths_.fill({});
        visibleRows_=candidate.visible;
        swingPercent_=candidate.swing;
@@ -165,6 +167,8 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
  }else return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
+ undo_.reset();
+ clipboardValid_=false;
  samplePaths_.fill({});
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  randomVelocity_.fill(0);masterVolume_=100;
@@ -263,17 +267,25 @@ bool Controller::changePattern(std::size_t pattern) {
  setParamNormalized(kPatternParam,value);
  return true;
 }
-bool Controller::replacePattern(std::size_t p,const PatternSteps& data) {
+bool Controller::replacePattern(std::size_t p,const PatternSteps& data,bool remember) {
  if(p>=kPatterns)return false;
+ PatternSteps old{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,old.size(),old.begin());
+ if(old==data)return true;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.PatternReplace");
  auto* a=msg->getAttributes();
  if(!a||a->setInt("Pattern",static_cast<Steinberg::int64>(p))!=Steinberg::kResultOk||
-    a->setBinary("Steps",data.data(),static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk) {
+    a->setBinary("Steps",data.data(),static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk){
    msg->release();return false;
  }
- const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;msg->release();
- if(ok){std::copy(data.begin(),data.end(),grid_.begin()+p*kRows*kSteps);notifyViews(false);}
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok){
+   if(remember)undo_.capture(p,old,data);
+   std::copy(data.begin(),data.end(),grid_.begin()+p*kRows*kSteps);
+   notifyViews(false);
+ }
  return ok;
 }
 bool Controller::copyCurrentPattern() {
@@ -300,6 +312,14 @@ bool Controller::duplicateCurrentPattern(bool* selectedCopy){
  return true; // the copy exists even if host refuses selecting it
 }
 bool Controller::clearCurrentPattern(){return replacePattern(currentPattern(),{});}
+bool Controller::undoCurrentPattern(){
+ const auto p=currentPattern();
+ const auto* old=undo_.snapshot(p);
+ if(!old)return false;
+ if(!replacePattern(p,*old,false))return false;
+ undo_.consume(p);
+ return true;
+}
 bool Controller::varyPatternVelocity(){
  const auto p=currentPattern();
  PatternSteps data{};
@@ -387,38 +407,36 @@ bool Controller::hideLastEmptyRow() {
  if(good)--visibleRows_;
  return good;
 }
+void Controller::rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next) {
+ PatternSteps old{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,old.size(),old.begin());
+ auto changed=old;changed[r*kSteps+s]=next;
+ undo_.capture(p,old,changed);
+}
 bool Controller::setStepVelocity(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next){
  if(p>=kPatterns||r>=kRows||s>=kSteps||next>127)return false;
+ if(velocity(p,r,s)==next)return true;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.StepEdit");
- auto* attr=msg->getAttributes();
- if(!attr){msg->release();return false;}
- attr->setInt("Pattern",static_cast<Steinberg::int64>(p));
- attr->setInt("Row",static_cast<Steinberg::int64>(r));
- attr->setInt("Step",static_cast<Steinberg::int64>(s));
- attr->setInt("Velocity",static_cast<Steinberg::int64>(next));
+ auto* a=msg->getAttributes();
+ if(!a||a->setInt("Pattern",static_cast<Steinberg::int64>(p))!=Steinberg::kResultOk||
+    a->setInt("Row",static_cast<Steinberg::int64>(r))!=Steinberg::kResultOk||
+    a->setInt("Step",static_cast<Steinberg::int64>(s))!=Steinberg::kResultOk||
+    a->setInt("Velocity",static_cast<Steinberg::int64>(next))!=Steinberg::kResultOk) {
+   msg->release();return false;
+ }
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
+ if(ok) {
+   rememberUndoStep(p,r,s,next);
+   grid_[(p*kRows+r)*kSteps+s]=next;
+   notifyViews(false);
+ }
  return ok;
 }
 bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
- const auto current=velocity(p,r,s);
- const auto next=drumator::nextStepVelocity(current);
- auto* msg=allocateMessage();
- if(!msg)return false;
- msg->setMessageID("Drumator.StepEdit");
- auto* attr=msg->getAttributes();
- if(!attr){msg->release();return false;}
- attr->setInt("Pattern",static_cast<Steinberg::int64>(p));
- attr->setInt("Row",static_cast<Steinberg::int64>(r));
- attr->setInt("Step",static_cast<Steinberg::int64>(s));
- attr->setInt("Velocity",static_cast<Steinberg::int64>(next));
- const auto ok=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();
- if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
- return ok;
+ return setStepVelocity(p,r,s,drumator::nextStepVelocity(velocity(p,r,s)));
 }
 bool Controller::adjustRandomVelocity(std::size_t row,int delta) {
  if(row>=kRows)return false;
@@ -552,20 +570,7 @@ bool Controller::toggleRowGate(std::size_t row,bool solo) {
 }
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
- const auto next=velocity(p,r,s)>0?0:127;
- auto* msg=allocateMessage();
- if(!msg)return false;
- msg->setMessageID("Drumator.StepEdit");
- auto* attr=msg->getAttributes();
- if(!attr){msg->release();return false;}
- attr->setInt("Pattern",static_cast<Steinberg::int64>(p));
- attr->setInt("Row",static_cast<Steinberg::int64>(r));
- attr->setInt("Step",static_cast<Steinberg::int64>(s));
- attr->setInt("Velocity",static_cast<Steinberg::int64>(next));
- const auto ok=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();
- if(ok)grid_[(p*kRows+r)*kSteps+s]=static_cast<std::uint8_t>(next);
- return ok;
+ return setStepVelocity(p,r,s,velocity(p,r,s)>0?0:127);
 }
 Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
  if(row>=kRows)return LoadStatus::InvalidRow;
