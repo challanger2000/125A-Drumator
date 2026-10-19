@@ -32,36 +32,23 @@ double contentHeight(std::size_t rows) {
  return std::max(kMinHeight,kGridY+rows*kRowHeight+99.0);
 }
 constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
-// Deep PPG-inspired blue housing, warm illuminated drum triggers.
-const VSTGUI::CColor background{12,38,93,255};
-const VSTGUI::CColor panel{31,71,139,255};
-const VSTGUI::CColor border{99,150,209,255};
-const VSTGUI::CColor on{250,170,77,255};
-const VSTGUI::CColor off{32,72,132,255};
-const VSTGUI::CColor letters{237,245,254,255};
-const VSTGUI::CColor accent{126,203,248,255};
-const VSTGUI::CColor lightEdge{186,223,253,255};
-const VSTGUI::CColor shadowEdge{7,24,65,255};
+const VSTGUI::CColor background{26,35,45,255};
+const VSTGUI::CColor panel{41,53,67,255};
+const VSTGUI::CColor border{73,94,114,255};
+const VSTGUI::CColor on{224,137,66,255};
+const VSTGUI::CColor off{67,81,96,255};
+const VSTGUI::CColor letters{228,236,243,255};
+const VSTGUI::CColor accent{104,175,203,255};
 
 // Centralized VSTGUI button renderer: consistent visible frame, fill,
 // contrast and selected/disabled states, with fixed hit regions.
 void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
                  const char* title,bool selected=false,bool enabled=true) {
  const VSTGUI::CColor face=enabled?(selected?accent:panel):background;
- ctx->setFillColor(shadowEdge);
- ctx->drawRect({rect.left+1,rect.top+2,rect.right+1,rect.bottom+2},
-               VSTGUI::kDrawFilled);
  ctx->setFillColor(face);
  ctx->drawRect(rect,VSTGUI::kDrawFilled);
- ctx->setFrameColor(enabled?border:off);
+ ctx->setFrameColor(selected?letters:border);
  ctx->drawRect(rect,VSTGUI::kDrawStroked);
- // Raised front edge for unpressed controls, recessed edge when selected.
- ctx->setFrameColor(selected?shadowEdge:lightEdge);
- ctx->drawLine({rect.left+1,rect.bottom-2},{rect.left+1,rect.top+1});
- ctx->drawLine({rect.left+1,rect.top+1},{rect.right-2,rect.top+1});
- ctx->setFrameColor(selected?lightEdge:shadowEdge);
- ctx->drawLine({rect.left+2,rect.bottom-2},{rect.right-2,rect.bottom-2});
- ctx->drawLine({rect.right-2,rect.bottom-2},{rect.right-2,rect.top+2});
  ctx->setFont(VSTGUI::kNormalFont,12);
  ctx->setFontColor(!enabled?border:(selected?background:letters));
  ctx->drawString(title,rect);
@@ -307,23 +294,15 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
  c->drawRect({0,0,1280,contentHeight(controller_.visibleRows())},VSTGUI::kDrawFilled);
- // Housing: brighter cobalt control strip and inset sequencer shelf.
- c->setFillColor(panel);
- c->drawRect({8,6,1250,34},VSTGUI::kDrawFilled);
- c->setFrameColor(border);
- c->drawRect({8,6,1250,34},VSTGUI::kDrawStroked);
- c->setFillColor(shadowEdge);
- c->drawRect({8,101,1250,kGridY+displayedRows()*kRowHeight+2},
-             VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,18);
  c->setFontColor(letters);
- c->drawString("125A  DRUMATOR   /   DRUM SEQUENCER",VSTGUI::CRect(16,8,1000,32),
+ c->drawString("125A  /  DRUMATOR",VSTGUI::CRect(16,8,1000,32),
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
  c->drawString("SAMPLE LADEN: NAME KLICKEN / DATEI ZIEHEN  |  FILL: PRO ZEILE  |  SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
                VSTGUI::kLeftText);
- const double footerY=kGridY+displayedRows()*kRowHeight+73.0;
+ const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
@@ -436,8 +415,6 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
      c->setFillColor(v>=112?on:(v>=80?VSTGUI::CColor{195,126,73,255}:(v>0?VSTGUI::CColor{122,100,83,255}:off)));
      c->drawRect({x+2,y+4,x+17,y+22},VSTGUI::kDrawFilled);
-     c->setFrameColor(v?lightEdge:border);
-     c->drawRect({x+2,y+4,x+17,y+22},VSTGUI::kDrawStroked);
      // Five-level step display: OFF has no bar; 32/64/96/127
      // increase the inset bar height. Preserve the surrounding grid.
      if(v>0) {
