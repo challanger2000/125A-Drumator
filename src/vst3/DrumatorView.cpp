@@ -5,6 +5,7 @@
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "core/RowMixControl.h"
+#include "core/Utf8Path.h"
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
@@ -155,7 +156,7 @@ private:
         }
 
         std::error_code ec;
-        const auto fsPath = std::filesystem::u8path(candidate);
+        const auto fsPath = pathFromUtf8(candidate);
         return std::filesystem::is_regular_file(fsPath, ec) && !ec;
     };
 

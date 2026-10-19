@@ -7,6 +7,7 @@
 #include "core/StepVelocity.h"
 #include "core/HostEditDirty.h"
 #include "core/PatternQuantization.h"
+#include "core/Utf8Path.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstattributes.h"
@@ -445,19 +446,19 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
  if(direction!=1&&direction!=-1)return LoadStatus::Rejected;
  if(samplePaths_[row].empty())return LoadStatus::NotFound;
  try {
-   const auto current=std::filesystem::u8path(samplePaths_[row]);
+   const auto current=pathFromUtf8(samplePaths_[row]);
    const auto parent=current.parent_path();
    if(parent.empty()||!std::filesystem::is_directory(parent))return LoadStatus::NotFound;
    std::vector<std::string> candidates;
    for(const auto& entry:std::filesystem::directory_iterator(parent)) {
      std::error_code ec;
      if(!entry.is_regular_file(ec)||ec)continue;
-     auto ext=entry.path().extension().u8string();
+     auto ext=pathToUtf8(entry.path().extension());
      std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
-     if(ext==".wav"||ext==".flac")candidates.push_back(entry.path().u8string());
+     if(ext==".wav"||ext==".flac")candidates.push_back(pathToUtf8(entry.path()));
    }
    if(candidates.size()<2)return LoadStatus::NotFound;
-   std::string cursor=current.u8string();
+   std::string cursor=pathToUtf8(current);
    // Attempt each candidate at most once, skipping corrupt or inaccessible files.
    // The active sample/path is changed only by a successful loadWav().
    for(std::size_t tried=0;tried<candidates.size()-1;++tried) {
@@ -478,7 +479,7 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
 Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& path) {
  if(row>=kRows)return LoadStatus::InvalidRow;
  if(path.empty())return LoadStatus::NotFound;
- const auto suffix=std::filesystem::u8path(path).extension().u8string();
+ const auto suffix=pathToUtf8(pathFromUtf8(path).extension());
  std::string ext=suffix;
  std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char ch){
     return static_cast<char>(std::tolower(ch));
@@ -488,7 +489,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  constexpr std::uintmax_t kMessageMax=16u*1024u*1024u;
  std::vector<std::uint8_t> data;
  try {
-   const auto file=std::filesystem::u8path(path);
+   const auto file=pathFromUtf8(path);
    if(!std::filesystem::is_regular_file(file))return LoadStatus::NotFound;
    const auto length=std::filesystem::file_size(file);
    if(length>kMessageMax)return LoadStatus::TooLarge;

@@ -6,6 +6,7 @@
 #include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "vst3/PluginIDs.h"
+#include "core/Utf8Path.h"
 #include <windows.h>
 #include <filesystem>
 #include <iostream>
@@ -19,7 +20,7 @@ namespace {
 }
 int main(int argc,char** argv) {
     if(argc!=2)fail("Expected one VST3 binary path");
-    const auto modulePath=std::filesystem::u8path(argv[1]);
+    const auto modulePath=drumator::pathFromUtf8(argv[1]);
     auto* module=LoadLibraryW(modulePath.c_str());
     if(!module) {
         std::cerr<<"LoadLibraryW Windows error: "<<GetLastError()<<'\n';
