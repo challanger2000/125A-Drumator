@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 project(Drumator VERSION 0.1.0 LANGUAGES CXX)
 # Milestone 1: host-independent timing core. SDK integration is separate.
 add_library(drumator_core INTERFACE)
-target_compile_features(drumator_core INTERFACE cxx_std_17)
+target_compile_features(drumator_core INTERFACE cxx_std_23)
 target_include_directories(drumator_core INTERFACE src)
 include(CTest)
 if(BUILD_TESTING)
@@ -161,7 +161,7 @@ if(DRUMATOR_BUILD_VST3)
   # setupVSTGUIBundleSupport, the .uidesc cannot be found on Win32,
   # and VST3Editor::init() leaves the requested GUI rectangle at 0x0.
   target_compile_definitions(vstgui_support PRIVATE SMTG_MODULE_IS_BUNDLE=1)
-  target_compile_features(Drumator PRIVATE cxx_std_17)
+  target_compile_features(Drumator PRIVATE cxx_std_23)
   # Build the official Steinberg hosting helpers for a full in-process
   # test of the packaged plugin and actual output buffers.
   add_library(drumator_host_fixture STATIC
@@ -175,13 +175,13 @@ if(DRUMATOR_BUILD_VST3)
   target_link_libraries(drumator_audio_host_smoke PRIVATE
       sdk drumator_core drumator_host_fixture)
   target_include_directories(drumator_audio_host_smoke PRIVATE "${_drflac_dir}")
-  target_compile_features(drumator_audio_host_smoke PRIVATE cxx_std_17)
+  target_compile_features(drumator_audio_host_smoke PRIVATE cxx_std_23)
   if(MSVC)
     target_compile_options(drumator_audio_host_smoke PRIVATE /W4 /WX)
   endif()
   add_executable(drumator_editor_smoke tests/EditorGeometrySmoke.cpp)
   target_link_libraries(drumator_editor_smoke PRIVATE sdk drumator_core)
-  target_compile_features(drumator_editor_smoke PRIVATE cxx_std_17)
+  target_compile_features(drumator_editor_smoke PRIVATE cxx_std_23)
   if(MSVC)
     target_compile_options(drumator_editor_smoke PRIVATE /W4 /WX)
   endif()
