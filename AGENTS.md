@@ -1,5 +1,11 @@
 # 125A Drumator — development instructions
 
+## RC01–RC04 — aktueller Stand 20.10.2026
+
+**Geprüfter Programmcommit `d984188457882a4463b9263593d88f7bf1fffb71`**, [Windows #39341195970](https://github.com/challanger2000/125A-Drumator/actions/runs/39341195970) **SUCCESS**: 16/16 CTests, Steinberg Validator 47/47, paketierter Editor-/Audio-Host-Smoke PASS. Codex-Recheck RC01–RC04 im Code bearbeitet; [exakter Reparatur-/QA-Nachweis](docs/CODEX-RC01-RC04-REPAIR-2026-10-20.md). SDK-Rechtsklick-„UI Zoom“ bewusst deaktiviert, 100/150-Headerbuttons bleiben. **Studio One/nativer Attach/Recall, O01 und finale GUI weiterhin offen. KEINE V1-FREIGABE.**
+
+Die früheren Abschnitte sind historische Prüfstände.
+
 ## Aktueller Entwicklungsstand nach Codex A01–A09 (19.10.2026)
 
 Quellcode `dbd9106f7af48b23ad4874a1a4c74395baa14173`, [GitHub Actions #39335925418](https://github.com/challanger2000/125A-Drumator/actions/runs/39335925418) **SUCCESS**: 15/15 CTests, Steinberg Validator 47/47 und paketierte VST3-Audio-/Editor-Smokes. Alle neun identifizierten Codex-Befunde sind im Quellcode bearbeitet; Details und noch offene **native Studio-One-Gates** in [docs/CODEX-FINDINGS-REPAIR-2026-10-19.md](docs/CODEX-FINDINGS-REPAIR-2026-10-19.md). Keine finale 125A-Drumator-GUI, keine Freigabe als V1; die bisherigen Statusabschnitte darunter sind historische Fixpunkte.
