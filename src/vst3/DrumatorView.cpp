@@ -39,6 +39,20 @@ const VSTGUI::CColor on{224,137,66,255};
 const VSTGUI::CColor off{67,81,96,255};
 const VSTGUI::CColor letters{228,236,243,255};
 const VSTGUI::CColor accent{104,175,203,255};
+
+// Centralized VSTGUI button renderer: consistent visible frame, fill,
+// contrast and selected/disabled states, with fixed hit regions.
+void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
+                 const char* title,bool selected=false,bool enabled=true) {
+ const VSTGUI::CColor face=enabled?(selected?accent:panel):background;
+ ctx->setFillColor(face);
+ ctx->drawRect(rect,VSTGUI::kDrawFilled);
+ ctx->setFrameColor(selected?letters:border);
+ ctx->drawRect(rect,VSTGUI::kDrawStroked);
+ ctx->setFont(VSTGUI::kNormalFont,12);
+ ctx->setFontColor(!enabled?border:(selected?background:letters));
+ ctx->drawString(title,rect);
+}
 }
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
 // Internal Studio One browser objects not exposed as file paths are
@@ -286,7 +300,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("FILL: LINKS AUF ZEILENNUMMER   |   SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,335,67),
+ c->drawString("SAMPLE LADEN: NAME KLICKEN / DATEI ZIEHEN  |  FILL: PRO ZEILE  |  SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
@@ -294,11 +308,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(letters);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    const double x=kPatternX+pattern*kPatternWidth;
-   c->setFillColor(pattern==controller_.currentPattern()?accent:panel);
-   c->drawRect({x,kHeaderY,x+54,kHeaderY+30},VSTGUI::kDrawFilled);
    char label[2]={static_cast<char>('A'+pattern),0};
-   c->setFontColor(pattern==controller_.currentPattern()?background:letters);
-   c->drawString(label,VSTGUI::CRect(x,kHeaderY,x+54,kHeaderY+30));
+   drawControl(c,{x,kHeaderY,x+54,kHeaderY+30},label,
+               pattern==controller_.currentPattern());
  }
  if(compactViewport_){
    c->setFontColor(accent);
@@ -328,14 +340,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);
  c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
  c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
- c->setFillColor(controller_.songEnabled()?accent:panel);
- c->drawRect({540,74,638,98},VSTGUI::kDrawFilled);
- c->setFontColor(controller_.songEnabled()?background:letters);
- c->drawString(controller_.songEnabled()?"SONG ON":"SONG OFF",VSTGUI::CRect(540,74,638,98));
- c->setFillColor(songEditorOpen_?accent:panel);
- c->drawRect({652,74,850,98},VSTGUI::kDrawFilled);
- c->setFontColor(songEditorOpen_?background:letters);
- c->drawString(songEditorOpen_?"PATTERN-ANSICHT":"SONG-KETTE BEARBEITEN",VSTGUI::CRect(652,74,850,98));
+ drawControl(c,{540,74,638,98},controller_.songEnabled()?"SONG ON":"SONG OFF",
+             controller_.songEnabled());
+ drawControl(c,{652,74,850,98},songEditorOpen_?"ZURUECK ZUM PATTERN":"SONG-KETTE EDITIEREN",
+             songEditorOpen_);
  char songSummary[64]{};
  std::snprintf(songSummary,sizeof(songSummary),"CHAIN: %u EINTRAEGE  |  1/2 / 1 / 2 TAKTE",
                static_cast<unsigned>(controller_.songCount()));
@@ -348,10 +356,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
    // Visible per-row FILL button, not a hidden action behind a row number.
-   c->setFillColor(off);
-   c->drawRect({16,y+2,48,y+26},VSTGUI::kDrawFilled);
-   c->setFontColor(letters);
-   c->drawString("FILL",VSTGUI::CRect(16,y+2,48,y+26));
+   drawControl(c,{16,y+2,48,y+26},"FILL");
    const auto& name=controller_.label(row);
    // Fit the filename in the fixed row area; preserve the extension where possible.
    std::string visibleName=name;
@@ -443,8 +448,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  const char* actions[]={"COPY","PASTE","CLEAR"};
  for(int i=0;i<3;++i) {
    const double x=480+i*115.;
-   c->setFillColor(panel);c->drawRect({x,buttonsY,x+109,buttonsY+29},VSTGUI::kDrawFilled);
-   c->setFontColor(letters);c->drawString(actions[i],VSTGUI::CRect(x,buttonsY,x+109,buttonsY+29));
+   drawControl(c,{x,buttonsY,x+109,buttonsY+29},actions[i]);
  }
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
     const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-150.0));
@@ -482,7 +486,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
            static_cast<unsigned>(index+1),static_cast<char>('A'+e.pattern),
            e.steps==8?"1/2":(e.steps==16?"1":"2"));
      }else std::snprintf(cell,sizeof(cell),"%02u +",static_cast<unsigned>(index+1));
-     c->drawString(cell,VSTGUI::CRect(sx,sy,sx+73,sy+29));
+     drawControl(c,{sx,sy,sx+73,sy+29},cell,selected,available||index==count);
    }
    c->setFont(VSTGUI::kNormalFont,12);
    c->setFontColor(accent);
@@ -490,11 +494,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    for(std::size_t idx=0;idx<8;++idx) {
      const auto chosen=controller_.songEntry(std::min(songSlot_,count-1)).pattern==idx;
      const double bx=115+idx*56.0;
-     c->setFillColor(chosen?accent:panel);
-     c->drawRect({bx,277,bx+50,303},VSTGUI::kDrawFilled);
      char letter[2]{static_cast<char>('A'+idx),0};
-     c->setFontColor(chosen?background:letters);
-     c->drawString(letter,VSTGUI::CRect(bx,277,bx+50,303));
+     drawControl(c,{bx,277,bx+50,303},letter,chosen);
    }
    c->setFontColor(accent);
    c->drawString("LAENGE:",VSTGUI::CRect(594,277,681,303),VSTGUI::kLeftText);
@@ -503,17 +504,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    for(int idx=0;idx<3;++idx) {
      const auto chosen=controller_.songEntry(std::min(songSlot_,count-1)).steps==lenSteps[idx];
      const double bx=678+idx*106.;
-     c->setFillColor(chosen?accent:panel);
-     c->drawRect({bx,277,bx+100,303},VSTGUI::kDrawFilled);
-     c->setFontColor(chosen?background:letters);
-     c->drawString(lenNames[idx],VSTGUI::CRect(bx,277,bx+100,303));
+     drawControl(c,{bx,277,bx+100,303},lenNames[idx],chosen);
    }
-   c->setFillColor(panel);
-   c->drawRect({1012,277,1110,303},VSTGUI::kDrawFilled);
-   c->drawRect({1118,277,1239,303},VSTGUI::kDrawFilled);
-   c->setFontColor(letters);
-   c->drawString("+ EINTRAG",VSTGUI::CRect(1012,277,1110,303));
-   c->drawString("LETZTEN LOESCHEN",VSTGUI::CRect(1118,277,1239,303));
+   drawControl(c,{1012,277,1110,303},"+ EINTRAG",false,count<64);
+   drawControl(c,{1118,277,1239,303},"LETZTEN LOESCHEN",false,count>1);
  }
  setDirty(false);
 }
