@@ -27,7 +27,7 @@ namespace {
 constexpr double kLabelX=16.0,kGridX=560.0,kGridY=108.0;
 constexpr double kCellWidth=21.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
-constexpr double kMinHeight=300.0;
+constexpr double kMinHeight=326.0;
 double contentHeight(std::size_t rows) {
  return std::max(kMinHeight,kGridY+rows*kRowHeight+64.0);
 }
@@ -347,10 +347,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(row%2==0?panel:background);
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
-   char number[8]{};
-   std::snprintf(number,sizeof(number),"%02u",static_cast<unsigned>(row+1));
-   c->drawString(number,VSTGUI::CRect(kLabelX,y,kLabelX+31,y+26),
-                 VSTGUI::kLeftText);
+   // Visible per-row FILL button, not a hidden action behind a row number.
+   c->setFillColor(off);
+   c->drawRect({16,y+2,48,y+26},VSTGUI::kDrawFilled);
+   c->setFontColor(letters);
+   c->drawString("FILL",VSTGUI::CRect(16,y+2,48,y+26));
    const auto& name=controller_.label(row);
    // Fit the filename in the fixed row area; preserve the extension where possible.
    std::string visibleName=name;
@@ -606,7 +607,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(y>=74&&y<98&&x>=540&&x<850) {
    bool ok=true;
    if(x<638)ok=controller_.toggleSongMode();
-   else songEditorOpen_=!songEditorOpen_;
+   else {songEditorOpen_=!songEditorOpen_;if(songEditorOpen_)adjustEditorHeight();}
    if(!ok)status_="SONG-MODUS NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
