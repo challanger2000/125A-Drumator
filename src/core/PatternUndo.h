@@ -20,3 +20,4 @@ private:
  std::array<PatternSteps,kPatterns> previous_{};
  std::array<bool,kPatterns> valid_{};
 };
+} // namespace drumator
