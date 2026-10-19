@@ -110,6 +110,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.Swing")!=0&&
     std::strcmp(id,"Drumator.Humanize")!=0&&
     std::strcmp(id,"Drumator.RowRandomVelocity")!=0&&
+    std::strcmp(id,"Drumator.MasterVolume")!=0&&
     std::strcmp(id,"Drumator.SongConfig")!=0&&
     std::strcmp(id,"Drumator.ClearSample")!=0)
     return AudioEffect::notify(msg);
@@ -159,6 +160,13 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    kit_.songEnabled=static_cast<std::uint8_t>(enabled);
    kit_.chain=candidate;
    songMailbox_.publish(candidate,enabled!=0);
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.MasterVolume")==0) {
+   Steinberg::int64 value=-1;
+   if(attrs->getInt("Percent",value)!=Steinberg::kResultOk||
+      value<0||value>200)return Steinberg::kInvalidArgument;
+   masterVolume_.store(static_cast<std::uint8_t>(value),std::memory_order_relaxed);
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.RowRandomVelocity")==0) {
@@ -640,6 +648,19 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                                    stemsL.data(),stemsR.data());
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
+ const float master=static_cast<float>(masterVolume_.load(std::memory_order_relaxed))/100.f;
+ if(master!=1.f){
+   for(Steinberg::int32 bus=0;bus<data.numOutputs;++bus){
+     auto& outputBus=data.outputs[bus];
+     if(!outputBus.channelBuffers32)continue;
+     for(Steinberg::int32 channel=0;channel<outputBus.numChannels;++channel){
+       auto* buffer=outputBus.channelBuffers32[channel];
+       if(!buffer)continue;
+       for(Steinberg::int32 frame=0;frame<data.numSamples;++frame)
+         buffer[frame]*=master;
+     }
+   }
+ }
  // Conservative: do not claim silence just because a short sound ended within
  // the current block. The host can determine silence independently.
  output.silenceFlags=0;
@@ -683,6 +704,9 @@ Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
    kit_.solo=static_cast<std::uint16_t>(soloMask_.load(std::memory_order_relaxed));
    kit_.swing=swingPercent_.load(std::memory_order_relaxed);
    kit_.humanize=humanizePercent_.load(std::memory_order_relaxed);
+   kit_.masterVolume=masterVolume_.load(std::memory_order_relaxed);
+   for(std::size_t row=0;row<kRows;++row)
+      kit_.randomVelocity[row]=randomVelocity_[row].load(std::memory_order_relaxed);
    for(std::size_t row=0;row<kRows;++row){kit_.choke[row]=rowChoke_[row].load();kit_.output[row]=rowOutput_[row].load();}
    for(std::size_t row=0;row<kRows;++row) {
      kit_.gain[row]=static_cast<std::uint8_t>(std::lround(rowGain_[row].load()*100.f));
@@ -763,6 +787,9 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     soloMask_.store(kit_.solo,std::memory_order_relaxed);
     swingPercent_.store(kit_.swing,std::memory_order_relaxed);
     humanizePercent_.store(kit_.humanize,std::memory_order_relaxed);
+    masterVolume_.store(kit_.masterVolume,std::memory_order_relaxed);
+    for(std::size_t row=0;row<kRows;++row)
+       randomVelocity_[row].store(kit_.randomVelocity[row],std::memory_order_relaxed);
     for(std::size_t row=0;row<kRows;++row){rowChoke_[row].store(kit_.choke[row]);rowOutput_[row].store(kit_.output[row]);}
     for(std::size_t row=0;row<kRows;++row) {
       rowGain_[row].store(kit_.gain[row]/100.f,std::memory_order_relaxed);
