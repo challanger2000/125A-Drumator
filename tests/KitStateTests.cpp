@@ -31,6 +31,10 @@ int main() {
     KitState original{};
     original.visible=6;original.selected=5;
     original.muted=0x8001;original.solo=0x0006;original.swing=35;original.humanize=70;
+    original.songEnabled=1;
+    check(original.chain.setCount(3)&&original.chain.configure(0,0,16)&&
+          original.chain.configure(1,1,8)&&original.chain.configure(2,2,32),
+          "DM12 chain setup");
     original.gain[0]=50;original.pan[0]=0;original.pitch[0]=36;
     original.choke[0]=1;original.choke[15]=4;
     original.output[0]=7;original.output[15]=0;
@@ -53,6 +57,10 @@ int main() {
           copy.output==original.output,
           "Volume/pan/pitch/choke state lost");
     check(copy.visible==6&&copy.selected==5,"Song layout/program not restored");
+    check(copy.songEnabled==1&&copy.chain.count()==3&&
+          copy.chain.entry(0).steps==16&&copy.chain.entry(1).pattern==1&&
+          copy.chain.entry(1).steps==8&&copy.chain.entry(2).steps==32,
+          "DM12 chain roundtrip");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
     check(copy.names==original.names,"Sample names not restored");
     check(copy.wav==original.wav,"Source WAV bytes not identical");
@@ -78,6 +86,8 @@ int main() {
           "rejected bus changed previously loaded kit");
     // Remove the DM11 output table to create a legitimate DM10 fixture.
     auto legacyBase=encoded;
+    // Remove DM12 song data at offset 96 before deriving older fixtures.
+    legacyBase.erase(legacyBase.begin()+96,legacyBase.begin()+226);
     legacyBase.erase(legacyBase.begin()+78,legacyBase.begin()+94);
     for(int i=0;i<4;++i)
       legacyBase[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV10>>(8*i));
@@ -90,6 +100,7 @@ int main() {
     KitState v10{};
     check(KitCodec::decode(legacyBase.data(),legacyBase.size(),v10)&&
           v10.output[0]==0&&v10.output[15]==15,"DM10 output migration");
+    check(v10.songEnabled==0,"DM10 must restore old pattern mode");
     // Old DMR4 projects have no row masks and must reopen with both off.
     auto legacy=legacyBase;
     legacy.erase(legacy.begin()+10,legacy.begin()+80);

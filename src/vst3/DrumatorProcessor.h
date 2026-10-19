@@ -16,6 +16,47 @@
 #include <mutex>
 #include <memory>
 namespace drumator {
+// Atomic, versioned transfer; only the control thread writes. The audio thread
+// reads bounded snapshots and keeps its last valid chain on contention.
+class SongMailbox final {
+ std::atomic<std::uint32_t> sequence_{0};
+ std::atomic<std::uint8_t> enabled_{0};
+ std::atomic<std::uint8_t> count_{8};
+ std::array<std::atomic<std::uint8_t>,SongChain::kCapacity> pattern_{};
+ std::array<std::atomic<std::uint8_t>,SongChain::kCapacity> length_{};
+public:
+ SongMailbox() noexcept {
+  for(std::size_t i=0;i<SongChain::kCapacity;++i){
+   pattern_[i].store(static_cast<std::uint8_t>(i<kPatterns?i:0));
+   length_[i].store(32);
+  }
+ }
+ void publish(const SongChain& chain,bool enabled) noexcept {
+  sequence_.fetch_add(1,std::memory_order_acq_rel);
+  enabled_.store(enabled?1:0,std::memory_order_relaxed);
+  count_.store(static_cast<std::uint8_t>(chain.count()),std::memory_order_relaxed);
+  for(std::size_t i=0;i<SongChain::kCapacity;++i){
+   const auto e=chain.entry(i);
+   pattern_[i].store(e.pattern,std::memory_order_relaxed);
+   length_[i].store(e.steps,std::memory_order_relaxed);
+  }
+  sequence_.fetch_add(1,std::memory_order_release);
+ }
+ bool snapshot(SongChain& chain,bool& enabled) const noexcept {
+  const auto first=sequence_.load(std::memory_order_acquire);
+  if(first&1u)return false;
+  const auto count=count_.load(std::memory_order_relaxed);
+  const auto state=enabled_.load(std::memory_order_relaxed);
+  SongChain candidate;
+  if(!candidate.setCount(count)||state>1)return false;
+  for(std::size_t i=0;i<count;++i)
+   if(!candidate.configure(i,pattern_[i].load(std::memory_order_relaxed),
+                              length_[i].load(std::memory_order_relaxed)))return false;
+  const auto last=sequence_.load(std::memory_order_acquire);
+  if(first!=last||last&1u)return false;
+  chain=candidate;enabled=state!=0;return true;
+ }
+};
 class Processor final:public Steinberg::Vst::AudioEffect {
 public:
  Processor();
@@ -46,6 +87,9 @@ private:
  // Version and selected program share one atomic CAS arbitration word.
  std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
+ SongMailbox songMailbox_{};
+ SongChain audioSongChain_{};
+ bool audioSongEnabled_{false};
  AtomicPatternBank patterns_;
  // Last coherent patterns, read/written only in the audio callback.
  std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> audioPatternCache_{};

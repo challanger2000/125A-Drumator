@@ -47,6 +47,13 @@ public:
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool changePattern(std::size_t pattern);
+ bool configureSong(bool enabled,std::size_t count,const SongChain& chain);
+ bool toggleSongMode();
+ bool editSongEntry(std::size_t slot,int patternDelta,int lengthDelta);
+ bool adjustSongCount(int delta);
+ bool songEnabled() const noexcept {return songEnabled_;}
+ std::size_t songCount() const noexcept {return songChain_.count();}
+ SongChain::Entry songEntry(std::size_t slot) const noexcept {return songChain_.entry(slot);}
  bool copyCurrentPattern();
  bool pasteCurrentPattern();
  bool duplicateCurrentPattern(bool* selectedCopy=nullptr);
@@ -94,5 +101,7 @@ private:
  double preferredZoom_{1.0};
  std::uint8_t swingPercent_{0};
  std::uint8_t humanizePercent_{0};
+ SongChain songChain_{};
+ bool songEnabled_{false};
 };
 }

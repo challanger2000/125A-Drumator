@@ -470,7 +470,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      }else if(audioPatternValid_[activePattern]) {
        // A controller-side edit must not mute an otherwise valid audio block.
        consistent=audioPatternCache_[activePattern];
-     }else {
+     }else if(!audioSongEnabled_) {
        // No previously validated generation exists; never render a partial edit.
        cursor=finish;return;
      }

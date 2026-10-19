@@ -328,9 +328,26 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);
  c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
  c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
+ c->setFillColor(controller_.songEnabled()?accent:panel);
+ c->drawRect({540,74,635,98},VSTGUI::kDrawFilled);
+ c->setFontColor(controller_.songEnabled()?background:letters);
+ c->drawString(controller_.songEnabled()?"SONG ON":"SONG OFF",VSTGUI::CRect(540,74,635,98));
  c->setFontColor(letters);
- c->drawString("VOL/PAN/P: - LINKS, + RECHTS, STRG+KLICK RESET | ALT+SAMPLE ENTFERNEN",
-               VSTGUI::CRect(545,74,1240,98),VSTGUI::kLeftText);
+ c->drawString("COUNT - +",VSTGUI::CRect(641,74,730,98));
+ c->drawString("<",VSTGUI::CRect(738,74,760,98));
+ c->drawString(">",VSTGUI::CRect(762,74,784,98));
+ const auto slot=std::min(songSlot_,controller_.songCount()-1);
+ const auto entry=controller_.songEntry(slot);
+ char chainText[52]{};
+ std::snprintf(chainText,sizeof(chainText),"%02u/%02u  %c  %s",
+    static_cast<unsigned>(slot+1),static_cast<unsigned>(controller_.songCount()),
+    static_cast<char>('A'+entry.pattern),
+    entry.steps==8?"1/2":(entry.steps==16?"1 BAR":"2 BAR"));
+ c->setFontColor(accent);
+ c->drawString(chainText,VSTGUI::CRect(790,74,1030,98));
+ c->setFontColor(letters);
+ c->drawString("PAT - +",VSTGUI::CRect(1032,74,1124,98));
+ c->drawString("LEN - +",VSTGUI::CRect(1134,74,1230,98));
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
    const double y=kGridY+(row-firstRow_)*kRowHeight;
@@ -534,6 +551,19 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    else firstRow_=CompactRowViewport::next(controller_.visibleRows(),firstRow_);
    fillMenuRow_=-1;invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
+ if(y>=74&&y<98&&x>=540&&x<1230) {
+   bool ok=true;
+   const auto slot=std::min(songSlot_,controller_.songCount()-1);
+   if(x<635)ok=controller_.toggleSongMode();
+   else if(x>=641&&x<730)ok=controller_.adjustSongCount(x<685?-1:1);
+   else if(x>=738&&x<760)songSlot_=slot==0?controller_.songCount()-1:slot-1;
+   else if(x>=762&&x<784)songSlot_=(slot+1)%controller_.songCount();
+   else if(x>=1032&&x<1124)ok=controller_.editSongEntry(slot,x<1078?-1:1,0);
+   else if(x>=1134&&x<1230)ok=controller_.editSongEntry(slot,0,x<1182?-1:1);
+   if(songSlot_>=controller_.songCount())songSlot_=controller_.songCount()-1;
+   if(!ok)status_="SONG-EINSTELLUNG NICHT UEBERNOMMEN";
+   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
  if(y>=74&&y<98&&x>=448&&x<505) {
    if(!controller_.adjustHumanize((buttons&VSTGUI::kControl)?

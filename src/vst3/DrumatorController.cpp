@@ -125,6 +125,8 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        visibleRows_=candidate.visible;
        swingPercent_=candidate.swing;
        humanizePercent_=candidate.humanize;
+       songEnabled_=candidate.songEnabled!=0;
+       songChain_=candidate.chain;
        for(std::size_t row=0;row<kRows;++row) {
           muted_[row]=(candidate.muted&(1u<<row))!=0;
           solo_[row]=(RowVisibility::visibleSolo(candidate.solo,candidate.visible)&
@@ -163,6 +165,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  visibleRows_=candidateRows;
  samplePaths_.fill({});
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
+ songEnabled_=false;songChain_=SongChain{};
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
  for(auto& name:labels_)name="LEER - WAV LADEN";
@@ -198,6 +201,49 @@ const std::string& Controller::label(std::size_t row) const noexcept {
  static const std::string empty;
  return row<kRows?labels_[row]:empty;
 }
+
+bool Controller::configureSong(bool enabled,std::size_t count,const SongChain& chain) {
+ if(count==0||count>SongChain::kCapacity||chain.count()!=count)return false;
+ std::array<std::uint8_t,2*SongChain::kCapacity> bytes{};
+ for(std::size_t i=0;i<count;++i){
+   const auto entry=chain.entry(i);
+   if(entry.pattern>=kPatterns||!SongChain::validLength(entry.steps))return false;
+   bytes[2*i]=entry.pattern;bytes[2*i+1]=entry.steps;
+ }
+ auto* msg=allocateMessage();
+ if(!msg)return false;
+ msg->setMessageID("Drumator.SongConfig");
+ auto* a=msg->getAttributes();
+ if(!a||a->setInt("Enabled",enabled?1:0)!=Steinberg::kResultOk||
+    a->setInt("Count",static_cast<Steinberg::int64>(count))!=Steinberg::kResultOk||
+    a->setBinary("Entries",bytes.data(),static_cast<Steinberg::uint32>(count*2))!=Steinberg::kResultOk){
+   msg->release();return false;
+ }
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok){songEnabled_=enabled;songChain_=chain;notifyViews(false);}
+ return ok;
+}
+bool Controller::toggleSongMode(){return configureSong(!songEnabled_,songChain_.count(),songChain_);}
+bool Controller::adjustSongCount(int delta){
+ const auto old=static_cast<int>(songChain_.count());
+ const auto next=std::clamp(old+delta,1,static_cast<int>(SongChain::kCapacity));
+ SongChain candidate=songChain_;
+ if(!candidate.setCount(static_cast<std::size_t>(next)))return false;
+ return configureSong(songEnabled_,candidate.count(),candidate);
+}
+bool Controller::editSongEntry(std::size_t slot,int patternDelta,int lengthDelta){
+ if(slot>=songChain_.count())return false;
+ SongChain candidate=songChain_;
+ const auto old=candidate.entry(slot);
+ const auto pattern=static_cast<std::uint8_t>((static_cast<int>(old.pattern)+patternDelta+8)%8);
+ const std::array<std::uint8_t,3> lengths{8,16,32};
+ const auto index=old.steps==8?0:(old.steps==16?1:2);
+ const auto length=lengths[static_cast<std::size_t>((index+lengthDelta+3)%3)];
+ if(!candidate.configure(slot,pattern,length))return false;
+ return configureSong(songEnabled_,candidate.count(),candidate);
+}
+
 bool Controller::changePattern(std::size_t pattern) {
  if(pattern>=kPatterns)return false;
  const auto value=static_cast<double>(pattern)/7.0;
