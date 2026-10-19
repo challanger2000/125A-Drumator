@@ -112,9 +112,17 @@ public:
      const auto index=static_cast<std::size_t>(
        ((absolute-c.phaseOriginStep)%static_cast<std::int64_t>(kSteps)+
         static_cast<std::int64_t>(kSteps))%static_cast<std::int64_t>(kSteps));
-     const auto p=b.selected();
+     auto p=b.selected();
+     auto patternStep=index;
+     // C++23: song-aware banks may supply a musical position mapping.
+     // Legacy PatternBank retains its existing 32-step loop unchanged.
+     if constexpr(requires { b.mapStep(absolute,c.phaseOriginStep); }) {
+       const auto position=b.mapStep(absolute,c.phaseOriginStep);
+       p=position.pattern;
+       patternStep=position.step;
+     }
      for(std::size_t row=0;row<kRows;++row){
-       const auto velocity=b.get(p,row,index);
+       const auto velocity=b.get(p,row,patternStep);
        if(velocity){
          const auto rowSeed=bits^(static_cast<std::uint64_t>(row)+1)*0x9e3779b97f4a7c15ULL;
          const int deviation=static_cast<int>((rowSeed>>24)%25)-12;

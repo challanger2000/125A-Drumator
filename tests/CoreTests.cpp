@@ -1,4 +1,5 @@
 #include "core/SequencerCore.h"
+#include "core/SongChain.h"
 #include "core/SampleFolderNavigation.h"
 #include "core/CompactRowViewport.h"
 #include <algorithm>
@@ -215,6 +216,33 @@ int main(){
       check(reference[i].sampleOffset==split[i].sampleOffset&&
             reference[i].velocity==split[i].velocity,
             "swing/humanize changed under split blocks");
+  }
+  // Vary song entry lengths and verify exact placement through the scheduler.
+  {
+    SongChain chain;
+    check(chain.setCount(3),"chain count");
+    check(chain.configure(0,0,16)&&chain.configure(1,1,8)&&chain.configure(2,2,32),
+          "chain lengths");
+    struct SongBank {
+      SongChain& chain;
+      std::uint8_t selected() const noexcept {return 0;}
+      SongChain::Position mapStep(std::int64_t step,std::int64_t origin) const noexcept {
+        return chain.at(step,origin);
+      }
+      std::uint8_t get(std::size_t p,std::size_t row,std::size_t step) const noexcept {
+        return row==0&&step==0&&p<=2?static_cast<std::uint8_t>(p+90):0;
+      }
+    } bank{chain};
+    std::vector<Trigger> hits;
+    const auto result=StepScheduler::run(bank,Clock{0,120.,48000.,336000,true},
+        [&](Trigger hit){hits.push_back(hit);});
+    check(result.status==ScheduleStatus::Ok&&hits.size()==3,"song event count");
+    check(hits[0].pattern==0&&hits[0].step==0&&hits[0].sampleOffset==0,
+          "song A first bar");
+    check(hits[1].pattern==1&&hits[1].step==0&&hits[1].sampleOffset==96000,
+          "song B half-bar fill");
+    check(hits[2].pattern==2&&hits[2].step==0&&hits[2].sampleOffset==144000,
+          "song C follows fill");
   }
   std::cout<<"Drumator step core: all test groups PASS\n";
   return 0;
