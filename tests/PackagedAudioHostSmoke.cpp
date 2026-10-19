@@ -371,14 +371,24 @@ int main(int argc,char** argv) {
  require(restoredAudio->process(data)==kResultOk,"Second audio render");
  double restoredMean=0;
  for(int i=50;i<190;++i)restoredMean+=left[i];
- require(std::abs(restoredMean/140.+.5)<0.015,
-         "Project reload did not reproduce FLOAT32 WAV audio level");
+ // DM13 restores the saved 73% master gain: -0.5 * 0.73 = -0.365.
+ require(std::abs(restoredMean/140.+.365)<0.015,
+         "Project reload did not reproduce FLOAT32 WAV audio with saved master gain");
  require(restoredAudio->setProcessing(false)==kResultOk,"Second stop processing");
  require(restored->setActive(false)==kResultOk,"Second deactivate");
  require(restoredController->terminate()==kResultOk,"Second controller terminate");
  require(restored->terminate()==kResultOk,"Second component terminate");
  restoredAudio->release();restoredController->release();restored->release();
- std::cout<<"DMR4 actual fresh-instance audio recall -0.5 PASS\n";
+ std::cout<<"DM13 fresh-instance audio and 73% master recall PASS\n";
+ // Restore neutral gain in the original host instance before legacy
+ // per-sample amplitude checks; the saved DM13 project above is unchanged.
+ {
+   HostMessage neutralMaster;
+   neutralMaster.setMessageID("Drumator.MasterVolume");
+   require(neutralMaster.getAttributes()->setInt("Percent",100)==kResultOk&&
+           processorPoint->notify(&neutralMaster)==kResultOk,
+           "Reset master to unity for subsequent isolated host tests");
+ }
 
  // M11: exercise all 16 independent sample slots through the packaged VST3.
  // Retain unique WAV bytes per row, verify each MIDI note and full song state.
