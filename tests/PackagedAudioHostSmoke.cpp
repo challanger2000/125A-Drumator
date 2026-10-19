@@ -1000,6 +1000,44 @@ int main(int argc,char** argv) {
  patternChanges.clearQueue();
  context.tempo=120.;
  std::cout<<"M36 sample-offset pattern switch within host block PASS\\n";
+ // Packaged host proof: MIDI note 25 selects B at sample 64 and the
+ // second sequencer step at sample 128 plays B, never before offset.
+ auto midiSelect=[&](int pitch,int offset) {
+   events.clear();
+   Event e{};e.type=Event::kNoteOnEvent;e.busIndex=0;
+   e.sampleOffset=offset;e.noteOn.pitch=static_cast<int16>(pitch);
+   e.noteOn.velocity=1.f;e.noteOn.noteId=-1;
+   require(events.addEvent(e)==kResultOk,"MIDI program note");
+   left.fill(-99.f);right.fill(-99.f);
+   require(audio->process(data)==kResultOk,"MIDI selection audio block");
+ };
+ loadPattern(0);context.projectTimeMusic=0.;context.tempo=5625.;
+ patternChanges.clearQueue();
+ data.inputParameterChanges=nullptr;
+ midiSelect(25,64);
+ for(int n=0;n<128;++n)
+   require(left[n]==0.f&&right[n]==0.f,"MIDI pattern selection emitted an early hit");
+ double midiMagnitude=0.;
+ for(int n=180;n<240;++n)midiMagnitude+=std::abs(left[n]);
+ require(midiMagnitude>1.,"MIDI pattern B missed frame-128 hit");
+ loadPattern(0);context.projectTimeMusic=0.;
+ midiSelect(24,64);
+ for(int n=0;n<256;++n)
+   require(left[n]==0.f&&right[n]==0.f,"MIDI pattern A unexpectedly sounded B");
+ // At the same sample offset a host automation point takes precedence.
+ loadPattern(0);context.projectTimeMusic=0.;
+ patternChanges.clearQueue();
+ { int32 index=0,point=0;
+   auto* q=patternChanges.addParameterData(drumator::kPatternParam,index);
+   require(q&&q->addPoint(64,1./7.,point)==kResultOk,
+           "Automation/MIDI collision event");
+ }
+ data.inputParameterChanges=&patternChanges;
+ midiSelect(24,64);
+ double hostMagnitude=0.;
+ for(int n=180;n<240;++n)hostMagnitude+=std::abs(left[n]);
+ require(hostMagnitude>1.,"Host automation failed to override MIDI at equal offset");
+ std::cout<<"MIDI A-H / automation ordering packaged audio PASS\n";
  data.inputParameterChanges=nullptr;
  context.state=0;
  std::cout<<"VST3 distinct pattern recall and rendered playback PASS\\n";

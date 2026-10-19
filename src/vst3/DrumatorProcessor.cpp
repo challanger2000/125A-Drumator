@@ -475,6 +475,47 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  // Adopt only complete prepared assets, without deleting on audio.
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
  triggers_.clear();
+ // Collect MIDI A-H and host automation before scheduling. Fixed storage
+ // avoids allocations in the audio callback; equal-offset host wins.
+ (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_);
+ struct PatternEdit {Steinberg::int32 offset;std::uint8_t pattern;bool host;std::size_t order;};
+ std::array<PatternEdit,256> patternEdits{};
+ std::size_t editCount=0;
+ bool editOverflow=false;
+ auto addPattern=[&](Steinberg::int32 offset,unsigned pattern,bool host) {
+   if(editOverflow||offset<0||offset>=data.numSamples)return;
+   if(editCount==patternEdits.size()){editCount=0;editOverflow=true;return;}
+   patternEdits[editCount]={offset,static_cast<std::uint8_t>(pattern),host,editCount};
+   ++editCount;
+ };
+ if(data.inputParameterChanges) {
+   for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
+     auto* q=data.inputParameterChanges->getParameterData(i);
+     if(!q||q->getParameterId()!=kPatternParam)continue;
+     for(Steinberg::int32 j=0;j<q->getPointCount();++j) {
+       Steinberg::int32 offset=-1;Steinberg::Vst::ParamValue v=0;
+       if(q->getPoint(j,offset,v)==Steinberg::kResultTrue&&std::isfinite(v))
+         addPattern(offset,patternFromNormalized(v),true);
+     }
+   }
+ }
+ if(!audioSongEnabled_&&data.inputEvents) {
+   for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+     Steinberg::Vst::Event e{};
+     if(data.inputEvents->getEvent(i,e)!=Steinberg::kResultOk||
+        e.type!=Steinberg::Vst::Event::kNoteOnEvent||
+        e.noteOn.pitch<24||e.noteOn.pitch>31||
+        !std::isfinite(e.noteOn.velocity)||
+        e.noteOn.velocity<=0.f||e.noteOn.velocity>1.f)continue;
+     addPattern(e.sampleOffset,static_cast<unsigned>(e.noteOn.pitch-24),false);
+   }
+ }
+ std::sort(patternEdits.begin(),patternEdits.begin()+editCount,
+   [](const PatternEdit& l,const PatternEdit& r) {
+     if(l.offset!=r.offset)return l.offset<r.offset;
+     if(l.host!=r.host)return !l.host;
+     return l.order<r.order;
+   });
  // Process program changes at their actual sample offset. Schedule each
  // constant-pattern interval separately; no allocation in the audio callback.
  if(playing&&context&&
@@ -501,7 +542,6 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    const auto rate=processSetup.sampleRate;
    const auto swing=swingPercent_.load(std::memory_order_relaxed)/100.0;
    const auto humanize=humanizePercent_.load(std::memory_order_relaxed)/100.0;
-   (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_);
    std::uint32_t activePattern=selected_.load(std::memory_order_relaxed);
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
@@ -563,66 +603,16 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
      cursor=finish;
    };
-   if(data.inputParameterChanges) {
-     for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
-       auto* queue=data.inputParameterChanges->getParameterData(i);
-       if(!queue||queue->getParameterId()!=kPatternParam)continue;
-       for(Steinberg::int32 j=0;j<queue->getPointCount();++j) {
-         Steinberg::int32 sampleOffset=0;
-         Steinberg::Vst::ParamValue value=0;
-         if(queue->getPoint(j,sampleOffset,value)!=Steinberg::kResultTrue||
-            !std::isfinite(value)||sampleOffset<0||
-            sampleOffset>=data.numSamples||sampleOffset<cursor)continue;
-         scheduleRange(sampleOffset);
-         activePattern=static_cast<std::uint32_t>(
-             patternFromNormalized(value));
-       }
-     }
-   }
-   // MIDI notes 24..31 select A..H at their host sample offset.
-   // The 36..51 row-audition range remains unchanged. MIDI selection is
-   // disabled in Song mode, where the chain owns pattern progression.
-   if(!audioSongEnabled_&&data.inputEvents) {
-     for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
-       Steinberg::Vst::Event event{};
-       if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
-          event.type!=Steinberg::Vst::Event::kNoteOnEvent||
-          event.noteOn.velocity<=0.f||event.noteOn.pitch<24||event.noteOn.pitch>31||
-          event.sampleOffset<cursor||event.sampleOffset>=data.numSamples)continue;
-       scheduleRange(event.sampleOffset);
-       activePattern=static_cast<std::uint32_t>(event.noteOn.pitch-24);
-     }
+   for(std::size_t i=0;i<editCount;++i) {
+     scheduleRange(patternEdits[i].offset);
+     activePattern=patternEdits[i].pattern;
    }
    scheduleRange(data.numSamples);
    selected_.store(activePattern,std::memory_order_relaxed);
  }else {
-   // Even without a valid transport clock the host may change the program.
-   if(data.inputParameterChanges)
-     for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
-       auto* queue=data.inputParameterChanges->getParameterData(i);
-       if(!queue||queue->getParameterId()!=kPatternParam)continue;
-       for(Steinberg::int32 j=0;j<queue->getPointCount();++j) {
-         Steinberg::int32 offset=0;Steinberg::Vst::ParamValue value=0;
-         if(queue->getPoint(j,offset,value)==Steinberg::kResultTrue&&
-            std::isfinite(value)&&offset>=0&&offset<data.numSamples)
-           selected_.store(static_cast<std::uint32_t>(
-             patternFromNormalized(value)),
-             std::memory_order_relaxed);
-       }
-     }
- }
- // Pattern-select MIDI also works when the transport is stopped. The
- // pattern is retained for the next transport start; note-off is ignored.
- if(!playing&&!audioSongEnabled_&&data.inputEvents) {
-   for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
-     Steinberg::Vst::Event event{};
-     if(data.inputEvents->getEvent(i,event)==Steinberg::kResultOk&&
-        event.type==Steinberg::Vst::Event::kNoteOnEvent&&
-        event.noteOn.velocity>0.f&&event.noteOn.pitch>=24&&event.noteOn.pitch<=31&&
-        event.sampleOffset>=0&&event.sampleOffset<data.numSamples)
-       selected_.store(static_cast<std::uint32_t>(event.noteOn.pitch-24),
-                       std::memory_order_relaxed);
-   }
+   // Retain MIDI/automation selection for the next valid transport start.
+   if(editCount)selected_.store(patternEdits[editCount-1].pattern,
+                               std::memory_order_relaxed);
  }
  // MIDI one-shot audition also works with stopped DAW transport.
  if(data.inputEvents) {
