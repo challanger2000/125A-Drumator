@@ -277,6 +277,21 @@ int main(int argc,char** argv) {
          savedKit.chain.entry(1).steps==16&&
          savedKit.chain.entry(2).steps==16,
          "SONG A-B-A persistence from actual VST3 failed");
+ // Restore PATTERN mode after the SONG-specific persistence check.
+ // Subsequent legacy host tests explicitly require manual A-H selection.
+ {
+   HostMessage config;
+   config.setMessageID("Drumator.SongConfig");
+   auto* attributes=config.getAttributes();
+   const std::array<std::uint8_t,6> entries{0,16,1,16,0,16};
+   require(attributes&&attributes->setInt("Enabled",0)==kResultOk&&
+           attributes->setInt("Count",3)==kResultOk&&
+           attributes->setBinary("Entries",entries.data(),
+             static_cast<Steinberg::uint32>(entries.size()))==kResultOk,
+           "SONG OFF host message construction");
+   require(processorPoint->notify(&config)==kResultOk,
+           "SONG OFF before manual pattern regressions");
+ }
  // Create a SECOND fresh plugin instance: restore state BEFORE setupProcessing,
  // as real hosts commonly do when reloading a project.
  IComponent* restored=nullptr;
