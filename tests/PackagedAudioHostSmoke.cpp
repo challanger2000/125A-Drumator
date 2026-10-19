@@ -728,7 +728,7 @@ int main(int argc,char** argv) {
      double magnitude=0;
      for(int n=0;n<256;++n)magnitude+=std::abs(left[n]);
      const auto bar=static_cast<std::size_t>(frame/96000);
-     barLevels[bar]=std::max(barLevels[bar],magnitude/256.0);
+     if(magnitude/256.0>barLevels[bar])barLevels[bar]=magnitude/256.0;
    }
    std::cout<<"PACKAGED ABA measured levels: A="<<barLevels[0]
             <<" B="<<barLevels[1]<<" A="<<barLevels[2]<<'\\n';
