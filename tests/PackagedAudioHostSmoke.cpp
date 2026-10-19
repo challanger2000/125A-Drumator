@@ -900,6 +900,12 @@ int main(int argc,char** argv) {
  // DM15 independent A-H one/two-bar playback at a continuous 48k clock.
  // Step 20 remains stored when a pattern loops at step 16.
  {
+   // The preceding control-contract test deliberately left swing=35% and
+   // humanize=70% active. Isolate loop-length timing from that randomized
+   // displacement, then restore the original modifiers below.
+   const auto savedSwing=patternKit.swing;
+   const auto savedHumanize=patternKit.humanize;
+   patternKit.swing=0;patternKit.humanize=0;
    patternKit.songEnabled=0;
    patternKit.patternLengths[0]=16;
    patternKit.grid[drumator::AtomicPatternBank::index(0,0,20)]=95;
@@ -952,6 +958,7 @@ int main(int argc,char** argv) {
        oneBarSaved.getCursor(),captured)&&captured.patternLengths[0]==16,
        "DM15 control edit did not persist to project");
    require(changeLength(0,32)==kResultOk,"DM15 restore length 32 rejected");
+   patternKit.swing=savedSwing;patternKit.humanize=savedHumanize;
    std::cout<<"DM15 independent 1T/2T pattern loops and preserved steps PASS\n";
  }
  // Actual packaged VST3 SONG playback, not merely scheduler simulation:
