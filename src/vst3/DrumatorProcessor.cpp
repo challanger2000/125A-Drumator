@@ -31,6 +31,7 @@ Processor::Processor() {
  setControllerClass(kControllerCID);
  for(auto& gain:rowGain_)gain.store(1.f,std::memory_order_relaxed);
  for(auto& pan:rowPan_)pan.store(0.f,std::memory_order_relaxed);
+ for(auto& length:patternLengths_)length.store(32,std::memory_order_relaxed);
  for(std::size_t row=0;row<kRows;++row)rowOutput_[row].store(static_cast<std::uint8_t>(row));
  // The initial test pattern is supplied by AtomicPatternBank.
 }
@@ -116,11 +117,25 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.SongConfig")!=0&&
     std::strcmp(id,"Drumator.ClearSample")!=0&&
     std::strcmp(id,"Drumator.RenameRow")!=0&&
-    std::strcmp(id,"Drumator.PreviewRow")!=0)
+    std::strcmp(id,"Drumator.PreviewRow")!=0&&
+    std::strcmp(id,"Drumator.PatternLength")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.PatternLength")==0) {
+   Steinberg::int64 index=-1,steps=-1;
+   if(attrs->getInt("Pattern",index)!=Steinberg::kResultOk||
+      attrs->getInt("Steps",steps)!=Steinberg::kResultOk||
+      index<0||index>=static_cast<Steinberg::int64>(kPatterns)||
+      (steps!=16&&steps!=32))return Steinberg::kInvalidArgument;
+   const auto i=static_cast<std::size_t>(index);
+   {std::lock_guard<std::mutex> guard(kitMutex_);
+    kit_.patternLengths[i]=static_cast<std::uint8_t>(steps);
+    patternLengths_[i].store(static_cast<std::uint8_t>(steps),std::memory_order_release);
+   }
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.PreviewRow")==0) {
    Steinberg::int64 index=-1;
    if(attrs->getInt("Row",index)!=Steinberg::kResultOk||
@@ -577,6 +592,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    const auto swing=swingPercent_.load(std::memory_order_relaxed)/100.0;
    const auto humanize=humanizePercent_.load(std::memory_order_relaxed)/100.0;
    std::uint32_t activePattern=selected_.load(std::memory_order_relaxed);
+   std::array<std::uint8_t,kPatterns> lengths{};
+   for(std::size_t i=0;i<kPatterns;++i)
+     lengths[i]=patternLengths_[i].load(std::memory_order_acquire);
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
      if(finish<=cursor)return;
@@ -597,25 +615,34 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        const std::array<std::uint8_t,kRows*kSteps>& values;
        std::uint8_t program;
        std::uint8_t selected() const noexcept {return program;}
+       std::uint8_t length;
+       SongChain::Position mapStep(std::int64_t step,std::int64_t origin) const noexcept {
+         const auto period=static_cast<std::int64_t>(length);
+         const auto wrapped=((step-origin)%period+period)%period;
+         return {program,static_cast<std::uint8_t>(wrapped),0};
+       }
        std::uint8_t get(std::size_t p,std::size_t r,std::size_t step) const noexcept {
           return p==program?values[r*kSteps+step]:0;
        }
-     } read{consistent,static_cast<std::uint8_t>(activePattern)};
+     } read{consistent,static_cast<std::uint8_t>(activePattern),lengths[activePattern]};
      const Clock clock{initialPpq+static_cast<double>(cursor)*tempo/(60.0*rate),
                        tempo,rate,finish-cursor,true,swing,humanize,phaseOriginStep_};
      std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> songPrograms{};
      struct SongRead {
        const std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns>& values;
        const SongChain& chain;
+       const std::array<std::uint8_t,kPatterns>& lengths;
        std::uint8_t selected() const noexcept {return 0;}
        SongChain::Position mapStep(std::int64_t step,std::int64_t origin) const noexcept {
-         return chain.at(step,origin);
+         auto result=chain.at(step,origin);
+         result.step=static_cast<std::uint8_t>(result.step%lengths[result.pattern]);
+         return result;
        }
        std::uint8_t get(std::size_t program,std::size_t row,std::size_t step) const noexcept {
          return program<kPatterns&&row<kRows&&step<kSteps?
             values[program][row*kSteps+step]:0;
        }
-     } songRead{songPrograms,audioSongChain_};
+     } songRead{songPrograms,audioSongChain_,lengths};
      if(audioSongEnabled_) {
        for(std::size_t program=0;program<kPatterns;++program){
          std::array<std::uint8_t,kRows*kSteps> coherent{};
@@ -766,6 +793,8 @@ Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
    kit_.masterVolume=masterVolume_.load(std::memory_order_relaxed);
    for(std::size_t row=0;row<kRows;++row)
       kit_.randomVelocity[row]=randomVelocity_[row].load(std::memory_order_relaxed);
+   for(std::size_t i=0;i<kPatterns;++i)
+      kit_.patternLengths[i]=patternLengths_[i].load(std::memory_order_relaxed);
    for(std::size_t row=0;row<kRows;++row){kit_.choke[row]=rowChoke_[row].load();kit_.output[row]=rowOutput_[row].load();}
    for(std::size_t row=0;row<kRows;++row) {
      kit_.gain[row]=static_cast<std::uint8_t>(std::lround(rowGain_[row].load()*100.f));
@@ -788,7 +817,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
  KitState candidate;
- if(magic==kKitMagic||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -833,6 +862,8 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
        return Steinberg::kResultFalse;
     previewPending_.store(0,std::memory_order_release);
     kit_=std::move(candidate);
+    for(std::size_t i=0;i<kPatterns;++i)
+      patternLengths_[i].store(kit_.patternLengths[i],std::memory_order_relaxed);
     songMailbox_.publish(kit_.chain,kit_.songEnabled!=0);
     // Publish restored rhythms per complete pattern generation. A live
     // scheduler must never observe a half-restored pattern.

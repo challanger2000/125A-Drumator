@@ -897,6 +897,63 @@ int main(int argc,char** argv) {
    require(component->setActive(true)==kResultOk,"Pattern activate");
    require(audio->setProcessing(true)==kResultOk,"Pattern resume");
  };
+ // DM15 independent A-H one/two-bar playback at a continuous 48k clock.
+ // Step 20 remains stored when a pattern loops at step 16.
+ {
+   patternKit.songEnabled=0;
+   patternKit.patternLengths[0]=16;
+   patternKit.grid[drumator::AtomicPatternBank::index(0,0,20)]=95;
+   loadPattern(0);
+   context.tempo=120.0;
+   context.state=ProcessContext::kPlaying|
+                 ProcessContext::kProjectTimeMusicValid|
+                 ProcessContext::kTempoValid;
+   double oneBar=0.;
+   for(int block=0;block<=375;++block) {
+     context.projectTimeMusic=static_cast<double>(block)*256.0*120.0/(60.0*48000.0);
+     run(-1);
+     if(block==375)for(int n=50;n<190;++n)oneBar+=std::abs(left[n]);
+   }
+   require(oneBar>1.,"DM15 1T failed to restart at bar 2");
+   patternKit.patternLengths[0]=32;
+   loadPattern(0);
+   double twoBar=0.;
+   for(int block=0;block<=375;++block) {
+     context.projectTimeMusic=static_cast<double>(block)*256.0*120.0/(60.0*48000.0);
+     run(-1);
+     if(block==375)for(int n=50;n<190;++n)twoBar+=std::abs(left[n]);
+   }
+   require(twoBar<0.01,"DM15 2T restarted after 1 bar");
+   require(patternKit.grid[drumator::AtomicPatternBank::index(0,0,20)]==95,
+           "DM15 length toggle destroyed steps 17-32");
+   context.state=0;
+   // Control-message boundary and host serialization of changed A-H lengths.
+   auto changeLength=[&](int pattern,int length)->tresult {
+     HostMessage request;
+     request.setMessageID("Drumator.PatternLength");
+     auto* a=request.getAttributes();
+     require(a&&a->setInt("Pattern",pattern)==kResultOk&&
+             a->setInt("Steps",length)==kResultOk,
+             "DM15 pattern length host attributes");
+     return processorPoint->notify(&request);
+   };
+   require(changeLength(-1,16)!=kResultOk&&
+           changeLength(8,16)!=kResultOk&&
+           changeLength(0,8)!=kResultOk&&
+           changeLength(0,0)!=kResultOk,
+           "DM15 accepted invalid length/target");
+   require(changeLength(0,16)==kResultOk,"DM15 control length 16 rejected");
+   Steinberg::ResizableMemoryIBStream oneBarSaved;
+   require(component->getState(&oneBarSaved)==kResultOk,
+           "DM15 save after host control");
+   drumator::KitState captured;
+   require(drumator::KitCodec::decode(
+       static_cast<const std::uint8_t*>(oneBarSaved.getData()),
+       oneBarSaved.getCursor(),captured)&&captured.patternLengths[0]==16,
+       "DM15 control edit did not persist to project");
+   require(changeLength(0,32)==kResultOk,"DM15 restore length 32 rejected");
+   std::cout<<"DM15 independent 1T/2T pattern loops and preserved steps PASS\n";
+ }
  // Actual packaged VST3 SONG playback, not merely scheduler simulation:
  // three successive bars must sound A (loud), B (quiet), A (loud).
  {

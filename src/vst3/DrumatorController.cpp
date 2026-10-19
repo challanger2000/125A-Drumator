@@ -107,7 +107,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -121,6 +121,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
           !KitCodec::decode(encoded.data(),encoded.size(),candidate))
           return Steinberg::kResultFalse;
        grid_=candidate.grid;
+       patternLengths_=candidate.patternLengths;
        customNames_=candidate.displayNames;
        undo_.reset();
        clipboardValid_=false;
@@ -168,6 +169,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
  }else return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
+ patternLengths_.fill(32);
  customNames_.fill({});
  undo_.reset();
  clipboardValid_=false;
@@ -274,6 +276,21 @@ bool Controller::editSongEntry(std::size_t slot,int patternDelta,int lengthDelta
  return configureSong(songEnabled_,candidate.count(),candidate);
 }
 
+bool Controller::togglePatternLength(std::size_t pattern) {
+ if(pattern>=kPatterns)return false;
+ const auto next=static_cast<std::uint8_t>(patternLengths_[pattern]==16?32:16);
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.PatternLength");
+ auto* a=msg->getAttributes();
+ if(!a||a->setInt("Pattern",static_cast<Steinberg::int64>(pattern))!=Steinberg::kResultOk||
+    a->setInt("Steps",next)!=Steinberg::kResultOk) {
+   msg->release();return false;
+ }
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok){patternLengths_[pattern]=next;notifyViews(false);}
+ return ok;
+}
 bool Controller::changePattern(std::size_t pattern) {
  if(pattern>=kPatterns)return false;
  const auto value=static_cast<double>(pattern)/7.0;

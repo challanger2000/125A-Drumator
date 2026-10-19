@@ -50,6 +50,8 @@ public:
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
  bool setStepVelocity(std::size_t pattern,std::size_t row,std::size_t step,std::uint8_t velocity);
  bool changePattern(std::size_t pattern);
+ bool togglePatternLength(std::size_t pattern);
+ std::uint8_t patternLength(std::size_t p) const noexcept {return p<kPatterns?patternLengths_[p]:32;}
  bool configureSong(bool enabled,std::size_t count,const SongChain& chain);
  bool toggleSongMode();
  bool editSongEntry(std::size_t slot,int patternDelta,int lengthDelta);
@@ -104,6 +106,7 @@ private:
  std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
+ std::array<std::uint8_t,kPatterns> patternLengths_{{32,32,32,32,32,32,32,32}};
  PatternSteps clipboard_{};
  PatternUndo undo_{};
  bool clipboardValid_{false};

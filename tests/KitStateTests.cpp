@@ -35,6 +35,8 @@ int main() {
     original.randomVelocity[0]=45;
     original.randomVelocity[15]=80;
     original.masterVolume=73;
+    original.patternLengths[0]=16;
+    original.patternLengths[5]=16;
     check(original.chain.setCount(3)&&original.chain.configure(0,0,16)&&
           original.chain.configure(1,1,8)&&original.chain.configure(2,2,32),
           "DM12 chain setup");
@@ -71,6 +73,11 @@ int main() {
           "DM13 random velocity/master roundtrip");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
     check(copy.names==original.names,"Sample names not restored");
+    check(copy.patternLengths==original.patternLengths,"DM15 pattern lengths lost");
+    auto invalidLength=original;
+    invalidLength.patternLengths[1]=8;
+    std::vector<std::uint8_t> rejectLength;
+    check(!KitCodec::encode(invalidLength,rejectLength),"Invalid DM15 length serialized");
     check(copy.displayNames==original.displayNames,"DM14 independent labels not recalled");
     check(validRowLabel("Gruen")&&!validRowLabel(std::string(65,'X'))&&
           !validRowLabel(std::string({static_cast<char>(0xc0),static_cast<char>(0xaf)}))&&
@@ -97,11 +104,26 @@ int main() {
           "out-of-range DM11 bus accepted despite valid checksum");
     check(copy.output==preservedRouting.output&&copy.grid==preservedRouting.grid,
           "rejected bus changed previously loaded kit");
-    // DM14 appends per-row labels. Remove that exact tail to reproduce
-    // the older DM13 state, retaining the original WAV basenames/bytes.
+    // Strip the DM15 eight-byte length extension to recreate DM14.
+    auto old14=encoded;
+    old14.erase(old14.end()-static_cast<std::ptrdiff_t>(4+kPatterns),old14.end()-4);
+    for(int i=0;i<4;++i)
+      old14[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV14>>(8*i));
+    const auto old14Size=static_cast<std::uint32_t>(old14.size()-8);
+    for(int i=0;i<4;++i)old14[4+static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(old14Size>>(8*i));
+    const auto old14Hash=KitCodec::hash(old14.data()+8,old14.size()-12);
+    for(int i=0;i<4;++i)old14[old14.size()-4+static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(old14Hash>>(8*i));
+    KitState restored14;
+    check(KitCodec::decode(old14.data(),old14.size(),restored14)&&
+          restored14.displayNames==original.displayNames&&
+          restored14.patternLengths[0]==32&&restored14.patternLengths[5]==32,
+          "DM14 backwards compatibility failed");
+    // DM14 appends per-row labels. Remove them to reproduce DM13.
     std::size_t labelsSize=kRows;
     for(const auto& label:original.displayNames)labelsSize+=label.size();
-    auto old13=encoded;
+    auto old13=old14;
     old13.erase(old13.end()-static_cast<std::ptrdiff_t>(4+labelsSize),old13.end()-4);
     for(int i=0;i<4;++i)
       old13[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV13>>(8*i));
@@ -119,7 +141,7 @@ int main() {
     // Corrupt display-label length with a corrected checksum, rejecting
     // the state without mutating its previous successful contents.
     auto badDisplay=encoded;
-    const auto labelsBegin=badDisplay.size()-4-labelsSize;
+    const auto labelsBegin=badDisplay.size()-4-kPatterns-labelsSize;
     badDisplay[labelsBegin]=static_cast<std::uint8_t>(kMaxRowLabel+1);
     const auto badDisplayHash=KitCodec::hash(badDisplay.data()+8,badDisplay.size()-12);
     for(int i=0;i<4;++i)badDisplay[badDisplay.size()-4+static_cast<std::size_t>(i)]=

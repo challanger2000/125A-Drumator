@@ -25,12 +25,13 @@ constexpr std::uint32_t kKitMagicV10=0x30314d44u; // DM10
 constexpr std::uint32_t kKitMagicV11=0x31314d44u; // DM11
 constexpr std::uint32_t kKitMagicV12=0x32314d44u; // DM12
 constexpr std::uint32_t kKitMagicV13=0x33314d44u; // DM13
-constexpr std::uint32_t kKitMagic=0x34314d44u; // DM14
+constexpr std::uint32_t kKitMagicV14=0x34314d44u; // DM14
+constexpr std::uint32_t kKitMagic=0x35314d44u; // DM15
 constexpr std::size_t kMaxSingleWav=16u*1024u*1024u;
 constexpr std::size_t kMaxKitWavs=64u*1024u*1024u;
 constexpr std::size_t kMaxKitName=512;
 constexpr std::size_t kMaxRowLabel=64;
-constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u+1u+kMaxRowLabel)+kCells+20u+5u*kRows+2u+130u+kRows+1u;
+constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u+1u+kMaxRowLabel)+kCells+20u+5u*kRows+2u+130u+kRows+1u+kPatterns;
 // Display labels are not filesystem paths. Reject controls and malformed UTF-8.
 inline bool validRowLabel(const std::string& value) noexcept {
  if(value.size()>kMaxRowLabel)return false;
@@ -59,6 +60,7 @@ struct KitState {
  std::uint8_t humanize{0};
  std::uint8_t songEnabled{0};
  std::uint8_t masterVolume{100};
+ std::array<std::uint8_t,kPatterns> patternLengths{}; // 16=1 bar, 32=2 bars
  std::array<std::uint8_t,kRows> randomVelocity{};
  SongChain chain{};
  std::array<std::uint8_t,kRows> gain{};
@@ -66,7 +68,7 @@ struct KitState {
  std::array<std::uint8_t,kRows> pitch{};
  std::array<std::uint8_t,kRows> choke{};
  std::array<std::uint8_t,kRows> output{};
- KitState(){gain.fill(100);pan.fill(100);pitch.fill(24);
+ KitState(){gain.fill(100);pan.fill(100);pitch.fill(24);patternLengths.fill(32);
  for(std::size_t row=0;row<kRows;++row)output[row]=static_cast<std::uint8_t>(row);}
 
  std::array<std::uint8_t,kCells> grid{};
@@ -102,6 +104,7 @@ struct KitCodec {
  static bool valid(const KitState& src,bool validateWav) {
    if(src.selected>=kPatterns||!RowVisibility::valid(src.visible))return false;
    if(src.swing>50||src.humanize>100||src.masterVolume>200)return false;
+   for(const auto length:src.patternLengths)if(length!=16&&length!=32)return false;
     for(const auto v:src.randomVelocity)if(v>100)return false;
    if(src.songEnabled>1||src.chain.count()<1||src.chain.count()>SongChain::kCapacity)return false;
    for(std::size_t i=0;i<src.chain.count();++i){const auto e=src.chain.entry(i);if(e.pattern>=kPatterns||!SongChain::validLength(e.steps))return false;}
@@ -135,7 +138,7 @@ struct KitCodec {
    if(!valid(state,false))return false;
    try {
      std::vector<std::uint8_t> value;
-     std::size_t size=8+2+4+5*kRows+2+130+kRows+1+kCells+4; // header, selected/count, cells, checksum
+     std::size_t size=8+2+4+5*kRows+2+130+kRows+1+kCells+kPatterns+4; // header, selected/count, cells, checksum
      for(std::size_t r=0;r<kRows;++r)
          size+=7+state.names[r].size()+state.wav[r].size()+state.displayNames[r].size();
      if(size>kMaxKitBytes||size-8>std::numeric_limits<std::uint32_t>::max())
@@ -171,6 +174,7 @@ struct KitCodec {
        value.push_back(static_cast<std::uint8_t>(label.size()));
        value.insert(value.end(),label.begin(),label.end());
      }
+     value.insert(value.end(),state.patternLengths.begin(),state.patternLengths.end());
      put32(value,hash(value.data()+8,value.size()-8));
      if(value.size()!=size)return false;
      out=std::move(value);
@@ -180,9 +184,10 @@ struct KitCodec {
  static bool decode(const std::uint8_t* data,std::size_t size,KitState& out,
                     bool validateWav=true) {
    if(!data||size<8+2+kCells+6*kRows+4||size>kMaxKitBytes ||
-      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV13&&u32(data)!=kKitMagicV12&&u32(data)!=kKitMagicV11&&u32(data)!=kKitMagicV10&&u32(data)!=kKitMagicV9&&u32(data)!=kKitMagicV8&&u32(data)!=kKitMagicV7&&u32(data)!=kKitMagicV6&&u32(data)!=kKitMagicV5&&u32(data)!=kKitMagicV4)||
+      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV14&&u32(data)!=kKitMagicV13&&u32(data)!=kKitMagicV12&&u32(data)!=kKitMagicV11&&u32(data)!=kKitMagicV10&&u32(data)!=kKitMagicV9&&u32(data)!=kKitMagicV8&&u32(data)!=kKitMagicV7&&u32(data)!=kKitMagicV6&&u32(data)!=kKitMagicV5&&u32(data)!=kKitMagicV4)||
       u32(data+4)!=size-8)return false;
-   const bool v14=u32(data)==kKitMagic;
+   const bool v15=u32(data)==kKitMagic;
+   const bool v14=v15||u32(data)==kKitMagicV14;
    const bool v13=v14||u32(data)==kKitMagicV13;
    const bool v12=v13||u32(data)==kKitMagicV12;
    const bool v11=v12||u32(data)==kKitMagicV11;
@@ -202,6 +207,7 @@ struct KitCodec {
    if(v12&&size<8+2+4+5*kRows+2+130+kCells+6*kRows+4)return false;
    if(v13&&size<8+2+4+5*kRows+2+130+kRows+1+kCells+6*kRows+4)return false;
    if(v14&&size<8+2+4+5*kRows+2+130+kRows+1+kCells+7*kRows+4)return false;
+   if(v15&&size<8+2+4+5*kRows+2+130+kRows+1+kCells+7*kRows+kPatterns+4)return false;
    if(u32(data+size-4)!=hash(data+8,size-12))return false;
    try {
       KitState candidate;
@@ -256,6 +262,10 @@ struct KitCodec {
          if(labelLen>kMaxRowLabel||labelLen>end-pos)return false;
          candidate.displayNames[r].assign(reinterpret_cast<const char*>(data+pos),labelLen);
          pos+=labelLen;
+      }
+      if(v15){
+         if(end-pos<kPatterns)return false;
+         for(auto& length:candidate.patternLengths)length=data[pos++];
       }
       if(pos!=end||!valid(candidate,validateWav))return false;
       out=std::move(candidate);

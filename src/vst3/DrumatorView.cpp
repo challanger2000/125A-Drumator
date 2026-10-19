@@ -332,7 +332,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("P: SAMPLE VORHOEREN  |  NAME: LADEN / SHIFT+NAME: UMBENENNEN  |  SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
+ c->drawString("P: SAMPLE VORHOEREN | SHIFT+A-H: 1/2 TAKTE | SHIFT+NAME: UMBENENNEN | SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
@@ -340,7 +340,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(letters);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    const double x=kPatternX+pattern*kPatternWidth;
-   char label[2]={static_cast<char>('A'+pattern),0};
+   char label[12]{};
+   std::snprintf(label,sizeof(label),"%c %uT",static_cast<char>('A'+pattern),
+                 controller_.patternLength(pattern)==16?1u:2u);
    drawControl(c,{x,kHeaderY,x+54,kHeaderY+30},label,
                pattern==controller_.currentPattern());
  }
@@ -707,7 +709,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      const auto index=static_cast<std::size_t>((x-kPatternX)/kPatternWidth);
      if(x>=kPatternX+index*kPatternWidth+54.0)
        return VSTGUI::kMouseEventNotHandled;
-     controller_.changePattern(index);invalid();
+     const bool ok=(buttons&VSTGUI::kShift)?
+       controller_.togglePatternLength(index):controller_.changePattern(index);
+     if(!ok)status_="PATTERNLAENGE NICHT UEBERNOMMEN";
+     invalid();
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
  }

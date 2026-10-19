@@ -116,6 +116,7 @@ private:
  std::atomic<std::uint8_t> swingPercent_{0};
  std::atomic<std::uint8_t> humanizePercent_{0};
  std::array<std::atomic<std::uint8_t>,kRows> randomVelocity_{};
+ std::array<std::atomic<std::uint8_t>,kPatterns> patternLengths_{};
  std::atomic<std::uint8_t> masterVolume_{100};
  std::atomic<std::uint32_t> activeStemMask_{0};
  bool prepared_{false};
