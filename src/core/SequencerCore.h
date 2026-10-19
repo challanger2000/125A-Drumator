@@ -117,9 +117,9 @@ public:
      // C++23: song-aware banks may supply a musical position mapping.
      // Legacy PatternBank retains its existing 32-step loop unchanged.
      if constexpr(requires { b.mapStep(absolute,c.phaseOriginStep); }) {
-       const auto position=b.mapStep(absolute,c.phaseOriginStep);
-       p=position.pattern;
-       patternStep=position.step;
+       const auto songPosition=b.mapStep(absolute,c.phaseOriginStep);
+       p=songPosition.pattern;
+       patternStep=songPosition.step;
      }
      for(std::size_t row=0;row<kRows;++row){
        const auto velocity=b.get(p,row,patternStep);
