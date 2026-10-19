@@ -319,10 +319,10 @@ int main(int argc,char** argv) {
            "DM14 valid row label rejected");
    HostMessage reject;
    reject.setMessageID("Drumator.RenameRow");
-   auto* bad=reject.getAttributes();
+   auto* invalidNameAttr=reject.getAttributes();
    const std::string oversized(65,'X');
-   require(bad&&bad->setInt("Row",0)==kResultOk&&
-           bad->setBinary("DisplayName",oversized.data(),
+   require(invalidNameAttr&&invalidNameAttr->setInt("Row",0)==kResultOk&&
+           invalidNameAttr->setBinary("DisplayName",oversized.data(),
                           static_cast<uint32>(oversized.size()))==kResultOk&&
            processorPoint->notify(&reject)!=kResultOk,
            "DM14 invalid row label accepted");
