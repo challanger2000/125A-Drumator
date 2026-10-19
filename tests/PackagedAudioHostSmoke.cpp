@@ -603,6 +603,49 @@ int main(int argc,char** argv) {
  events.clear();
  for(int tail=0;tail<7;++tail)run(-1);
  std::cout<<"MIDI 128-frame sample-accurate onset PASS\\n";
+ // Packaged host control-contract QA: instrument pitch, stem destination
+ // and visible row count must reject invalid values and survive VST3 save.
+ {
+   auto sendRowInt=[&](const char* id,const char* key,int row,int value)->tresult {
+     HostMessage m;m.setMessageID(id);
+     auto* a=m.getAttributes();
+     require(a&&a->setInt("Row",row)==kResultOk&&
+             a->setInt(key,value)==kResultOk,"Row control attributes");
+     return processorPoint->notify(&m);
+   };
+   auto setVisible=[&](int count)->tresult {
+     HostMessage m;m.setMessageID("Drumator.VisibleRows");
+     require(m.getAttributes()->setInt("Count",count)==kResultOk,
+             "Visible row count attribute");
+     return processorPoint->notify(&m);
+   };
+   require(sendRowInt("Drumator.RowPitch","Semitones",0,7)==kResultOk,
+           "Pitch +7 control rejected");
+   require(sendRowInt("Drumator.RowPitch","Semitones",0,25)!=kResultOk&&
+           sendRowInt("Drumator.RowPitch","Semitones",16,0)!=kResultOk,
+           "Invalid row pitch accepted");
+   require(sendRowInt("Drumator.RowOutput","Bus",0,5)==kResultOk,
+           "Stem destination 5 rejected");
+   require(sendRowInt("Drumator.RowOutput","Bus",0,16)!=kResultOk,
+           "Invalid stem bus accepted");
+   require(setVisible(8)==kResultOk&&
+           setVisible(0)!=kResultOk&&setVisible(17)!=kResultOk,
+           "Visible row count bounds invalid");
+   Steinberg::ResizableMemoryIBStream controls;
+   require(component->getState(&controls)==kResultOk,
+           "Pitch/stem/visible state read failed");
+   drumator::KitState state{};
+   require(drumator::KitCodec::decode(
+          static_cast<const std::uint8_t*>(controls.getData()),
+          controls.getCursor(),state)&&
+          state.pitch[0]==31&&state.output[0]==5&&state.visible==8,
+          "Pitch/stem/visible controls not serialized");
+   require(sendRowInt("Drumator.RowPitch","Semitones",0,0)==kResultOk&&
+           sendRowInt("Drumator.RowOutput","Bus",0,0)==kResultOk&&
+           setVisible(4)==kResultOk,
+           "Pitch/stem/visible neutral reset failed");
+   std::cout<<"Packaged VST3 pitch, stem destination and visible-row state PASS\\n";
+ }
  // Functional QA: control messages must update actual saved component state.
  auto percentage=[&](const char* id,int number)->tresult {
    HostMessage message;message.setMessageID(id);
