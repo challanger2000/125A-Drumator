@@ -130,7 +130,7 @@ public:
                        static_cast<int>(std::lround(deviation*c.humanize)),1,127);
          emit(Trigger{static_cast<std::uint32_t>(frame),
                       static_cast<std::uint8_t>(row),
-                      static_cast<std::uint8_t>(index),
+                      static_cast<std::uint8_t>(patternStep),
                       static_cast<std::uint8_t>(varied),p});
          ++result.count;
        }
