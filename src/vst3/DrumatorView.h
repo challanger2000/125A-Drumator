@@ -26,6 +26,8 @@ private:
  Controller& controller_;
  VSTGUI::VST3Editor& editor_;
  int fillMenuRow_{-1};
+ std::size_t velocityRow_{0};
+ std::size_t velocityStep_{0};
  std::size_t firstRow_{0};
  std::size_t songSlot_{0};
  bool songEditorOpen_{false};

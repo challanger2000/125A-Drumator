@@ -387,6 +387,21 @@ bool Controller::hideLastEmptyRow() {
  if(good)--visibleRows_;
  return good;
 }
+bool Controller::setStepVelocity(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next){
+ if(p>=kPatterns||r>=kRows||s>=kSteps||next>127)return false;
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.StepEdit");
+ auto* attr=msg->getAttributes();
+ if(!attr){msg->release();return false;}
+ attr->setInt("Pattern",static_cast<Steinberg::int64>(p));
+ attr->setInt("Row",static_cast<Steinberg::int64>(r));
+ attr->setInt("Step",static_cast<Steinberg::int64>(s));
+ attr->setInt("Velocity",static_cast<Steinberg::int64>(next));
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok)grid_[(p*kRows+r)*kSteps+s]=next;
+ return ok;
+}
 bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
  const auto current=velocity(p,r,s);

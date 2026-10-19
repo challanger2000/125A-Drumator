@@ -29,7 +29,7 @@ constexpr double kCellWidth=19.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
 constexpr double kMinHeight=326.0;
 double contentHeight(std::size_t rows) {
- return std::max(kMinHeight,kGridY+rows*kRowHeight+64.0);
+ return std::max(kMinHeight,kGridY+rows*kRowHeight+99.0);
 }
 constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
 const VSTGUI::CColor background{26,35,45,255};
@@ -451,6 +451,17 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  }
  drawControl(c,{844,buttonsY,1014,buttonsY+29},"VELOCITY VARIIEREN");
  drawControl(c,{1024,buttonsY,1220,buttonsY+29},"VELOCITY RESET 100");
+ const auto selectedVelocity=controller_.velocity(controller_.currentPattern(),velocityRow_,velocityStep_);
+ char velocityInfo[90]{};
+ std::snprintf(velocityInfo,sizeof(velocityInfo),"STEP-VELOCITY  ZEILE %u / STEP %u : %u",
+      static_cast<unsigned>(velocityRow_+1),static_cast<unsigned>(velocityStep_+1),
+      static_cast<unsigned>(selectedVelocity));
+ c->setFontColor(accent);
+ c->drawString(velocityInfo,VSTGUI::CRect(480,buttonsY+34,915,buttonsY+64),VSTGUI::kLeftText);
+ drawControl(c,{916,buttonsY+34,986,buttonsY+64},"-10");
+ drawControl(c,{994,buttonsY+34,1064,buttonsY+64},"-1");
+ drawControl(c,{1072,buttonsY+34,1142,buttonsY+64},"+1");
+ drawControl(c,{1150,buttonsY+34,1220,buttonsY+64},"+10");
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
     const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-150.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR"};
@@ -685,6 +696,21 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
  }
  const double actionsY=kGridY+displayedRows()*kRowHeight+5.0;
+ if(y>=actionsY+34&&y<actionsY+64&&x>=916&&x<1220){
+   int delta=0;
+   if(x<986)delta=-10;
+   else if(x>=994&&x<1064)delta=-1;
+   else if(x>=1072&&x<1142)delta=1;
+   else if(x>=1150)delta=10;
+   if(delta!=0){
+     const auto original=static_cast<int>(controller_.velocity(
+         controller_.currentPattern(),velocityRow_,velocityStep_));
+     const auto next=static_cast<std::uint8_t>(std::clamp(original+delta,1,127));
+     if(!controller_.setStepVelocity(controller_.currentPattern(),velocityRow_,velocityStep_,next))
+       status_="STEP-VELOCITY NICHT UEBERNOMMEN";
+   }
+   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
  if(y>=actionsY&&y<actionsY+29) {
    if(x>=844&&x<1220){
      const bool ok=x<1014?controller_.varyPatternVelocity():
@@ -797,6 +823,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
    if(x>=kGridX&&x<kGridRight) {
       const auto step=static_cast<std::size_t>((x-kGridX)/kCellWidth);
+      velocityRow_=row;
+      velocityStep_=step;
       const bool updated=(buttons&VSTGUI::kShift)!=0
           ?controller_.cycleStepVelocity(controller_.currentPattern(),row,step)
           :controller_.toggleStep(controller_.currentPattern(),row,step);

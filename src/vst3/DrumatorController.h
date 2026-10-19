@@ -46,6 +46,7 @@ public:
  bool isRowSolo(std::size_t row) const noexcept {return row<kRows&&solo_[row];}
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
+ bool setStepVelocity(std::size_t pattern,std::size_t row,std::size_t step,std::uint8_t velocity);
  bool changePattern(std::size_t pattern);
  bool configureSong(bool enabled,std::size_t count,const SongChain& chain);
  bool toggleSongMode();
