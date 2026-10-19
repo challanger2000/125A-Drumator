@@ -259,6 +259,30 @@ int main(int argc,char** argv) {
    require(processorPoint->notify(&config)==kResultOk,
            "SONG host message rejected");
  }
+ // Real packaged VST3 messaging and DM13 persistence for global master and
+ // per-row performance randomization (not merely a standalone codec test).
+ {
+   HostMessage master;
+   master.setMessageID("Drumator.MasterVolume");
+   require(master.getAttributes()->setInt("Percent",73)==kResultOk,
+           "master attribute setup");
+   require(processorPoint->notify(&master)==kResultOk,
+           "master VST3 message rejected");
+   HostMessage random;
+   random.setMessageID("Drumator.RowRandomVelocity");
+   require(random.getAttributes()->setInt("Row",2)==kResultOk&&
+           random.getAttributes()->setInt("Percent",45)==kResultOk,
+           "random velocity attribute setup");
+   require(processorPoint->notify(&random)==kResultOk,
+           "random velocity VST3 message rejected");
+   HostMessage invalid;
+   invalid.setMessageID("Drumator.RowRandomVelocity");
+   require(invalid.getAttributes()->setInt("Row",16)==kResultOk&&
+           invalid.getAttributes()->setInt("Percent",45)==kResultOk,
+           "invalid random velocity setup");
+   require(processorPoint->notify(&invalid)!=kResultOk,
+           "out-of-range random velocity row accepted");
+ }
  Steinberg::ResizableMemoryIBStream saved;
  require(component->getState(&saved)==kResultOk,"VST3 getState failed");
  const auto* raw=static_cast<const std::uint8_t*>(saved.getData());
@@ -268,6 +292,9 @@ int main(int argc,char** argv) {
  require(savedKit.wav[0]==makeWav(32,true,-.5f),
          "Original FLOAT32 WAV was not embedded in song state");
  require(savedKit.names[0]=="StudioDrum.wav","WAV filename missing from song");
+ require(savedKit.masterVolume==73&&savedKit.randomVelocity[2]==45&&
+         savedKit.randomVelocity[0]==0,
+         "DM13 master/random host messages not persisted");
  require(savedKit.visible==4,"Default four visible rows lost");
  require(savedKit.songEnabled==1&&savedKit.chain.count()==3&&
          savedKit.chain.entry(0).pattern==0&&
@@ -277,6 +304,21 @@ int main(int argc,char** argv) {
          savedKit.chain.entry(1).steps==16&&
          savedKit.chain.entry(2).steps==16,
          "SONG A-B-A persistence from actual VST3 failed");
+ // Return temporary performance modifiers to unity/zero so subsequent
+ // legacy audio amplitude smoke tests remain isolated.
+ {
+   HostMessage master;
+   master.setMessageID("Drumator.MasterVolume");
+   require(master.getAttributes()->setInt("Percent",100)==kResultOk&&
+           processorPoint->notify(&master)==kResultOk,
+           "master reset after persistence check");
+   HostMessage random;
+   random.setMessageID("Drumator.RowRandomVelocity");
+   require(random.getAttributes()->setInt("Row",2)==kResultOk&&
+           random.getAttributes()->setInt("Percent",0)==kResultOk&&
+           processorPoint->notify(&random)==kResultOk,
+           "random velocity reset after persistence check");
+ }
  // Restore PATTERN mode after the SONG-specific persistence check.
  // Subsequent legacy host tests explicitly require manual A-H selection.
  {
