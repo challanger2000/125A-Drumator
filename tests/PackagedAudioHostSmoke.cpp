@@ -646,6 +646,58 @@ int main(int argc,char** argv) {
            "Pitch/stem/visible neutral reset failed");
    std::cout<<"Packaged VST3 pitch, stem destination and visible-row state PASS\\n";
  }
+ // Batched host regression: editable steps, whole-pattern paste/copy,
+ // bounds checking, and persistence through the actual VST3 component.
+ {
+   auto editStep=[&](int pat,int row,int step,int velocity)->tresult {
+     HostMessage msg;msg.setMessageID("Drumator.StepEdit");
+     auto* a=msg.getAttributes();
+     require(a&&a->setInt("Pattern",pat)==kResultOk&&
+             a->setInt("Row",row)==kResultOk&&
+             a->setInt("Step",step)==kResultOk&&
+             a->setInt("Velocity",velocity)==kResultOk,"StepEdit attributes");
+     return processorPoint->notify(&msg);
+   };
+   auto replacePattern=[&](int pat,const std::array<std::uint8_t,drumator::kRows*drumator::kSteps>& values)->tresult {
+     HostMessage msg;msg.setMessageID("Drumator.PatternReplace");
+     auto* a=msg.getAttributes();
+     require(a&&a->setInt("Pattern",pat)==kResultOk&&
+             a->setBinary("Steps",values.data(),
+                 static_cast<Steinberg::uint32>(values.size()))==kResultOk,
+             "PatternReplace attributes");
+     return processorPoint->notify(&msg);
+   };
+   require(editStep(7,15,31,91)==kResultOk,
+           "StepEdit last row/last step rejected");
+   require(editStep(8,15,31,91)!=kResultOk&&
+           editStep(7,16,31,91)!=kResultOk&&
+           editStep(7,15,32,91)!=kResultOk&&
+           editStep(7,15,31,128)!=kResultOk,
+           "StepEdit accepted out-of-range coordinates/velocity");
+   std::array<std::uint8_t,drumator::kRows*drumator::kSteps> target{};
+   target[0]=127;target[31]=1;target[15*drumator::kSteps+31]=76;
+   require(replacePattern(6,target)==kResultOk,"Pattern paste rejected");
+   require(replacePattern(8,target)!=kResultOk,"Out-of-range pattern paste accepted");
+   const auto baseline=target;
+   target[0]=255;
+   require(replacePattern(6,target)!=kResultOk,"Invalid velocity paste accepted");
+   Steinberg::ResizableMemoryIBStream snap;
+   require(component->getState(&snap)==kResultOk,"Editable pattern state capture");
+   drumator::KitState state{};
+   require(drumator::KitCodec::decode(
+     static_cast<const std::uint8_t*>(snap.getData()),snap.getCursor(),state),
+     "Editable pattern state decode");
+   require(state.grid[drumator::AtomicPatternBank::index(7,15,31)]==91&&
+           state.grid[drumator::AtomicPatternBank::index(6,0,0)]==127&&
+           state.grid[drumator::AtomicPatternBank::index(6,0,31)]==1&&
+           state.grid[drumator::AtomicPatternBank::index(6,15,31)]==76,
+           "StepEdit/paste failed VST3 state persistence or invalid paste corrupted pattern");
+   std::array<std::uint8_t,drumator::kRows*drumator::kSteps> blank{};
+   require(replacePattern(6,blank)==kResultOk&&
+           replacePattern(7,blank)==kResultOk,
+           "Pattern paste regression cleanup");
+   std::cout<<"Packaged VST3 StepEdit/PatternReplace, boundaries and state PASS\\n";
+ }
  // Functional QA: control messages must update actual saved component state.
  auto percentage=[&](const char* id,int number)->tresult {
    HostMessage message;message.setMessageID(id);
