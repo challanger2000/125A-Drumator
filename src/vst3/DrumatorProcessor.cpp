@@ -579,6 +579,20 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        }
      }
    }
+   // MIDI notes 24..31 select A..H at their host sample offset.
+   // The 36..51 row-audition range remains unchanged. MIDI selection is
+   // disabled in Song mode, where the chain owns pattern progression.
+   if(!audioSongEnabled_&&data.inputEvents) {
+     for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+       Steinberg::Vst::Event event{};
+       if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
+          event.type!=Steinberg::Vst::Event::kNoteOnEvent||
+          event.noteOn.velocity<=0.f||event.noteOn.pitch<24||event.noteOn.pitch>31||
+          event.sampleOffset<cursor||event.sampleOffset>=data.numSamples)continue;
+       scheduleRange(event.sampleOffset);
+       activePattern=static_cast<std::uint32_t>(event.noteOn.pitch-24);
+     }
+   }
    scheduleRange(data.numSamples);
    selected_.store(activePattern,std::memory_order_relaxed);
  }else {
@@ -596,6 +610,19 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
              std::memory_order_relaxed);
        }
      }
+ }
+ // Pattern-select MIDI also works when the transport is stopped. The
+ // pattern is retained for the next transport start; note-off is ignored.
+ if(!playing&&!audioSongEnabled_&&data.inputEvents) {
+   for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+     Steinberg::Vst::Event event{};
+     if(data.inputEvents->getEvent(i,event)==Steinberg::kResultOk&&
+        event.type==Steinberg::Vst::Event::kNoteOnEvent&&
+        event.noteOn.velocity>0.f&&event.noteOn.pitch>=24&&event.noteOn.pitch<=31&&
+        event.sampleOffset>=0&&event.sampleOffset<data.numSamples)
+       selected_.store(static_cast<std::uint32_t>(event.noteOn.pitch-24),
+                       std::memory_order_relaxed);
+   }
  }
  // MIDI one-shot audition also works with stopped DAW transport.
  if(data.inputEvents) {
