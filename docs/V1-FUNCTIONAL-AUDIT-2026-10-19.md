@@ -1,5 +1,7 @@
 # 125A Drumator — V1 functional audit (2026-10-19)
 
+**Current verified baseline (audit correction):** `b6c40d0c918f92c0d63e343dc72caa0793528fb5`, [Windows Actions #39324490951](https://github.com/challanger2000/125A-Drumator/actions/runs/39324490951) SUCCESS, 13/13 active CTests, 47/47 validator and packaged host smoke PASS. Below, the prior source baseline `08ec0e2` is historical. Actual attached Studio One QA, visual skin binding and realtime pacing remain open.
+
 **Source baseline:** `develop/v1.0.0` at `08ec0e282125e3be50950fac68ba23932ca44a60`; the DM15 1T/2T implementation has verified source `1d6f5430bc376695f6bf4168eeece5e604ea8977` and successful Windows Actions #39312446384. The V1-SCOPE document is a DRAFT concept, not a product release authorization. See `AGENTS.md` and 125A Engineering START-HERE.
 
 Interpretation: **Implemented** means a concrete UI/controller/processor path exists. **Host QA** means a Windows-hosted package test exists and has passed at an explicitly identified source commit. **Owner QA outstanding** cannot be replaced by Steinberg Validator or GUI geometry tests.

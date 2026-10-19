@@ -1,5 +1,13 @@
 # 125A Drumator — development instructions
 
+## Stand nach Fehlerkorrektur (19.10.2026)
+
+**Aktueller geprüfter Produktionscode: `b6c40d0c918f92c0d63e343dc72caa0793528fb5`, [Windows Actions #39324490951](https://github.com/challanger2000/125A-Drumator/actions/runs/39324490951) SUCCESS.** 13/13 CTests einschließlich echter Song-Chain-Release-Checks, absichtlichem Negativtest und Header-Hitbox-Test; Steinberg Validator 47/47 PASS; paketierter GUI-/Audio-Host-Smoke PASS. P1-01, P2-03 (UIDESC-Obergrenze), konkrete P2-06-Headerlücken, P3-08 und die zwei eigenen Compilerwarnungen wurden im Quellcode behoben.
+
+**Noch OFFEN:** finale Bitmap-/VSTGUI-Skin-Einbindung gehört dem anderen Chat; angeschlossene Studio-One-GUI/Zoom/Drag-Drop/Fenster-Resize, Langzeit-Realtime, möglicher Host-/Restore-Konkurrenzfall und abschließende Nutzerfreigabe sind **nicht** durch Actions bewiesen. Keine FINAL V1.
+
+Die nachfolgenden älteren Meilenstein- und Auditabschnitte bleiben als **historische Befunde**, nicht als aktueller Stand.
+
 ## Status
 **M10 VERIFIED Windows host state recall**: source commit `eb11d3f4fdacf557aa48940395616fbeda79caaa`, [Actions #38960037594](https://github.com/challanger2000/125A-Drumator/actions/runs/38960037594) SUCCESS. CTests **8/8 PASS**; official Steinberg Validator **47/47 PASS**; packaged editor 1100x300 PASS; packaged audio-host smoke full DMR4 save → **new VST3 processor/controller instance** → state restore **before** setupProcessing → same FLOAT32 WAV at measured **−0.5 per channel** PASS. PCM16/24/FLOAT32 amplitude, corrupt input, silent unloaded row also PASS. Artifact ID `12072750795` (125A-Drumator-M10-Embedded-Kit-Recall-QA), ZIP `125A_Drumator_M10_Windows_x64.zip` independently inspected; three correct bundle files, no corrupt ZIP members, x64 PE machine 0x8664, strict JSON resources, DLL SHA256 `87d7254382901ccf2d8053e7440bbfdb801618cfd71bda3ca8faf9dbde5b4dd8`. **Studio Pro 8.1.2 project reopen/GUI/drag-drop, all 16 rows loaded concurrently, kit limit handling under 64 MiB, and long-term realtime still need independent QA. Not FINAL.**
 

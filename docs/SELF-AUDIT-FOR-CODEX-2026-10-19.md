@@ -1,5 +1,26 @@
 # 125A Drumator – vollumfänglicher Quell-, VSTGUI-, Test- und Übergabe-Selbst-Audit
 
+## Nachtrag: nachgewiesene Reparaturen – 19.10.2026
+
+**Originalaudit:** Commit `3700b98` bleibt unten unverändert als historische Bestandsaufnahme. **Reparierter Produktionscode:** `b6c40d0c918f92c0d63e343dc72caa0793528fb5`; [GitHub Actions #39324490951](https://github.com/challanger2000/125A-Drumator/actions/runs/39324490951) **SUCCESS**.
+
+| Vorheriger Befund | Reparatur und neue Evidenz | Status |
+|---|---|---|
+| **P1-01** SongChain-`assert()` in MSVC Release eliminiert | `tests/SongChainTests.cpp` verwendet **20 dauerhaft aktive CHECK-Aufrufe**, dazu neuer `drumator_song_chain_negative_tests` mit `WILL_FAIL`. CTest: **13/13 PASS** | **BEHOBEN / CI PASS** |
+| **P1-02** Keine Bitmap-/Skin-Runtime | Klarstellung in `docs/VSTGUI-HANDOFF.md` und `resource/VSTGUI_ASSET_SLOTS.json`: noch keine registrierten Runtime-Assets. Gestalterische Umsetzung ausdrücklich beim anderen Chat | **Nicht behoben; absichtlich außerhalb dieses Auftrags** |
+| **P2-03** UIDESC `maxSize` 650, 16 Rows + Velocity benötigen 792 | `resource/Drumator.uidesc` maximale Höhe auf **850** logische Pixel gesetzt; Windows-VST3/Geometrie-Smokes PASS | **Widerspruch BEHOBEN; reales Host-Resize weiter OFFEN** |
+| **P2-04** Kein Windows-Attach-/Mouse-Hosttest | Unverändert; aktuelle Tests sind paketierte Vor-Attach-/Audio-Smokes | **OFFEN** |
+| **P2-05** mögliche ABA/Host-Event-Restore-Priorität | Keine unbelegte Änderung der Konkurrenzlogik; differenzierender Barrieretest am echten Pfad fehlt | **RISIKO, NICHT reproduziert** |
+| **P2-06** gezeichnete vs. klickbare Headerlücken | Gemeinsame `UiHeaderHitZones.h` im Event-Pfad, explizite Randtests; Lücken zwischen Master-/Song-Buttons jetzt inert. JSON referenziert die Quelle | **Konkreter Header-Befund BEHOBEN; restliche UI-Hitboxen weiter OFFEN** |
+| **P2-07** native Studio One / paced Realtime | Nicht durch Windows Actions ersetzbar | **OFFEN** |
+| **P3-08** Undo irrtümlich `selected` statt `enabled` | `drawControl(...,false,i!=3||canUndo())` | **BEHOBEN / CI PASS** |
+| **P3-09** veraltete Statusdokumente | `AGENTS.md`, `README.md` und V1-Audit erhalten einen aktuellen Prüfstand; ältere Meilensteine bleiben als Historie | **Teilweise bereinigt** |
+| **P3-10** eigene C4100/C4456-Warnungen | `inputs` als unbenutzten Instrumenteneingang dokumentiert; Shadow-`row` in `randomRow` umbenannt; neuer MSVC-Log ohne diese beiden Warnungen | **BEHOBEN / CI PASS** |
+| **P3-11** voreiliges Skinning / falscher Fertigstatus | Auf vorherige funktionale View zurückgesetzt, dokumentierte Slots explizit als Sollbeschreibung kenntlich | **KORRIGIERT, echte Grafik-Integration weiterhin offen** |
+
+**Wichtige Abgrenzung:** Der Windows-Run beweist die erfolgreiche Herstellung, Tests und Validator, **nicht** das tatsächliche Aussehen/Anklicken in Studio One. Ein weiterer unabhängiger Codex-Audit soll verbleibende Risiken reproduzieren, nicht alte bereits geschlossene Quellfehler erneut als offen deklarieren.
+
+---
 **Prüftag:** 19.10.2026 (UTC)  
 **Adressat:** unabhängige Nachprüfung durch Codex  
 **Repository:** `challanger2000/125A-Drumator`  
