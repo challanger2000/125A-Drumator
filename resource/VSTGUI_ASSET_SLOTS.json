@@ -1,0 +1,564 @@
+{
+  "name": "125A-Drumator VSTGUI Technical Handoff",
+  "functionalSource": "6a8384b241b865adc3d4e6266ca5c1c3f581fb34",
+  "artworkStatus": "NONE; another chat creates all final graphics",
+  "canvas": {
+    "width": 1280,
+    "height": "max(326,108+displayedRows*29+(velocityLaneOpen?220:105))",
+    "units": "logical VSTGUI pixels",
+    "zoom": [
+      1,
+      1.5
+    ]
+  },
+  "sources": [
+    "src/vst3/DrumatorView.cpp",
+    "src/vst3/DrumatorView.h",
+    "src/vst3/DrumatorController.cpp",
+    "src/core/VelocityLane.h",
+    "resource/Drumator.uidesc"
+  ],
+  "graphicFamilies": [
+    {
+      "id": "official_125a_logo",
+      "purpose": "Use original SVG from challanger2000/125A-Branding",
+      "status": "asset not created"
+    },
+    {
+      "id": "header",
+      "purpose": "fixed top region",
+      "status": "asset not created"
+    },
+    {
+      "id": "row_backing",
+      "purpose": "29px tile, 4 to 16 rows",
+      "status": "asset not created"
+    },
+    {
+      "id": "footer",
+      "purpose": "dynamic row count",
+      "status": "asset not created"
+    },
+    {
+      "id": "buttons",
+      "purpose": "drawControl() normal/selected/disabled",
+      "status": "asset not created"
+    },
+    {
+      "id": "steps",
+      "purpose": "32 columns off/velocity-low/medium/high",
+      "status": "asset not created"
+    },
+    {
+      "id": "velocity_bars",
+      "purpose": "32 live bars 0-127",
+      "status": "asset not created"
+    },
+    {
+      "id": "fill_popup",
+      "purpose": "9 selections",
+      "status": "asset not created"
+    },
+    {
+      "id": "song_grid",
+      "purpose": "64 live entries",
+      "status": "asset not created"
+    },
+    {
+      "id": "song_overlay",
+      "purpose": "pattern and length selection",
+      "status": "asset not created"
+    }
+  ],
+  "controls": {
+    "header": [
+      {
+        "id": "pattern_A-H",
+        "rect": [
+          "340+62*i",
+          38,
+          "394+62*i",
+          68
+        ],
+        "action": "Click selects; Shift+click toggles 1T/2T, i=0..7"
+      },
+      {
+        "id": "compact_left",
+        "rect": [
+          1005,
+          39,
+          1032,
+          69
+        ],
+        "action": "previous page"
+      },
+      {
+        "id": "compact_right",
+        "rect": [
+          1032,
+          39,
+          1060,
+          69
+        ],
+        "action": "next page"
+      },
+      {
+        "id": "zoom_100",
+        "rect": [
+          1070,
+          39,
+          1127,
+          69
+        ],
+        "action": "100%"
+      },
+      {
+        "id": "zoom_150",
+        "rect": [
+          1136,
+          39,
+          1217,
+          69
+        ],
+        "action": "150%"
+      },
+      {
+        "id": "swing_minus",
+        "rect": [
+          185,
+          74,
+          214,
+          98
+        ],
+        "action": "-5; Ctrl reset"
+      },
+      {
+        "id": "swing_plus",
+        "rect": [
+          214,
+          74,
+          244,
+          98
+        ],
+        "action": "+5; Ctrl reset"
+      },
+      {
+        "id": "human_minus",
+        "rect": [
+          448,
+          74,
+          477,
+          98
+        ],
+        "action": "-10; Ctrl reset"
+      },
+      {
+        "id": "human_plus",
+        "rect": [
+          477,
+          74,
+          505,
+          98
+        ],
+        "action": "+10; Ctrl reset"
+      },
+      {
+        "id": "song_toggle",
+        "rect": [
+          540,
+          74,
+          638,
+          98
+        ],
+        "action": "toggle Song"
+      },
+      {
+        "id": "song_edit",
+        "rect": [
+          652,
+          74,
+          850,
+          98
+        ],
+        "action": "show Song editor"
+      },
+      {
+        "id": "master_minus",
+        "rect": [
+          1140,
+          74,
+          1180,
+          98
+        ],
+        "action": "-5; Ctrl reset"
+      },
+      {
+        "id": "master_plus",
+        "rect": [
+          1184,
+          74,
+          1228,
+          98
+        ],
+        "action": "+5; Ctrl reset"
+      }
+    ],
+    "row": {
+      "formula": "y=108+(row-firstRow)*29",
+      "rowCount": [
+        4,
+        16
+      ],
+      "slots": [
+        {
+          "id": "fill",
+          "rect": [
+            16,
+            2,
+            48,
+            26
+          ],
+          "action": "show Fill choices"
+        },
+        {
+          "id": "preview",
+          "rect": [
+            52,
+            2,
+            78,
+            26
+          ],
+          "action": "audition sample"
+        },
+        {
+          "id": "name",
+          "rect": [
+            81,
+            0,
+            202,
+            26
+          ],
+          "action": "click load; Shift rename; Alt clear (clear catch region starts x=16)"
+        },
+        {
+          "id": "previous_sample",
+          "rect": [
+            203,
+            2,
+            216,
+            26
+          ],
+          "action": "folder -1"
+        },
+        {
+          "id": "next_sample",
+          "rect": [
+            216,
+            2,
+            229,
+            26
+          ],
+          "action": "folder +1"
+        },
+        {
+          "id": "stereo_output",
+          "rect": [
+            230,
+            2,
+            275,
+            26
+          ],
+          "action": "cycle destination"
+        },
+        {
+          "id": "volume",
+          "rect": [
+            280,
+            0,
+            345,
+            26
+          ],
+          "action": "left/right halves change, Ctrl default"
+        },
+        {
+          "id": "pan",
+          "rect": [
+            350,
+            0,
+            415,
+            26
+          ],
+          "action": "left/right halves change, Ctrl default"
+        },
+        {
+          "id": "pitch",
+          "rect": [
+            420,
+            0,
+            475,
+            26
+          ],
+          "action": "left/right halves change, Ctrl default"
+        },
+        {
+          "id": "mute",
+          "rect": [
+            478,
+            3,
+            500,
+            24
+          ],
+          "action": "toggle"
+        },
+        {
+          "id": "solo",
+          "rect": [
+            507,
+            3,
+            529,
+            24
+          ],
+          "action": "toggle"
+        },
+        {
+          "id": "choke",
+          "rect": [
+            535,
+            3,
+            558,
+            24
+          ],
+          "action": "cycle 0-4, Shift reverse"
+        },
+        {
+          "id": "random_velocity",
+          "rect": [
+            560,
+            3,
+            619,
+            25
+          ],
+          "action": "adjust; Ctrl reset"
+        },
+        {
+          "id": "step",
+          "rect": [
+            "622+19*i",
+            0,
+            "641+19*i",
+            29
+          ],
+          "action": "Click toggle; Shift velocity cycle, i=0..31"
+        }
+      ]
+    },
+    "footer": {
+      "formula": "footerTop=108+displayedRows*29+5",
+      "relativeSlots": [
+        {
+          "id": "add_instrument",
+          "rect": [
+            16,
+            0,
+            213,
+            29
+          ],
+          "action": "add"
+        },
+        {
+          "id": "remove_instrument",
+          "rect": [
+            226,
+            0,
+            266,
+            29
+          ],
+          "action": "remove empty"
+        },
+        {
+          "id": "copy",
+          "rect": [
+            480,
+            0,
+            565,
+            29
+          ],
+          "action": "copy"
+        },
+        {
+          "id": "paste",
+          "rect": [
+            570,
+            0,
+            655,
+            29
+          ],
+          "action": "paste"
+        },
+        {
+          "id": "clear",
+          "rect": [
+            660,
+            0,
+            745,
+            29
+          ],
+          "action": "clear"
+        },
+        {
+          "id": "undo",
+          "rect": [
+            750,
+            0,
+            835,
+            29
+          ],
+          "action": "undo"
+        },
+        {
+          "id": "vary_velocity",
+          "rect": [
+            844,
+            0,
+            1014,
+            29
+          ],
+          "action": "variate"
+        },
+        {
+          "id": "reset_velocity",
+          "rect": [
+            1024,
+            0,
+            1220,
+            29
+          ],
+          "action": "reset 100"
+        },
+        {
+          "id": "toggle_velocity_lane",
+          "rect": [
+            16,
+            34,
+            266,
+            64
+          ],
+          "action": "expand/collapse"
+        },
+        {
+          "id": "velocity_row_left",
+          "rect": [
+            280,
+            34,
+            324,
+            64
+          ],
+          "action": "previous row"
+        },
+        {
+          "id": "velocity_row_right",
+          "rect": [
+            408,
+            34,
+            455,
+            64
+          ],
+          "action": "next row"
+        },
+        {
+          "id": "velocity_minus10",
+          "rect": [
+            916,
+            34,
+            986,
+            64
+          ],
+          "action": "-10"
+        },
+        {
+          "id": "velocity_minus1",
+          "rect": [
+            994,
+            34,
+            1064,
+            64
+          ],
+          "action": "-1"
+        },
+        {
+          "id": "velocity_plus1",
+          "rect": [
+            1072,
+            34,
+            1142,
+            64
+          ],
+          "action": "+1"
+        },
+        {
+          "id": "velocity_plus10",
+          "rect": [
+            1150,
+            34,
+            1220,
+            64
+          ],
+          "action": "+10"
+        }
+      ]
+    },
+    "velocityLane": {
+      "visible": "velocityLaneOpen_&&!songEditorOpen_",
+      "x": "622+19*i",
+      "top": "gridBottom+95",
+      "bottom": "gridBottom+165",
+      "count": 32,
+      "clickDrag": "1..127",
+      "ctrlDrag": "0"
+    },
+    "fillMenu": {
+      "x": [
+        650,
+        819
+      ],
+      "rowHeight": 25,
+      "entries": [
+        "Fill2",
+        "Fill4",
+        "Fill8",
+        "Snare24",
+        "All",
+        "Clear",
+        "Offbeat",
+        "Gallop",
+        "Ghost"
+      ]
+    },
+    "songOverlay": {
+      "grid": "16 columns * 4 rows; [16+76*c,134+32*r,89+76*c,163+32*r]",
+      "pattern": "[115+56*i,277,165+56*i,303]",
+      "length": "[678+106*i,277,778+106*i,303]",
+      "add": [
+        1012,
+        277,
+        1110,
+        303
+      ],
+      "remove": [
+        1118,
+        277,
+        1239,
+        303
+      ]
+    }
+  },
+  "rules": [
+    "No final rendering in this handoff",
+    "UI event/click areas must stay unchanged",
+    "Do not embed changing text into images",
+    "Only another chat integrates final artwork",
+    "Use original 125A master logo geometry",
+    "Preserve native 100% and 150% artwork resolution",
+    "Preserve host zoom, audio, MIDI, project recall"
+  ]
+}
