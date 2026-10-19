@@ -107,7 +107,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -121,6 +121,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
           !KitCodec::decode(encoded.data(),encoded.size(),candidate))
           return Steinberg::kResultFalse;
        grid_=candidate.grid;
+       customNames_=candidate.displayNames;
        undo_.reset();
        clipboardValid_=false;
        samplePaths_.fill({});
@@ -167,6 +168,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
  }else return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
+ customNames_.fill({});
  undo_.reset();
  clipboardValid_=false;
  samplePaths_.fill({});
@@ -206,9 +208,24 @@ std::size_t Controller::currentPattern() noexcept {
 }
 const std::string& Controller::label(std::size_t row) const noexcept {
  static const std::string empty;
- return row<kRows?labels_[row]:empty;
+ return row<kRows?(!customNames_[row].empty()?customNames_[row]:labels_[row]):empty;
 }
 
+bool Controller::renameRow(std::size_t row,const std::string& name) {
+ if(row>=kRows||!validRowLabel(name))return false;
+ if(customNames_[row]==name)return true;
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.RenameRow");
+ auto* attrs=msg->getAttributes();
+ if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk||
+    attrs->setBinary("DisplayName",name.data(),static_cast<Steinberg::uint32>(name.size()))!=Steinberg::kResultOk){
+   msg->release();return false;
+ }
+ const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
+ msg->release();
+ if(ok){customNames_[row]=name;notifyViews(false);}
+ return ok;
+}
 bool Controller::configureSong(bool enabled,std::size_t count,const SongChain& chain) {
  if(count==0||count>SongChain::kCapacity||chain.count()!=count)return false;
  std::array<std::uint8_t,2*SongChain::kCapacity> bytes{};
@@ -358,7 +375,7 @@ bool Controller::fillRow(std::size_t row,RowFill mode){
 bool Controller::canHideLast() const noexcept {
  if(visibleRows_<=1||visibleRows_>kRows)return false;
  const auto row=static_cast<std::size_t>(visibleRows_-1);
- if(labels_[row]!="LEER - WAV LADEN"||solo_[row])return false;
+ if(labels_[row]!="LEER - WAV LADEN"||!customNames_[row].empty()||solo_[row])return false;
  struct GridView {
   const Controller& ctrl;
   std::uint8_t get(std::size_t p,std::size_t r,std::size_t s) const noexcept {

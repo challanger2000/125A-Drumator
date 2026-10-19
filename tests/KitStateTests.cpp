@@ -45,6 +45,9 @@ int main() {
     original.grid[AtomicPatternBank::index(5,2,31)]=95;
     original.grid[AtomicPatternBank::index(0,15,0)]=127;
     original.names[0]="Kick_01.wav";
+    original.displayNames[0]="KICK";
+    original.displayNames[3]="Closed Hat";
+    original.displayNames[6]="Buehne";
     original.wav[0]=wav16();
     original.names[2]="HiHat_Closed.wav";
     original.wav[2]=wav16();
@@ -68,6 +71,11 @@ int main() {
           "DM13 random velocity/master roundtrip");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
     check(copy.names==original.names,"Sample names not restored");
+    check(copy.displayNames==original.displayNames,"DM14 independent labels not recalled");
+    check(validRowLabel("Gruen")&&!validRowLabel(std::string(65,'X'))&&
+          !validRowLabel(std::string({static_cast<char>(0xc0),static_cast<char>(0xaf)}))&&
+          !validRowLabel(std::string("Bad\nLine")),
+          "DM14 label validation");
     check(copy.wav==original.wav,"Source WAV bytes not identical");
     std::vector<std::uint8_t> again;
     check(KitCodec::encode(copy,again)&&encoded==again,
@@ -89,8 +97,39 @@ int main() {
           "out-of-range DM11 bus accepted despite valid checksum");
     check(copy.output==preservedRouting.output&&copy.grid==preservedRouting.grid,
           "rejected bus changed previously loaded kit");
+    // DM14 appends per-row labels. Remove that exact tail to reproduce
+    // the older DM13 state, retaining the original WAV basenames/bytes.
+    std::size_t labelsSize=kRows;
+    for(const auto& label:original.displayNames)labelsSize+=label.size();
+    auto old13=encoded;
+    old13.erase(old13.end()-static_cast<std::ptrdiff_t>(4+labelsSize),old13.end()-4);
+    for(int i=0;i<4;++i)
+      old13[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV13>>(8*i));
+    const auto old13Length=static_cast<std::uint32_t>(old13.size()-8);
+    for(int i=0;i<4;++i)old13[4+static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(old13Length>>(8*i));
+    const auto old13Hash=KitCodec::hash(old13.data()+8,old13.size()-12);
+    for(int i=0;i<4;++i)old13[old13.size()-4+static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(old13Hash>>(8*i));
+    KitState migrated13;
+    check(KitCodec::decode(old13.data(),old13.size(),migrated13)&&
+          migrated13.displayNames[0].empty()&&
+          migrated13.names[0]=="Kick_01.wav"&&migrated13.wav[0]==original.wav[0],
+          "DM13 backwards compatible instrument name migration");
+    // Corrupt display-label length with a corrected checksum, rejecting
+    // the state without mutating its previous successful contents.
+    auto badDisplay=encoded;
+    const auto labelsBegin=badDisplay.size()-4-labelsSize;
+    badDisplay[labelsBegin]=static_cast<std::uint8_t>(kMaxRowLabel+1);
+    const auto badDisplayHash=KitCodec::hash(badDisplay.data()+8,badDisplay.size()-12);
+    for(int i=0;i<4;++i)badDisplay[badDisplay.size()-4+static_cast<std::size_t>(i)]=
+        static_cast<std::uint8_t>(badDisplayHash>>(8*i));
+    KitState beforeBad=copy;
+    check(!KitCodec::decode(badDisplay.data(),badDisplay.size(),copy)&&
+          copy.displayNames==beforeBad.displayNames&&copy.wav==beforeBad.wav,
+          "DM14 invalid name length destroyed previous state");
     // Create a genuine DM12 fixture, migrating its absent mix/random fields.
-    auto old12=encoded;
+    auto old12=old13;
     old12.erase(old12.begin()+226,old12.begin()+243);
     for(int i=0;i<4;++i)old12[static_cast<std::size_t>(i)]=
         static_cast<std::uint8_t>(kKitMagicV12>>(8*i));

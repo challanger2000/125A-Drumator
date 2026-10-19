@@ -93,6 +93,11 @@ public:
  std::uint8_t velocity(std::size_t pattern,std::size_t row,std::size_t step) const noexcept;
  std::size_t currentPattern() noexcept;
  const std::string& label(std::size_t row) const noexcept;
+ bool renameRow(std::size_t row,const std::string& name);
+ const std::string& customName(std::size_t row) const noexcept {
+   static const std::string empty;
+   return row<kRows?customNames_[row]:empty;
+ }
 private:
  void notifyViews(bool relayout);
  std::vector<DrumatorView*> views_;
@@ -104,6 +109,7 @@ private:
  bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true);
  void rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next);
  std::array<std::string,kRows> labels_{};
+ std::array<std::string,kRows> customNames_{};
  // Filesystem navigation is session-only. Embedded WAV data remains self-contained.
  std::array<std::string,kRows> samplePaths_{};
  std::array<bool,kRows> muted_{};

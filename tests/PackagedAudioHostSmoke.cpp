@@ -307,6 +307,26 @@ int main(int argc,char** argv) {
    require(processorPoint->notify(&invalid)!=kResultOk,
            "out-of-range random velocity row accepted");
  }
+ // DM14: rename the instrument without modifying its original WAV filename.
+ {
+   HostMessage rename;
+   rename.setMessageID("Drumator.RenameRow");
+   auto* attr=rename.getAttributes();
+   constexpr char label[]="Closed Hat";
+   require(attr&&attr->setInt("Row",0)==kResultOk&&
+           attr->setBinary("DisplayName",label,sizeof(label)-1)==kResultOk&&
+           processorPoint->notify(&rename)==kResultOk,
+           "DM14 valid row label rejected");
+   HostMessage reject;
+   reject.setMessageID("Drumator.RenameRow");
+   auto* bad=reject.getAttributes();
+   const std::string oversized(65,'X');
+   require(bad&&bad->setInt("Row",0)==kResultOk&&
+           bad->setBinary("DisplayName",oversized.data(),
+                          static_cast<uint32>(oversized.size()))==kResultOk&&
+           processorPoint->notify(&reject)!=kResultOk,
+           "DM14 invalid row label accepted");
+ }
  Steinberg::ResizableMemoryIBStream saved;
  require(component->getState(&saved)==kResultOk,"VST3 getState failed");
  const auto* raw=static_cast<const std::uint8_t*>(saved.getData());
@@ -316,6 +336,7 @@ int main(int argc,char** argv) {
  require(savedKit.wav[0]==makeWav(32,true,-.5f),
          "Original FLOAT32 WAV was not embedded in song state");
  require(savedKit.names[0]=="StudioDrum.wav","WAV filename missing from song");
+ require(savedKit.displayNames[0]=="Closed Hat","DM14 custom display name missing");
  require(savedKit.masterVolume==73&&savedKit.randomVelocity[2]==45&&
          savedKit.randomVelocity[0]==0,
          "DM13 master/random host messages not persisted");

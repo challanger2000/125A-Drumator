@@ -112,11 +112,26 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.RowRandomVelocity")!=0&&
     std::strcmp(id,"Drumator.MasterVolume")!=0&&
     std::strcmp(id,"Drumator.SongConfig")!=0&&
-    std::strcmp(id,"Drumator.ClearSample")!=0)
+    std::strcmp(id,"Drumator.ClearSample")!=0&&
+    std::strcmp(id,"Drumator.RenameRow")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.RenameRow")==0) {
+   Steinberg::int64 index=-1;
+   const void* bytes=nullptr;
+   Steinberg::uint32 len=0;
+   if(attrs->getInt("Row",index)!=Steinberg::kResultOk||index<0||
+      index>=static_cast<Steinberg::int64>(kRows)||
+      attrs->getBinary("DisplayName",bytes,len)!=Steinberg::kResultOk||
+      len>kMaxRowLabel||(len!=0&&bytes==nullptr))return Steinberg::kInvalidArgument;
+   const auto name=std::string(len?static_cast<const char*>(bytes):"",len);
+   if(!validRowLabel(name))return Steinberg::kInvalidArgument;
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   kit_.displayNames[static_cast<std::size_t>(index)]=name;
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.ClearSample")==0) {
    Steinberg::int64 index=-1;
    if(attrs->getInt("Row",index)!=Steinberg::kResultOk||
@@ -746,7 +761,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
  KitState candidate;
- if(magic==kKitMagic||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {

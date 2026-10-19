@@ -10,6 +10,7 @@
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cfont.h"
+#include "vstgui/lib/controls/ctextedit.h"
 #include "vstgui/lib/ccolor.h"
 #include "vstgui/lib/idatapackage.h"
 #include "vstgui/lib/vstguibase.h"
@@ -255,6 +256,37 @@ std::size_t DrumatorView::displayedRows() const noexcept {
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
 }
+bool DrumatorView::removed(VSTGUI::CView* parent) {
+ if(nameEdit_){
+   if(auto* frame=getFrame())frame->removeView(nameEdit_);
+   nameEdit_=nullptr;
+   editingNameRow_=kRows;
+ }
+ return CView::removed(parent);
+}
+void DrumatorView::editName(std::size_t row) {
+ if(row>=controller_.visibleRows()||!getFrame())return;
+ const double y=kGridY+(row-firstRow_)*kRowHeight;
+ if(!nameEdit_){
+   nameEdit_=new VSTGUI::CTextEdit({52,y+2,202,y+26},this,1001,controller_.label(row).c_str());
+   getFrame()->addView(nameEdit_);
+ }
+ editingNameRow_=row;
+ nameEdit_->setViewSize({52,y+2,202,y+26});
+ nameEdit_->setText(controller_.customName(row).empty()?controller_.label(row).c_str():
+                   controller_.customName(row).c_str());
+ nameEdit_->setVisible(true);
+ nameEdit_->takeFocus();
+}
+void DrumatorView::valueChanged(VSTGUI::CControl* control) {
+ if(control!=nameEdit_||editingNameRow_>=kRows)return;
+ const auto text=std::string(nameEdit_->getText().getString());
+ if(!controller_.renameRow(editingNameRow_,text))status_="INSTRUMENTENNAME NICHT UEBERNOMMEN";
+ else status_="INSTRUMENTENNAME GESPEICHERT";
+ nameEdit_->setVisible(false);
+ editingNameRow_=kRows;
+ invalid();
+}
 void DrumatorView::refreshFromHost(bool relayout) {
  if(relayout&&getParentView())adjustEditorHeight();
  else invalid();
@@ -300,7 +332,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("SAMPLE LADEN: NAME KLICKEN / DATEI ZIEHEN  |  FILL: PRO ZEILE  |  SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
+ c->drawString("SAMPLE: NAME KLICK / DATEI ZIEHEN  |  SHIFT+NAME: UMBENENNEN  |  SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
@@ -802,6 +834,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=230&&x<275&&(buttons&VSTGUI::kAlt)==0) {
       if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=kLabelX&&x<203&&(buttons&VSTGUI::kShift)!=0) {
+      editName(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kLabelX&&x<203&&(buttons&VSTGUI::kAlt)!=0) {
       if(controller_.clearSample(row))status_="SAMPLE ENTFERNT - STEPS BLEIBEN";
