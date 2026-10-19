@@ -9,7 +9,7 @@ Der Entwicklungsbranch enthält wieder die funktionale VSTGUI aus Commit `6a8384
 - `src/vst3/DrumatorView.cpp/.h`: komplette bedienbare Custom View, bestehende Klickbereiche und dynamische Zustandsanzeige.
 - `src/vst3/DrumatorController.cpp/.h`: echte Funktionen, keine Attrappen.
 - `resource/Drumator.uidesc`: bestehendes Custom-View-Template, mit absichtlich noch leeren Bildressourcen.
-- **`resource/VSTGUI_ASSET_SLOTS.json`**: kontrollgenaue Koordinaten, Zustände, Austauschpunkte und später benötigte Grafikfamilien.
+- **`resource/VSTGUI_ASSET_SLOTS.json`**: dokumentierte Koordinaten, Zustände, Austauschpunkte und spätere Grafikfamilien. **Keine zur Laufzeit registrierten CBitmap- oder Filmstrip-Slots; der andere Chat muss die Bildanbindung tatsächlich implementieren.**
 
 ## Übergabe zum Austausch gegen fertig generierte Bilder
 
@@ -21,7 +21,7 @@ Der Entwicklungsbranch enthält wieder die funktionale VSTGUI aus Commit `6a8384
 6. Zoom 100 % und 150 %, Host-Resize und Kompaktansicht müssen erhalten bleiben. Grafiken in passender nativer Auflösung vorbereiten.
 7. Offizielles 125A-Logo: ausschließlich `challanger2000/125A-Branding/125A_Logo_Master_FINAL.svg` und geometrisch unverändert. **Hier wird noch kein Design oder Logo-Rendering implementiert.**
 
-Die genaue Liste aller visualisierten und klickbaren Bereiche in logischen Pixeln steht im **JSON-Manifest**. Beim späteren Austausch gelten die tatsächlichen C++-Hitbereiche als technische Quelle. Keine Änderung an Audio/DSP, MIDI, Automation, Samples oder Projektzustand.
+Die logischen Bild-/Kontrollgruppen stehen im **JSON-Manifest**. Die Master-/Song-Klickzonen sind in `src/core/UiHeaderHitZones.h` zentralisiert und gegen Randfälle geprüft. Andere wiederholte Gruppen brauchen noch pixelweise UI-Hosttests. Beim späteren Austausch gelten die tatsächlichen C++-Hitbereiche als technische Quelle. Keine Änderung an Audio/DSP, MIDI, Automation, Samples oder Projektzustand.
 
 **QA des Ausgangscodes:** Commit `3944ed2`, GitHub Actions [#39314206625](https://github.com/challanger2000/125A-Drumator/actions/runs/39314206625): 11/11 CTests PASS, Steinberg Validator 47/47 PASS, paketierte GUI-/Audio-Hosttests PASS. Danach bis `6a8384b` nur Dokumentation. Keine praktische Studio-One-Freigabe der endgültigen Optik.
 

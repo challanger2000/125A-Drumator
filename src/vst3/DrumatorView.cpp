@@ -5,6 +5,7 @@
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "core/VelocityLane.h"
+#include "core/UiHeaderHitZones.h"
 #include "core/RowMixControl.h"
 #include "core/Utf8Path.h"
 #include "vstgui/lib/cdrawcontext.h"
@@ -489,7 +490,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  for(int i=0;i<4;++i) {
    const double x=480+i*90.;
    drawControl(c,{x,buttonsY,x+85,buttonsY+29},actions[i],
-               i==3&&controller_.canUndoCurrentPattern());
+               false,i!=3||controller_.canUndoCurrentPattern());
  }
  drawControl(c,{844,buttonsY,1014,buttonsY+29},"VELOCITY VARIIEREN");
  drawControl(c,{1024,buttonsY,1220,buttonsY+29},"VELOCITY RESET 100");
@@ -695,15 +696,16 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    fillMenuRow_=-1;invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
- if(y>=74&&y<98&&x>=1140&&x<1228){
+ if(UiHeaderHitZones::masterMinus(x,y)||UiHeaderHitZones::masterPlus(x,y)){
    const int amount=(buttons&VSTGUI::kControl)?
-     -static_cast<int>(controller_.masterVolume()):(x<1182?-5:5);
+     -static_cast<int>(controller_.masterVolume()):
+     (UiHeaderHitZones::masterMinus(x,y)?-5:5);
    if(!controller_.adjustMasterVolume(amount))status_="MASTER LEVEL NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
- if(y>=74&&y<98&&x>=540&&x<850) {
+ if(UiHeaderHitZones::songToggle(x,y)||UiHeaderHitZones::songEditor(x,y)) {
    bool ok=true;
-   if(x<638)ok=controller_.toggleSongMode();
+   if(UiHeaderHitZones::songToggle(x,y))ok=controller_.toggleSongMode();
    else {songEditorOpen_=!songEditorOpen_;if(songEditorOpen_)adjustEditorHeight();}
    if(!ok)status_="SONG-MODUS NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;

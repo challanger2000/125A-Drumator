@@ -16,7 +16,7 @@
           "mouse-enabled": "true",
           "background-color": "~ BlackCColor",
           "minSize": "1280, 300",
-          "maxSize": "1280, 650"
+          "maxSize": "1280, 850"
         },
         "children": {
           "CView": {

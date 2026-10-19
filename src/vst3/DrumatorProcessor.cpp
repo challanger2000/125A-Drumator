@@ -58,6 +58,7 @@ Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context
 Steinberg::tresult PLUGIN_API Processor::setBusArrangements(
  Steinberg::Vst::SpeakerArrangement* inputs,Steinberg::int32 numIns,
  Steinberg::Vst::SpeakerArrangement* outputs,Steinberg::int32 numOuts) {
+ (void)inputs;
  if(numIns!=0||numOuts<1||numOuts>static_cast<Steinberg::int32>(kRows)||
     !outputs)return Steinberg::kResultFalse;
  for(Steinberg::int32 i=0;i<numOuts;++i)
@@ -217,12 +218,12 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.RowRandomVelocity")==0) {
-   Steinberg::int64 row=-1,percent=-1;
-   if(attrs->getInt("Row",row)!=Steinberg::kResultOk||
+   Steinberg::int64 randomRow=-1,percent=-1;
+   if(attrs->getInt("Row",randomRow)!=Steinberg::kResultOk||
       attrs->getInt("Percent",percent)!=Steinberg::kResultOk||
-      row<0||row>=static_cast<Steinberg::int64>(kRows)||
+      randomRow<0||randomRow>=static_cast<Steinberg::int64>(kRows)||
       percent<0||percent>100)return Steinberg::kInvalidArgument;
-   randomVelocity_[static_cast<std::size_t>(row)].store(
+   randomVelocity_[static_cast<std::size_t>(randomRow)].store(
        static_cast<std::uint8_t>(percent),std::memory_order_relaxed);
    return Steinberg::kResultOk;
  }

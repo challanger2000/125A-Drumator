@@ -1,7 +1,7 @@
 {
   "name": "125A-Drumator VSTGUI Technical Handoff",
   "functionalSource": "6a8384b241b865adc3d4e6266ca5c1c3f581fb34",
-  "artworkStatus": "NONE; another chat creates all final graphics",
+  "artworkStatus": "No artwork, bitmap resources, or runtime skin bindings exist; other chat implements final graphics",
   "canvas": {
     "width": 1280,
     "height": "max(326,108+displayedRows*29+(velocityLaneOpen?220:105))",
@@ -9,7 +9,9 @@
     "zoom": [
       1,
       1.5
-    ]
+    ],
+    "maxLogicalHeight": 850,
+    "maxExpectedContentHeightAt16RowsWithVelocity": 792
   },
   "sources": [
     "src/vst3/DrumatorView.cpp",
@@ -170,7 +172,14 @@
           638,
           98
         ],
-        "action": "toggle Song"
+        "action": "toggle Song",
+        "hitRect": [
+          540,
+          74,
+          638,
+          98
+        ],
+        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
       },
       {
         "id": "song_edit",
@@ -180,7 +189,14 @@
           850,
           98
         ],
-        "action": "show Song editor"
+        "action": "show Song editor",
+        "hitRect": [
+          652,
+          74,
+          850,
+          98
+        ],
+        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
       },
       {
         "id": "master_minus",
@@ -190,7 +206,14 @@
           1180,
           98
         ],
-        "action": "-5; Ctrl reset"
+        "action": "-5; Ctrl reset",
+        "hitRect": [
+          1140,
+          74,
+          1180,
+          98
+        ],
+        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
       },
       {
         "id": "master_plus",
@@ -200,7 +223,14 @@
           1228,
           98
         ],
-        "action": "+5; Ctrl reset"
+        "action": "+5; Ctrl reset",
+        "hitRect": [
+          1184,
+          74,
+          1228,
+          98
+        ],
+        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
       }
     ],
     "row": {
@@ -560,5 +590,7 @@
     "Use original 125A master logo geometry",
     "Preserve native 100% and 150% artwork resolution",
     "Preserve host zoom, audio, MIDI, project recall"
-  ]
+  ],
+  "sourceOfTruthForHeaderHitboxes": "src/core/UiHeaderHitZones.h",
+  "skinIntegrationReady": false
 }
