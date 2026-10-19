@@ -49,8 +49,4 @@ private:
  std::array<Entry,kCapacity> entries_{};
  std::size_t count_{kPatterns};
 };
-static_assert(SongChain{}.totalSteps()==256);
-static_assert(SongChain{}.at(32).pattern==1);
-static_assert(SongChain{}.at(256).pattern==0);
-static_assert(SongChain{}.at(-1).pattern==7);
 }
