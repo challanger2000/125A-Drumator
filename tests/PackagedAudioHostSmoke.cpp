@@ -245,6 +245,20 @@ int main(int argc,char** argv) {
  std::cout<<"Invalid WAV preserved audio, unloaded row 2 silent PASS\n";
  // Save an actual initialized component via its public VST3 IBStream
  // interface. Decode the recorded bytes to prove assets are truly embedded.
+ // Direct VST3 message contract: SONG A-B-A, three bars.
+ {
+   HostMessage config;
+   config.setMessageID("Drumator.SongConfig");
+   auto* a=config.getAttributes();
+   const std::array<std::uint8_t,6> entries{0,16,1,16,0,16};
+   require(a&&a->setInt("Enabled",1)==kResultOk&&
+           a->setInt("Count",3)==kResultOk&&
+           a->setBinary("Entries",entries.data(),
+             static_cast<Steinberg::uint32>(entries.size()))==kResultOk,
+           "SONG host message creation");
+   require(processorPoint->notify(&config)==kResultOk,
+           "SONG host message rejected");
+ }
  Steinberg::ResizableMemoryIBStream saved;
  require(component->getState(&saved)==kResultOk,"VST3 getState failed");
  const auto* raw=static_cast<const std::uint8_t*>(saved.getData());
@@ -255,6 +269,14 @@ int main(int argc,char** argv) {
          "Original FLOAT32 WAV was not embedded in song state");
  require(savedKit.names[0]=="StudioDrum.wav","WAV filename missing from song");
  require(savedKit.visible==4,"Default four visible rows lost");
+ require(savedKit.songEnabled==1&&savedKit.chain.count()==3&&
+         savedKit.chain.entry(0).pattern==0&&
+         savedKit.chain.entry(1).pattern==1&&
+         savedKit.chain.entry(2).pattern==0&&
+         savedKit.chain.entry(0).steps==16&&
+         savedKit.chain.entry(1).steps==16&&
+         savedKit.chain.entry(2).steps==16,
+         "SONG A-B-A persistence from actual VST3 failed");
  // Create a SECOND fresh plugin instance: restore state BEFORE setupProcessing,
  // as real hosts commonly do when reloading a project.
  IComponent* restored=nullptr;

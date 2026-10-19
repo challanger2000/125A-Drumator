@@ -244,6 +244,46 @@ int main(){
     check(hits[2].pattern==2&&hits[2].step==0&&hits[2].sampleOffset==144000,
           "song C follows fill");
   }
+  // A-B-A at bar 2: 3 one-bar entries, invariant to buffer subdivision.
+  {
+    SongChain chain;
+    check(chain.setCount(3)&&chain.configure(0,0,16)&&
+          chain.configure(1,1,16)&&chain.configure(2,0,16),"ABA chain");
+    struct Bank {
+      SongChain& chain;
+      std::uint8_t selected() const noexcept {return 0;}
+      SongChain::Position mapStep(std::int64_t x,std::int64_t origin) const noexcept {
+        return chain.at(x,origin);
+      }
+      std::uint8_t get(std::size_t p,std::size_t r,std::size_t step) const noexcept {
+        return r==p&&step==0?127:0;
+      }
+    } bank{chain};
+    std::vector<Trigger> whole,split;
+    const auto runABA=[&](std::uint32_t start,std::uint32_t frames,std::vector<Trigger>& out){
+      const auto ppq=4.0+static_cast<double>(start)*120.0/(60.0*48000.0);
+      const auto result=StepScheduler::run(bank,Clock{ppq,120.,48000.,
+        static_cast<int>(frames),true,0.,0.,16},[&](Trigger t){
+        t.sampleOffset+=start;out.push_back(t);
+      });
+      check(result.status==ScheduleStatus::Ok,"ABA scheduler status");
+    };
+    for(std::uint32_t i=0;i<288000;i+=96000)runABA(i,96000,whole);
+    for(std::uint32_t i=0;i<288000;){
+      const auto n=std::min(std::uint32_t{511},288000-i);
+      runABA(i,n,split);i+=n;
+    }
+    check(whole.size()==3&&split.size()==3,"ABA event count");
+    for(std::size_t i=0;i<3;++i){
+      const auto expected=static_cast<std::uint8_t>(i==1?1:0);
+      const auto offset=static_cast<std::uint32_t>(i*96000);
+      check(whole[i].pattern==expected&&whole[i].row==expected&&
+            whole[i].step==0&&whole[i].sampleOffset==offset,
+            "ABA wrong pattern or downbeat");
+      check(split[i].pattern==expected&&split[i].sampleOffset==offset,
+            "ABA buffer dependence");
+    }
+  }
   std::cout<<"Drumator step core: all test groups PASS\n";
   return 0;
  } catch(const std::exception& ex){
