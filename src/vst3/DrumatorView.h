@@ -21,6 +21,11 @@ public:
  void valueChanged(VSTGUI::CControl* control) override;
  VSTGUI::CMouseEventResult onMouseDown(
      VSTGUI::CPoint& point,const VSTGUI::CButtonState& buttons) override;
+ VSTGUI::CMouseEventResult onMouseMoved(
+     VSTGUI::CPoint& point,const VSTGUI::CButtonState& buttons) override;
+ VSTGUI::CMouseEventResult onMouseUp(
+     VSTGUI::CPoint& point,const VSTGUI::CButtonState& buttons) override;
+ VSTGUI::CMouseEventResult onMouseCancel() override;
  VSTGUI::SharedPointer<VSTGUI::IDropTarget> getDropTarget() override {return this;}
  VSTGUI::DragOperation onDragEnter(VSTGUI::DragEventData data) override;
  VSTGUI::DragOperation onDragMove(VSTGUI::DragEventData data) override;
@@ -40,6 +45,9 @@ private:
  std::size_t firstRow_{0};
  std::size_t songSlot_{0};
  bool songEditorOpen_{false};
+ bool velocityLaneOpen_{false};
+ bool laneDragActive_{false};
+ bool laneErase_{false};
  bool compactViewport_{false};
  std::size_t displayedRows() const noexcept;
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};

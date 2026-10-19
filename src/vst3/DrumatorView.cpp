@@ -4,6 +4,7 @@
 #include "core/CompactRowViewport.h"
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
+#include "core/VelocityLane.h"
 #include "core/RowMixControl.h"
 #include "core/Utf8Path.h"
 #include "vstgui/lib/cdrawcontext.h"
@@ -29,8 +30,10 @@ constexpr double kLabelX=16.0,kGridX=622.0,kGridY=108.0;
 constexpr double kCellWidth=19.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
 constexpr double kMinHeight=326.0;
-double contentHeight(std::size_t rows) {
- return std::max(kMinHeight,kGridY+rows*kRowHeight+99.0);
+double contentHeight(std::size_t rows,bool velocityOpen=false) {
+ return std::max(kMinHeight,kGridY+rows*kRowHeight+
+                 (velocityOpen?VelocityLane::kFooterHeight:
+                               VelocityLane::kClosedFooterHeight));
 }
 constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
 const VSTGUI::CColor background{26,35,45,255};
@@ -288,6 +291,8 @@ void DrumatorView::valueChanged(VSTGUI::CControl* control) {
  invalid();
 }
 void DrumatorView::refreshFromHost(bool relayout) {
+ if(controller_.visibleRows()>0)
+   velocityRow_=std::min(velocityRow_,controller_.visibleRows()-1);
  if(relayout&&getParentView())adjustEditorHeight();
  else invalid();
 }
@@ -297,7 +302,7 @@ bool DrumatorView::attached(VSTGUI::CView* parent) {
  return result;
 }
 bool DrumatorView::adjustEditorHeight() {
- const double height=contentHeight(controller_.visibleRows());
+ const double height=contentHeight(controller_.visibleRows(),velocityLaneOpen_);
  // The host owns its window; reject an unsupported host resize explicitly.
  // The editor combines user zoom with host content scaling.
  const auto effectiveScale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
@@ -325,7 +330,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
- c->drawRect({0,0,1280,contentHeight(controller_.visibleRows())},VSTGUI::kDrawFilled);
+ c->drawRect({0,0,1280,contentHeight(controller_.visibleRows(),velocityLaneOpen_)},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,18);
  c->setFontColor(letters);
  c->drawString("125A  /  DRUMATOR",VSTGUI::CRect(16,8,1000,32),
@@ -334,8 +339,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);
  c->drawString("P: SAMPLE VORHOEREN | SHIFT+A-H: 1/2 TAKTE | SHIFT+NAME: UMBENENNEN | SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
                VSTGUI::kLeftText);
- const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
- c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
+ const double gridBottom=kGridY+displayedRows()*kRowHeight;
+ const double statusY=gridBottom+(velocityLaneOpen_?188.0:78.0);
+ c->drawString(status_.c_str(),VSTGUI::CRect(16,statusY,1240,statusY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
  for(std::size_t pattern=0;pattern<8;++pattern) {
@@ -464,7 +470,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }
    }
  }
- const double buttonsY=kGridY+displayedRows()*kRowHeight+5.0;
+ const double buttonsY=gridBottom+5.0;
  c->setFillColor(controller_.visibleRows()<kRows?accent:panel);
  c->drawRect({16,buttonsY,213,buttonsY+29},VSTGUI::kDrawFilled);
  c->setFontColor(background);
@@ -498,6 +504,55 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{994,buttonsY+34,1064,buttonsY+64},"-1");
  drawControl(c,{1072,buttonsY+34,1142,buttonsY+64},"+1");
  drawControl(c,{1150,buttonsY+34,1220,buttonsY+64},"+10");
+ // Row selection and explicit show/hide; no extra overlay on the steps.
+ drawControl(c,{16,buttonsY+34,266,buttonsY+64},
+             velocityLaneOpen_?"VELOCITY-BALKEN SCHLIESSEN":"VELOCITY-BALKEN OEFFNEN",
+             velocityLaneOpen_);
+ drawControl(c,{280,buttonsY+34,324,buttonsY+64},"<");
+ char laneRowLabel[32]{};
+ const auto selectedRow=std::min(velocityRow_,controller_.visibleRows()-1);
+ std::snprintf(laneRowLabel,sizeof(laneRowLabel),"ZEILE %02u",
+               static_cast<unsigned>(selectedRow+1));
+ drawControl(c,{328,buttonsY+34,404,buttonsY+64},laneRowLabel,
+             velocityLaneOpen_);
+ drawControl(c,{408,buttonsY+34,455,buttonsY+64},">");
+ if(velocityLaneOpen_&&!songEditorOpen_) {
+   const double panelY=VelocityLane::panelTop(gridBottom);
+   const auto top=VelocityLane::barTop(gridBottom);
+   const auto bottom=VelocityLane::barBottom(gridBottom);
+   c->setFillColor(panel);
+   c->drawRect({16,panelY-5,1240,panelY+100},VSTGUI::kDrawFilled);
+   c->setFrameColor(border);
+   c->drawRect({16,panelY-5,1240,panelY+100},VSTGUI::kDrawStroked);
+   char laneTitle[192]{};
+   std::snprintf(laneTitle,sizeof(laneTitle),
+      "VELOCITY | ZEILE %02u  | PATTERN %c (%u TAKT) | KLICK/ZIEHEN: 1-127 | STRG+KLICK: AUS",
+      static_cast<unsigned>(selectedRow+1),
+      static_cast<char>('A'+controller_.currentPattern()),
+      controller_.patternLength(controller_.currentPattern())==16?1u:2u);
+   c->setFontColor(letters);
+   c->drawString(laneTitle,VSTGUI::CRect(28,panelY+15,614,panelY+73),
+                 VSTGUI::kLeftText);
+   const auto currentLength=controller_.patternLength(controller_.currentPattern());
+   for(std::size_t step=0;step<kSteps;++step) {
+     const auto x=VelocityLane::kLeft+static_cast<double>(step)*VelocityLane::kCellWidth;
+     const auto velocity=controller_.velocity(controller_.currentPattern(),selectedRow,step);
+     const auto inactive=step>=currentLength;
+     c->setFillColor(inactive?VSTGUI::CColor{39,45,53,255}:background);
+     c->drawRect({x+1,top,x+18,bottom},VSTGUI::kDrawFilled);
+     if(velocity>0) {
+       c->setFillColor(inactive?border:on);
+       c->drawRect({x+3,bottom-VelocityLane::heightFor(velocity),
+                    x+16,bottom},VSTGUI::kDrawFilled);
+     }
+     c->setFrameColor(step==velocityStep_?accent:
+                      (step%4==0?border:off));
+     c->drawRect({x+1,top,x+18,bottom},VSTGUI::kDrawStroked);
+   }
+   c->setFontColor(accent);
+   c->drawString("0",VSTGUI::CRect(1231,bottom-10,1240,bottom+1));
+   c->drawString("127",VSTGUI::CRect(1231,top,1255,top+16));
+ }
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
     const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-230.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HIHAT","GALOPP","SNARE + GHOST"};
@@ -728,7 +783,44 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
  }
- const double actionsY=kGridY+displayedRows()*kRowHeight+5.0;
+ const double gridBottom=kGridY+displayedRows()*kRowHeight;
+ const double actionsY=gridBottom+5.0;
+ if(y>=actionsY+34&&y<actionsY+64&&x>=16&&x<266) {
+   const bool previous=velocityLaneOpen_;
+   const bool wasCompact=compactViewport_;
+   const auto wasFirstRow=firstRow_;
+   velocityLaneOpen_=!previous;
+   if(!adjustEditorHeight()){
+     velocityLaneOpen_=previous;
+     compactViewport_=wasCompact;
+     firstRow_=wasFirstRow;
+     status_="HOST HAT FENSTERHOEHE FUER VELOCITY ABGELEHNT";
+   }else status_=velocityLaneOpen_?"VELOCITY-BALKEN SICHTBAR":"VELOCITY-BALKEN AUS";
+   invalid();
+   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
+ if(y>=actionsY+34&&y<actionsY+64&&x>=280&&x<455) {
+   velocityRow_=std::min(velocityRow_,controller_.visibleRows()-1);
+   if(x<324) {
+     if(velocityRow_>0)--velocityRow_;
+   }else if(x>=408) {
+     if(velocityRow_+1<controller_.visibleRows())++velocityRow_;
+   }
+   invalid();
+   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
+ if(velocityLaneOpen_&&!songEditorOpen_&&
+    VelocityLane::hit(x,y,gridBottom)) {
+    laneDragActive_=true;
+    laneErase_=(buttons&VSTGUI::kControl)!=0;
+    const auto step=static_cast<std::size_t>(VelocityLane::stepAt(x));
+    velocityStep_=step;
+    const auto vel=VelocityLane::valueAt(y,gridBottom,laneErase_);
+    if(!controller_.setStepVelocity(controller_.currentPattern(),velocityRow_,step,vel))
+      status_="VELOCITY-BALKEN NICHT UEBERNOMMEN";
+    invalid();
+    return VSTGUI::kMouseEventHandled;
+ }
  if(y>=actionsY+34&&y<actionsY+64&&x>=916&&x<1220){
    int delta=0;
    if(x<986)delta=-10;
@@ -878,5 +970,33 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
  }
  return VSTGUI::kMouseEventNotHandled;
+}
+VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
+    VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
+ if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
+ if(!(buttons&VSTGUI::kLButton)){
+   laneDragActive_=false;return VSTGUI::kMouseEventHandled;
+ }
+ const double bottom=kGridY+displayedRows()*kRowHeight;
+ const auto step=VelocityLane::stepAt(pos.x);
+ if(step<0||!velocityLaneOpen_||songEditorOpen_)
+   return VSTGUI::kMouseEventHandled;
+ const auto mapped=VelocityLane::valueAt(pos.y,bottom,laneErase_);
+ velocityStep_=static_cast<std::size_t>(step);
+ if(!controller_.setStepVelocity(controller_.currentPattern(),velocityRow_,
+                                 velocityStep_,mapped))
+   status_="VELOCITY-ZIEHEN NICHT UEBERNOMMEN";
+ invalid();
+ return VSTGUI::kMouseEventHandled;
+}
+VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
+    VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
+ if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
+ laneDragActive_=false;
+ return VSTGUI::kMouseEventHandled;
+}
+VSTGUI::CMouseEventResult DrumatorView::onMouseCancel() {
+ laneDragActive_=false;
+ return VSTGUI::kMouseEventHandled;
 }
 }
