@@ -33,6 +33,7 @@ public:
                   VSTGUI::VST3Editor*) override;
 
  bool clearSample(std::size_t row);
+ bool previewSample(std::size_t row);
  bool toggleRowGate(std::size_t row,bool solo);
  bool cycleRowChoke(std::size_t row,int direction=1);
  bool cycleRowOutput(std::size_t row);

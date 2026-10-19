@@ -98,6 +98,8 @@ private:
 
  SampleExchange exchange_{};
  TriggerBatch triggers_{};
+ // One-shot previews from GUI; one pending request per row, not persisted.
+ std::atomic<std::uint32_t> previewPending_{0};
  std::atomic<double> outputRate_{0.0};
  bool wasPlaying_{false};
  std::int64_t phaseOriginStep_{0};

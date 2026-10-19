@@ -212,6 +212,40 @@ int main(int argc,char** argv) {
  audition(16,false,.5f);
  audition(24,false,.25f);
  audition(32,true,-.5f);
+ // Real packaged VST3 GUI audition: validate message contract and actual
+ // one-shot audio while transport is stopped (no MIDI input).
+ auto preview=[&](int row) {
+   HostMessage message;
+   message.setMessageID("Drumator.PreviewRow");
+   auto* attrs=message.getAttributes();
+   require(attrs&&attrs->setInt("Row",row)==kResultOk,"Preview message attribute");
+   return processorPoint->notify(&message);
+ };
+ context.state=0;
+ for(int i=0;i<8;++i)run(-1); // drain previous MIDI voice
+ require(preview(-1)!=kResultOk&&preview(16)!=kResultOk,
+         "Preview accepted invalid row");
+ require(preview(1)!=kResultOk,"Preview accepted empty row");
+ require(preview(0)==kResultOk,"Loaded row preview rejected");
+ run(-1);
+ double previewMean=0.;
+ for(int i=50;i<190;++i)previewMean+=left[i];
+ require(std::abs(previewMean/140.+.5)<.015,
+         "GUI preview was silent or wrong gain with transport stopped");
+ for(int i=0;i<8;++i)run(-1);
+ run(-1);
+ for(int i=0;i<256;++i)
+   require(left[i]==0.f&&right[i]==0.f,
+           "Preview retriggered without a new request");
+ require(preview(0)==kResultOk&&preview(0)==kResultOk,
+         "Repeated preview request rejected");
+ run(-1);
+ double coalescedMean=0.;
+ for(int i=50;i<190;++i)coalescedMean+=left[i];
+ require(std::abs(coalescedMean/140.+.5)<.015,
+         "Repeated preview requests stacked voices or went silent");
+ for(int i=0;i<8;++i)run(-1);
+ std::cout<<"Packaged GUI one-shot sample preview / stopped transport / invalid rows PASS\\n";
  // Exercise actual packaged VST3 global master DSP at zero, half and double
  // gain, including invalid control values and return to neutral gain.
  auto setMaster=[&](int value)->tresult {

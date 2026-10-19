@@ -83,13 +83,15 @@ Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 s
  return size==Steinberg::Vst::kSample32?Steinberg::kResultTrue:Steinberg::kResultFalse;
 }
 Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
- if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;}
+ if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
+             previewPending_.store(0,std::memory_order_release);}
  return AudioEffect::setActive(state);
 }
 Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
  // Steinberg's AudioEffect default returns kNotImplemented. A real host
  // may invoke this independently of setActive; honor the lifecycle.
- if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;}
+ if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
+             previewPending_.store(0,std::memory_order_release);}
  return Steinberg::kResultOk;
 }
 // Messages are delivered on the UI thread by the VST3 IConnectionPoint
@@ -113,11 +115,24 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     std::strcmp(id,"Drumator.MasterVolume")!=0&&
     std::strcmp(id,"Drumator.SongConfig")!=0&&
     std::strcmp(id,"Drumator.ClearSample")!=0&&
-    std::strcmp(id,"Drumator.RenameRow")!=0)
+    std::strcmp(id,"Drumator.RenameRow")!=0&&
+    std::strcmp(id,"Drumator.PreviewRow")!=0)
     return AudioEffect::notify(msg);
  auto* attrs=msg->getAttributes();
  if(!attrs)return Steinberg::kInvalidArgument;
  Steinberg::int64 row=-1;
+ if(std::strcmp(id,"Drumator.PreviewRow")==0) {
+   Steinberg::int64 index=-1;
+   if(attrs->getInt("Row",index)!=Steinberg::kResultOk||
+      index<0||index>=static_cast<Steinberg::int64>(kRows)||
+      index>=static_cast<Steinberg::int64>(visibleRows_.load(std::memory_order_relaxed)))
+     return Steinberg::kInvalidArgument;
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   if(kit_.wav[static_cast<std::size_t>(index)].empty())return Steinberg::kResultFalse;
+   previewPending_.fetch_or(std::uint32_t{1}<<static_cast<unsigned>(index),
+                            std::memory_order_release);
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.RenameRow")==0) {
    Steinberg::int64 index=-1;
    const void* bytes=nullptr;
@@ -149,6 +164,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    (void)old;
    if(!exchange_.publish(static_cast<std::size_t>(index),silent))
       return Steinberg::kResultFalse;
+   previewPending_.fetch_and(~(std::uint32_t{1}<<static_cast<unsigned>(index)),
+                             std::memory_order_acq_rel);
    kit_.wav[static_cast<std::size_t>(index)].clear();
    kit_.names[static_cast<std::size_t>(index)].clear();
    return Steinberg::kResultOk;
@@ -372,6 +389,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     (void)previousPending;
     if(!exchange_.publish(static_cast<std::size_t>(row),candidate))
        return Steinberg::kResultFalse;
+    previewPending_.fetch_and(~(std::uint32_t{1}<<static_cast<unsigned>(row)),
+                              std::memory_order_acq_rel);
     kit_.wav[static_cast<std::size_t>(row)].swap(retained);
     kit_.names[static_cast<std::size_t>(row)].swap(fileName);
  }
@@ -640,6 +659,14 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                             static_cast<std::uint32_t>(data.numSamples));
    }
  }
+ // Consume one-shot GUI previews in the audio callback after pattern scheduling.
+ // Per-row bit coalescing is bounded and allocation-free; downstream
+ // mix/output/choke/mute/solo and master processing remain unchanged.
+ const auto pending=previewPending_.exchange(0,std::memory_order_acq_rel);
+ for(std::size_t row=0;row<kRows;++row)
+   if((pending&(std::uint32_t{1}<<row))!=0)
+     (void)triggers_.appendNoteOn(static_cast<std::int32_t>(36+row),1.f,0,
+                                   static_cast<std::uint32_t>(data.numSamples));
  for(std::size_t row=0;row<kRows;++row)
    if(!voices_.setRowMix(row,rowGain_[row].load(std::memory_order_relaxed),
                            rowPan_[row].load(std::memory_order_relaxed))||
@@ -804,6 +831,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     ControlRestoreEntry restoreGate(restoreGate_);
     if(rate>0.0&&!publishRestoredKit(candidate,rate))
        return Steinberg::kResultFalse;
+    previewPending_.store(0,std::memory_order_release);
     kit_=std::move(candidate);
     songMailbox_.publish(kit_.chain,kit_.songEnabled!=0);
     // Publish restored rhythms per complete pattern generation. A live

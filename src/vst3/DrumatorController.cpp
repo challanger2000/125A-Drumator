@@ -504,6 +504,19 @@ bool Controller::adjustSwing(int delta) {
  if(ok)swingPercent_=static_cast<std::uint8_t>(next);
  return ok;
 }
+bool Controller::previewSample(std::size_t row) {
+ if(row>=visibleRows_)return false;
+ auto* msg=allocateMessage();if(!msg)return false;
+ msg->setMessageID("Drumator.PreviewRow");
+ auto* attrs=msg->getAttributes();
+ if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk) {
+   msg->release();return false;
+ }
+ // A preview must not mark the DAW project dirty.
+ const auto result=sendMessage(msg);
+ msg->release();
+ return result==Steinberg::kResultOk;
+}
 bool Controller::clearSample(std::size_t row) {
  if(row>=kRows)return false;
  auto* msg=allocateMessage();if(!msg)return false;

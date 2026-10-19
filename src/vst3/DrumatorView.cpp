@@ -268,11 +268,11 @@ void DrumatorView::editName(std::size_t row) {
  if(row>=controller_.visibleRows()||!getFrame())return;
  const double y=kGridY+(row-firstRow_)*kRowHeight;
  if(!nameEdit_){
-   nameEdit_=new VSTGUI::CTextEdit({52,y+2,202,y+26},this,1001,controller_.label(row).c_str());
+   nameEdit_=new VSTGUI::CTextEdit({81,y+2,202,y+26},this,1001,controller_.label(row).c_str());
    getFrame()->addView(nameEdit_);
  }
  editingNameRow_=row;
- nameEdit_->setViewSize({52,y+2,202,y+26});
+ nameEdit_->setViewSize({81,y+2,202,y+26});
  nameEdit_->setText(controller_.customName(row).empty()?controller_.label(row).c_str():
                    controller_.customName(row).c_str());
  nameEdit_->setVisible(true);
@@ -332,7 +332,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("SAMPLE: NAME KLICK / DATEI ZIEHEN  |  SHIFT+NAME: UMBENENNEN  |  SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
+ c->drawString("P: SAMPLE VORHOEREN  |  NAME: LADEN / SHIFT+NAME: UMBENENNEN  |  SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
                VSTGUI::kLeftText);
  const double footerY=kGridY+displayedRows()*kRowHeight+39.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,footerY,1240,footerY+21),
@@ -391,13 +391,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(letters);
    // Visible per-row FILL button, not a hidden action behind a row number.
    drawControl(c,{16,y+2,48,y+26},"FILL");
+   drawControl(c,{52,y+2,78,y+26},"P");
    const auto& name=controller_.label(row);
    // Fit the filename in the fixed row area; preserve the extension where possible.
    std::string visibleName=name;
    // Reserve space for previous/next sample buttons and the output selector.
-   if(visibleName.size()>16) {
+   if(visibleName.size()>13) {
      // Truncate on UTF-8 codepoint boundaries, never inside a character.
-     auto prefixEnd=std::min<std::size_t>(9,name.size());
+     auto prefixEnd=std::min<std::size_t>(6,name.size());
      while(prefixEnd>0&&prefixEnd<name.size()&&
            (static_cast<unsigned char>(name[prefixEnd])&0xC0u)==0x80u)
        --prefixEnd;
@@ -407,7 +408,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        ++suffixBegin;
      visibleName=name.substr(0,prefixEnd)+"..."+name.substr(suffixBegin);
    }
-   c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,202,y+26),
+   c->drawString(visibleName.c_str(),VSTGUI::CRect(81,y,202,y+26),
                  VSTGUI::kLeftText);
    drawControl(c,{203,y+2,216,y+26},"<");
    drawControl(c,{216,y+2,229,y+26},">");
@@ -835,7 +836,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";
       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=kLabelX&&x<203&&(buttons&VSTGUI::kShift)!=0) {
+   if(x>=52&&x<78) {
+      status_=controller_.previewSample(row)?"SAMPLE-VORSCHAU ANGEFORDERT":
+                       "VORSCHAU NICHT MOEGLICH: SAMPLE LADEN / HOST-AUDIO PRUEFEN";
+      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=81&&x<203&&(buttons&VSTGUI::kShift)!=0) {
       editName(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kLabelX&&x<203&&(buttons&VSTGUI::kAlt)!=0) {
