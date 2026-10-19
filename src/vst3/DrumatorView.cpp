@@ -5,6 +5,7 @@
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "core/VelocityLane.h"
+#include "core/UiOverlayHitZones.h"
 #include "core/UiHeaderHitZones.h"
 #include "core/RowMixControl.h"
 #include "core/Utf8Path.h"
@@ -80,8 +81,7 @@ private:
  bool allowed(VSTGUI::DragEventData data) const {
     auto local=data.pos;
     view_.frameToLocal(local);
-    if(local.y<kGridY||local.y>=kGridY+view_.visibleRowsForHit()*kRowHeight||
-       local.x<kLabelX||local.x>kGridRight)return false;
+    if(!view_.sampleDropTargetAt(local.x,local.y))return false;
     std::string path;
     return extractSamplePath(data.drag,path);
  }
@@ -236,7 +236,8 @@ private:
 };
 VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
  std::string path;
- const bool hasPath=DrumatorDropTarget::extractSamplePath(data.drag,path);
+ const bool hasPath=sampleDropTargetAt(data.pos.x,data.pos.y)&&
+                    DrumatorDropTarget::extractSamplePath(data.drag,path);
  status_=hasPath?"D&D: DATEIPFAD ERKANNT - AUF INSTRUMENTENZEILE ZIEHEN":
                  "D&D: EREIGNIS EMPFANGEN, ABER KEIN WAV/FLAC-DATEIPFAD";
  invalid();
@@ -244,7 +245,8 @@ VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
 }
 VSTGUI::DragOperation DrumatorView::onDragMove(VSTGUI::DragEventData data) {
  std::string path;
- return DrumatorDropTarget::extractSamplePath(data.drag,path)
+ return sampleDropTargetAt(data.pos.x,data.pos.y)&&
+        DrumatorDropTarget::extractSamplePath(data.drag,path)
    ?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
 }
 void DrumatorView::onDragLeave(VSTGUI::DragEventData) {}
@@ -253,6 +255,13 @@ bool DrumatorView::onDrop(VSTGUI::DragEventData data) {
 }
 std::size_t DrumatorView::visibleRowsForHit() const noexcept {
  return displayedRows();
+}
+bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
+ const bool fill=fillMenuRow_>=0;
+ const double top=fill?std::max(0.0,std::min(kGridY+
+    (fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,
+    getViewSize().getHeight()-230.0)):0.0;
+ return UiOverlayHitZones::canDrop(x,y,displayedRows(),songEditorOpen_,fill,top);
 }
 std::size_t DrumatorView::displayedRows() const noexcept {
  return compactViewport_?CompactRowViewport::count(controller_.visibleRows(),firstRow_):controller_.visibleRows();
@@ -637,8 +646,7 @@ bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
    status_="D&D FEHLER: KEINE DATEN VOM HOST";invalid();return false;
  }
  const auto position=data.pos;
- if(position.x<kLabelX||position.x>kGridRight||
-    position.y<kGridY||position.y>=kGridY+displayedRows()*kRowHeight) {
+ if(!sampleDropTargetAt(position.x,position.y)) {
    status_="D&D FEHLER: AUSSERHALB DER INSTRUMENTENZEILEN";
    invalid();return false;
  }
@@ -698,7 +706,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  if(UiHeaderHitZones::masterMinus(x,y)||UiHeaderHitZones::masterPlus(x,y)){
    const int amount=(buttons&VSTGUI::kControl)?
-     -static_cast<int>(controller_.masterVolume()):
+     100-static_cast<int>(controller_.masterVolume()):
      (UiHeaderHitZones::masterMinus(x,y)?-5:5);
    if(!controller_.adjustMasterVolume(amount))status_="MASTER LEVEL NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
@@ -730,10 +738,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      const auto current=controller_.songEntry(slot);
      if(x>=115&&x<563) {
        const auto index=static_cast<std::size_t>((x-115)/56.);
-       if(index<8)ok=controller_.setSongEntry(slot,static_cast<std::uint8_t>(index),current.steps);
+       if(index<8&&x<115+index*56.+50.)ok=controller_.setSongEntry(slot,static_cast<std::uint8_t>(index),current.steps);
      }else if(x>=678&&x<996) {
        const auto index=static_cast<std::size_t>((x-678)/106.);
-       if(index<3) {
+       if(index<3&&x<678+index*106.+100.) {
          const std::uint8_t lengths[]={8,16,32};
          ok=controller_.setSongEntry(slot,current.pattern,lengths[index]);
        }
@@ -841,8 +849,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(y>=actionsY&&y<actionsY+29) {
    if(x>=844&&x<1220){
      const bool ok=x<1014?controller_.varyPatternVelocity():
-                            (x>=1024?controller_.resetPatternVelocity():true);
-     if(!ok)status_="VELOCITY-AKTION NICHT UEBERNOMMEN";
+                            (x>=1024?controller_.resetPatternVelocity():false);
+     if(!ok&&x>=1014&&x<1024)return VSTGUI::kMouseEventNotHandled;
+      if(!ok)status_="VELOCITY-AKTION NICHT UEBERNOMMEN";
      else status_=x<1014?"AKTIVE STEPS: VELOCITY VARIIERT":"AKTIVE STEPS: VELOCITY 100";
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }

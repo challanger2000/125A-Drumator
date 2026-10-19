@@ -432,6 +432,8 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  // Deliberately silent until a real user sample was actually accepted.
  // No hidden synthesized kick to confuse failed import with working audio.
  if(!voices_.setOutputRate(setup.sampleRate))return Steinberg::kResultFalse;
+ if(!patternTimeline_.configure(static_cast<std::size_t>(setup.maxSamplesPerBlock)))
+   return Steinberg::kOutOfMemory;
  prepared_=true;
  outputRate_.store(setup.sampleRate,std::memory_order_release);
  {
@@ -528,15 +530,10 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  // Collect MIDI A-H and host automation before scheduling. Fixed storage
  // avoids allocations in the audio callback; equal-offset host wins.
  (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_);
- struct PatternEdit {Steinberg::int32 offset;std::uint8_t pattern;bool host;std::size_t order;};
- std::array<PatternEdit,256> patternEdits{};
- std::size_t editCount=0;
- bool editOverflow=false;
+ if(!patternTimeline_.reset(static_cast<std::size_t>(data.numSamples)))
+   return Steinberg::kInvalidArgument;
  auto addPattern=[&](Steinberg::int32 offset,unsigned pattern,bool host) {
-   if(editOverflow||offset<0||offset>=data.numSamples)return;
-   if(editCount==patternEdits.size()){editCount=0;editOverflow=true;return;}
-   patternEdits[editCount]={offset,static_cast<std::uint8_t>(pattern),host,editCount};
-   ++editCount;
+   patternTimeline_.insert(offset,pattern,host);
  };
  if(data.inputParameterChanges) {
    for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
@@ -560,12 +557,18 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      addPattern(e.sampleOffset,static_cast<unsigned>(e.noteOn.pitch-24),false);
    }
  }
- std::sort(patternEdits.begin(),patternEdits.begin()+editCount,
-   [](const PatternEdit& l,const PatternEdit& r) {
-     if(l.offset!=r.offset)return l.offset<r.offset;
-     if(l.host!=r.host)return !l.host;
-     return l.order<r.order;
-   });
+ // Preallocated sample timeline replaces the former destructive 256-point overflow.
+ Steinberg::Vst::IParamValueQueue* outputPatternQueue=nullptr;
+ auto reportMidi=[&](Steinberg::int32 offset,std::uint8_t pattern) {
+   if(!data.outputParameterChanges)return;
+   if(!outputPatternQueue) {
+     Steinberg::int32 index=0;
+     outputPatternQueue=data.outputParameterChanges->addParameterData(kPatternParam,index);
+     if(!outputPatternQueue)return;
+   }
+   Steinberg::int32 index=0;
+   (void)outputPatternQueue->addPoint(offset,static_cast<double>(pattern)/7.0,index);
+ };
  // Process program changes at their actual sample offset. Schedule each
  // constant-pattern interval separately; no allocation in the audio callback.
  if(playing&&context&&
@@ -665,16 +668,24 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
      cursor=finish;
    };
-   for(std::size_t i=0;i<editCount;++i) {
-     scheduleRange(patternEdits[i].offset);
-     activePattern=patternEdits[i].pattern;
+   for(Steinberg::int32 offset=0;offset<data.numSamples;++offset) {
+     const auto point=patternTimeline_.get(static_cast<std::size_t>(offset));
+     if(!point.source)continue;
+     scheduleRange(offset);
+     activePattern=point.pattern;
+     if(point.source==PatternEventTimeline::kMidi)reportMidi(offset,point.pattern);
    }
    scheduleRange(data.numSamples);
    selected_.store(activePattern,std::memory_order_relaxed);
  }else {
-   // Retain MIDI/automation selection for the next valid transport start.
-   if(editCount)selected_.store(patternEdits[editCount-1].pattern,
-                               std::memory_order_relaxed);
+   auto active=selected_.load(std::memory_order_relaxed);
+   for(Steinberg::int32 offset=0;offset<data.numSamples;++offset) {
+     const auto point=patternTimeline_.get(static_cast<std::size_t>(offset));
+     if(!point.source)continue;
+     active=point.pattern;
+     if(point.source==PatternEventTimeline::kMidi)reportMidi(offset,point.pattern);
+   }
+   selected_.store(active,std::memory_order_relaxed);
  }
  // MIDI one-shot audition also works with stopped DAW transport.
  if(data.inputEvents) {

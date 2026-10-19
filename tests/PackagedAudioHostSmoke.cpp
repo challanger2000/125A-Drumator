@@ -1157,6 +1157,53 @@ int main(int argc,char** argv) {
  for(int n=180;n<240;++n)hostMagnitude+=std::abs(left[n]);
  require(hostMagnitude>1.,"Host automation failed to override MIDI at equal offset");
  std::cout<<"MIDI A-H / automation ordering packaged audio PASS\n";
+ // A01: processor MIDI A->B reports a host output parameter at offset64.
+ {
+   ParameterChanges published;
+   data.outputParameterChanges=&published;
+   loadPattern(0);context.projectTimeMusic=0.;context.tempo=5625.;
+   require(ctrl->setParamNormalized(drumator::kPatternParam,0.)==kResultOk,
+           "A01 initial controller pattern");
+   data.inputParameterChanges=nullptr;
+   midiSelect(25,64);
+   require(published.getParameterCount()==1,"A01 missing output parameter");
+   auto* q=published.getParameterData(0);
+   require(q&&q->getParameterId()==drumator::kPatternParam&&q->getPointCount()==1,
+           "A01 wrong parameter output queue");
+   int32 offset=0;ParamValue value=0;
+   require(q->getPoint(0,offset,value)==kResultTrue&&offset==64&&
+           std::abs(value-1./7.)<1e-9,"A01 wrong sample offset/value");
+   require(ctrl->setParamNormalized(drumator::kPatternParam,value)==kResultOk&&
+           std::abs(ctrl->getParamNormalized(drumator::kPatternParam)-1./7.)<1e-9,
+           "A01 controller did not follow host MIDI feedback");
+   data.outputParameterChanges=nullptr;
+ }
+ // A02: 250 distinct host events + 8 MIDI changes exceeded the old 256 cap.
+ {
+   loadPattern(0);context.projectTimeMusic=0.;context.tempo=5625.;
+   ParameterChanges flood;int32 parameterIndex=0;
+   auto* q=flood.addParameterData(drumator::kPatternParam,parameterIndex);
+   require(q!=nullptr,"A02 host queue");
+   for(int offset=0;offset<250;++offset){
+     int32 pointIndex=0;
+     require(q->addPoint(offset,1./7.,pointIndex)==kResultOk,
+             "A02 host automation addPoint");
+   }
+   events.clear();
+   for(int offset=0;offset<8;++offset) {
+     Event e{};e.type=Event::kNoteOnEvent;e.busIndex=0;
+     e.sampleOffset=offset;e.noteOn.pitch=24;e.noteOn.velocity=1.f;e.noteOn.noteId=-1;
+     require(events.addEvent(e)==kResultOk,"A02 MIDI addEvent");
+   }
+   data.inputParameterChanges=&flood;
+   require(audio->process(data)==kResultOk,"A02 host process 258 events");
+   double measured=0.;
+   for(int n=180;n<240;++n)measured+=std::abs(left[n]);
+   require(measured>1.,"A02 B missing after >256 events");
+   data.inputParameterChanges=nullptr;
+   events.clear();
+ }
+ context.tempo=120.;
  data.inputParameterChanges=nullptr;
  context.state=0;
  std::cout<<"VST3 distinct pattern recall and rendered playback PASS\\n";

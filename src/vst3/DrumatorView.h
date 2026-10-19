@@ -33,6 +33,7 @@ public:
  bool onDrop(VSTGUI::DragEventData data) override;
  bool acceptFileDrop(VSTGUI::DragEventData data);
  std::size_t visibleRowsForHit() const noexcept;
+ bool sampleDropTargetAt(double x,double y) const noexcept;
 private:
  Controller& controller_;
  VSTGUI::CTextEdit* nameEdit_{nullptr};

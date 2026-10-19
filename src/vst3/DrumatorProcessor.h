@@ -8,6 +8,7 @@
 #include "core/TriggerBatch.h"
 #include "core/KitRestoreGate.h"
 #include "core/AtomicPatternSelection.h"
+#include "core/PatternEventTimeline.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include <array>
 #include <atomic>
@@ -98,6 +99,7 @@ private:
 
  SampleExchange exchange_{};
  TriggerBatch triggers_{};
+ PatternEventTimeline patternTimeline_{};
  // One-shot previews from GUI; one pending request per row, not persisted.
  std::atomic<std::uint32_t> previewPending_{0};
  std::atomic<double> outputRate_{0.0};
