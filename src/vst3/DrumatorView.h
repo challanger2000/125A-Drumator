@@ -4,8 +4,9 @@
 #include "vstgui/lib/dragging.h"
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include <string>
+#include <array>
 #include "core/SequencerCore.h"
-namespace VSTGUI {class CTextEdit;}
+namespace VSTGUI {class CTextEdit;class CGraphicsPath;}
 namespace drumator {
 class Controller;
 class DrumatorView final : public VSTGUI::CView, public VSTGUI::IDropTarget,
@@ -35,6 +36,8 @@ public:
  std::size_t visibleRowsForHit() const noexcept;
 private:
  Controller& controller_;
+ std::array<VSTGUI::CGraphicsPath*,30> logoPaths_{};
+ void drawOfficialLogo(VSTGUI::CDrawContext* context);
  VSTGUI::CTextEdit* nameEdit_{nullptr};
  std::size_t editingNameRow_{kRows};
  void editName(std::size_t row);

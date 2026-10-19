@@ -5,9 +5,11 @@
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "core/VelocityLane.h"
+#include "Official125ALogoGeometry.h"
 #include "core/RowMixControl.h"
 #include "core/Utf8Path.h"
 #include "vstgui/lib/cdrawcontext.h"
+#include "vstgui/lib/cgraphicspath.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cfont.h"
@@ -19,6 +21,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <filesystem>
@@ -36,23 +39,42 @@ double contentHeight(std::size_t rows,bool velocityOpen=false) {
                                VelocityLane::kClosedFooterHeight));
 }
 constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
-const VSTGUI::CColor background{26,35,45,255};
-const VSTGUI::CColor panel{41,53,67,255};
-const VSTGUI::CColor border{73,94,114,255};
-const VSTGUI::CColor on{224,137,66,255};
-const VSTGUI::CColor off{67,81,96,255};
-const VSTGUI::CColor letters{228,236,243,255};
-const VSTGUI::CColor accent{104,175,203,255};
+// Bright brushed graphite / blue-grey studio rack (not distressed blue).
+// Warm illuminated 808-style steps and restrained, cool selection LEDs.
+const VSTGUI::CColor background{25,31,39,255};
+const VSTGUI::CColor panel{53,65,77,255};
+const VSTGUI::CColor border{101,121,137,255};
+const VSTGUI::CColor on{233,147,67,255};
+const VSTGUI::CColor off{64,77,90,255};
+const VSTGUI::CColor letters{241,245,247,255};
+const VSTGUI::CColor accent{135,200,222,255};
+const VSTGUI::CColor buttonShadow{17,23,29,255};
+const VSTGUI::CColor buttonLip{153,171,182,255};
+const VSTGUI::CColor softMetal{75,89,103,255};
+const VSTGUI::CColor groupShade{34,43,54,255};
 
 // Centralized VSTGUI button renderer: consistent visible frame, fill,
 // contrast and selected/disabled states, with fixed hit regions.
 void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
                  const char* title,bool selected=false,bool enabled=true) {
+ // Lit, inset/raised rack-switch rendering without bitmap scaling
+ // or any change to the established interaction rect.
+ ctx->setFillColor(buttonShadow);
+ ctx->drawRect({rect.left+1,rect.top+2,rect.right+1,rect.bottom+2},VSTGUI::kDrawFilled);
  const VSTGUI::CColor face=enabled?(selected?accent:panel):background;
  ctx->setFillColor(face);
  ctx->drawRect(rect,VSTGUI::kDrawFilled);
  ctx->setFrameColor(selected?letters:border);
  ctx->drawRect(rect,VSTGUI::kDrawStroked);
+ ctx->setFrameColor(selected?VSTGUI::CColor{228,247,252,255}:buttonLip);
+ ctx->drawLine({rect.left+2,rect.top+2},{rect.right-2,rect.top+2});
+ ctx->setFrameColor(buttonShadow);
+ ctx->drawLine({rect.left+2,rect.bottom-2},{rect.right-2,rect.bottom-2});
+ if(selected&&enabled){
+   ctx->setFillColor(VSTGUI::CColor{234,248,250,255});
+   ctx->drawRect({rect.left+2,rect.bottom-4,rect.right-2,rect.bottom-2},
+                 VSTGUI::kDrawFilled);
+ }
  ctx->setFont(VSTGUI::kNormalFont,12);
  ctx->setFontColor(!enabled?border:(selected?background:letters));
  ctx->drawString(title,rect);
@@ -258,6 +280,47 @@ std::size_t DrumatorView::displayedRows() const noexcept {
 }
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
+ for(auto* path:logoPaths_)if(path)path->forget();
+}
+void DrumatorView::drawOfficialLogo(VSTGUI::CDrawContext* context) {
+ // Derivative paths are constructed once per editor from the unchanged
+ // authoritative 125A SVG coordinates, then reused on every GUI repaint.
+ constexpr double scale=0.078;
+ constexpr double left=17.0,top=-1.0;
+ if(!logoPaths_[0]) {
+   for(std::size_t i=0;i<kOfficialLogoContourCount;++i) {
+     auto* path=context->createGraphicsPath();
+     if(!path)return; // Graphics device unavailable; retry on next paint.
+     const char* p=kOfficialLogoContours[i].path;
+     while(*p) {
+       while(*p==' '||*p=='\t')++p;
+       if(!*p)break;
+       const char cmd=*p++;
+       if(cmd=='Z'){path->closeSubpath();continue;}
+       if(cmd!='M'&&cmd!='L')break;
+       while(*p==' ')++p;
+       char* end=nullptr;
+       const long px=std::strtol(p,&end,10);
+       if(end==p)break;
+       p=end;
+       const long py=std::strtol(p,&end,10);
+       if(end==p)break;
+       p=end;
+       const auto x=left+scale*static_cast<double>(px);
+       const auto y=top+scale*static_cast<double>(py);
+       if(cmd=='M')path->beginSubpath(x,y);
+       else path->addLine(x,y);
+     }
+     logoPaths_[i]=path;
+   }
+ }
+ for(std::size_t i=0;i<kOfficialLogoContourCount;++i) {
+   if(!logoPaths_[i])continue;
+   context->setFillColor(kOfficialLogoContours[i].red
+      ?VSTGUI::CColor{215,25,32,255}
+      :VSTGUI::CColor{217,217,217,255});
+   context->drawGraphicsPath(logoPaths_[i],VSTGUI::CDrawContext::kPathFilledEvenOdd);
+ }
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
  if(nameEdit_){
@@ -331,17 +394,34 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
  c->drawRect({0,0,1280,contentHeight(controller_.visibleRows(),velocityLaneOpen_)},VSTGUI::kDrawFilled);
- c->setFont(VSTGUI::kNormalFont,18);
+ // Brushed graphite top rail with clean studio-machine finish.
+ c->setFillColor(groupShade);
+ c->drawRect({0,0,1280,72},VSTGUI::kDrawFilled);
+ c->setFillColor(softMetal);
+ c->drawRect({0,69,1280,71},VSTGUI::kDrawFilled);
+ for(double sx:{7.0,1256.0}) {
+   c->setFillColor(buttonShadow);
+   c->drawEllipse({sx,8,sx+12,20},VSTGUI::kDrawFilled);
+   c->setFrameColor(buttonLip);
+   c->drawEllipse({sx+2,10,sx+10,18},VSTGUI::kDrawStroked);
+   c->drawLine({sx+4,14},{sx+8,14});
+ }
+ drawOfficialLogo(c);
+ c->setFont(VSTGUI::kNormalFont,22);
  c->setFontColor(letters);
- c->drawString("125A  /  DRUMATOR",VSTGUI::CRect(16,8,1000,32),
-               VSTGUI::kLeftText);
- c->setFont(VSTGUI::kNormalFont,12);
+ c->drawString("DRUMATOR",VSTGUI::CRect(174,8,330,34),VSTGUI::kLeftText);
+ c->setFont(VSTGUI::kNormalFont,11);
  c->setFontColor(accent);
- c->drawString("P: SAMPLE VORHOEREN | SHIFT+A-H: 1/2 TAKTE | SHIFT+NAME: UMBENENNEN | SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
-               VSTGUI::kLeftText);
+ c->drawString("32-STEP DRUM MACHINE",VSTGUI::CRect(174,35,338,62),VSTGUI::kLeftText);
  const double gridBottom=kGridY+displayedRows()*kRowHeight;
  const double statusY=gridBottom+(velocityLaneOpen_?188.0:78.0);
- c->drawString(status_.c_str(),VSTGUI::CRect(16,statusY,1240,statusY+21),
+ c->setFillColor(groupShade);
+ c->drawRect({10,statusY-3,1250,statusY+23},VSTGUI::kDrawFilled);
+ c->setFrameColor(softMetal);
+ c->drawLine({12,statusY-3},{1248,statusY-3});
+ c->setFont(VSTGUI::kNormalFont,12);
+ c->setFontColor(accent);
+ c->drawString(status_.c_str(),VSTGUI::CRect(20,statusY,1237,statusY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
  for(std::size_t pattern=0;pattern<8;++pattern) {
@@ -391,11 +471,32 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                static_cast<unsigned>(controller_.songCount()));
  c->setFontColor(accent);
  c->drawString(songSummary,VSTGUI::CRect(866,74,1030,98),VSTGUI::kLeftText);
+ c->setFont(VSTGUI::kNormalFont,10);
+ // Eights of four illuminated steps: small metal section strips keep the
+ // classic drum-machine grouping legible without shrinking hit areas.
+ for(std::size_t group=0;group<8;++group) {
+   const double left=kGridX+group*4*kCellWidth;
+   c->setFillColor(group%2==0?panel:groupShade);
+   c->drawRect({left,kGridY-10,left+4*kCellWidth-1,kGridY-1},
+               VSTGUI::kDrawFilled);
+   c->setFontColor(group%2==0?letters:accent);
+   char label[12]{};
+   std::snprintf(label,sizeof(label),"%02u-%02u",
+                 static_cast<unsigned>(group*4+1),
+                 static_cast<unsigned>(group*4+4));
+   c->drawString(label,VSTGUI::CRect(left,kGridY-11,left+4*kCellWidth-1,kGridY),
+                 VSTGUI::kCenterText);
+ }
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
    const double y=kGridY+(row-firstRow_)*kRowHeight;
-   c->setFillColor(row%2==0?panel:background);
+   c->setFillColor(row%2==0?panel:groupShade);
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
+   c->setFillColor(row==velocityRow_?accent:softMetal);
+   c->drawRect({10,y+2,13,y+kRowHeight-3},VSTGUI::kDrawFilled);
+   c->setFillColor(buttonShadow);
+   c->drawRect({kGridX-2,y+1,kGridRight+1,y+kRowHeight-2},
+               VSTGUI::kDrawFilled);
    c->setFontColor(letters);
    // Visible per-row FILL button, not a hidden action behind a row number.
    drawControl(c,{16,y+2,48,y+26},"FILL");
@@ -453,33 +554,37 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                controller_.rowRandomVelocity(row)>0);
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
-     const auto v=controller_.velocity(controller_.currentPattern(),row,step);
-     c->setFillColor(v>=112?on:(v>=80?VSTGUI::CColor{195,126,73,255}:(v>0?VSTGUI::CColor{122,100,83,255}:off)));
+     const auto velocity=controller_.velocity(controller_.currentPattern(),row,step);
+     const bool active=velocity>0;
+     const bool outsideLoop=step>=controller_.patternLength(controller_.currentPattern());
+     // Distinctive but original-size 808/909-inspired illuminated keys.
+     c->setFillColor(buttonShadow);
+     c->drawRect({x+1,y+3,x+18,y+25},VSTGUI::kDrawFilled);
+     c->setFillColor(outsideLoop?VSTGUI::CColor{54,59,65,255}:
+          (velocity>=112?on:(velocity>=80?VSTGUI::CColor{217,130,63,255}:
+           (active?VSTGUI::CColor{177,116,73,255}:off))));
      c->drawRect({x+2,y+4,x+17,y+22},VSTGUI::kDrawFilled);
-     // Five-level step display: OFF has no bar; 32/64/96/127
-     // increase the inset bar height. Preserve the surrounding grid.
-     if(v>0) {
-       const double barHeight=3.0+13.0*static_cast<double>(v)/127.0;
-       c->setFillColor(VSTGUI::CColor{244,235,213,255});
-       c->drawRect({x+13,y+21-barHeight,x+15,y+21},
-                   VSTGUI::kDrawFilled);
+     c->setFrameColor(active?VSTGUI::CColor{253,210,143,255}:buttonLip);
+     c->drawLine({x+3,y+5},{x+16,y+5});
+     c->setFrameColor(buttonShadow);
+     c->drawLine({x+3,y+21},{x+16,y+21});
+     if(active){
+       c->setFillColor(outsideLoop?border:VSTGUI::CColor{251,231,190,255});
+       const double height=3.0+12.0*static_cast<double>(velocity)/127.0;
+       c->drawRect({x+13,y+20-height,x+15,y+20},VSTGUI::kDrawFilled);
      }
-     if(step%4==0) {
+     if(step%4==0){
        c->setFrameColor(border);
-       c->drawRect({x+1,y+3,x+18,y+23},VSTGUI::kDrawStroked);
+       c->drawLine({x+1,y+1},{x+1,y+25});
      }
    }
  }
  const double buttonsY=gridBottom+5.0;
- c->setFillColor(controller_.visibleRows()<kRows?accent:panel);
- c->drawRect({16,buttonsY,213,buttonsY+29},VSTGUI::kDrawFilled);
- c->setFontColor(background);
- c->drawString(controller_.visibleRows()<kRows?"+ INSTRUMENT HINZUFUEGEN":"MAX. 16 INSTRUMENTE",
-               VSTGUI::CRect(16,buttonsY,213,buttonsY+29));
- c->setFillColor(controller_.canHideLast()?panel:background);
- c->drawRect({226,buttonsY,266,buttonsY+29},VSTGUI::kDrawFilled);
- c->setFontColor(letters);
- c->drawString("-",VSTGUI::CRect(226,buttonsY,266,buttonsY+29));
+ drawControl(c,{16,buttonsY,213,buttonsY+29},
+     controller_.visibleRows()<kRows?"+ INSTRUMENT HINZUFUEGEN":"MAX. 16 INSTRUMENTE",
+     false,controller_.visibleRows()<kRows);
+ drawControl(c,{226,buttonsY,266,buttonsY+29},"-",
+             false,controller_.canHideLast());
  char rowsLabel[40]{};
  std::snprintf(rowsLabel,sizeof(rowsLabel),"%u / 16 ZEILEN",
                static_cast<unsigned>(controller_.visibleRows()));
@@ -520,7 +625,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double panelY=VelocityLane::panelTop(gridBottom);
    const auto top=VelocityLane::barTop(gridBottom);
    const auto bottom=VelocityLane::barBottom(gridBottom);
-   c->setFillColor(panel);
+   c->setFillColor(groupShade);
    c->drawRect({16,panelY-5,1240,panelY+100},VSTGUI::kDrawFilled);
    c->setFrameColor(border);
    c->drawRect({16,panelY-5,1240,panelY+100},VSTGUI::kDrawStroked);
