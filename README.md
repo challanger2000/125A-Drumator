@@ -1,5 +1,7 @@
 # 125A Drumator
 
+**Current development checkpoint (2026-10-19):** Independent per-instrument naming implemented in DM14 source `c62b8fa`, [Windows Actions #39307595099](https://github.com/challanger2000/125A-Drumator/actions/runs/39307595099) SUCCESS: 10/10 CTests, Steinberg Validator 47/47, packaged GUI/audio host smoke PASS. Use **Shift+click on row name** to rename. Manual Studio One text editing and project-open tests remain outstanding. Details: [DM14 Row Names](docs/FEATURE-ROW-NAMES-DM14.md). **Not final.**
+
 Vintage-inspired multi-format drum sampler with a 32-step running-light sequencer. Focus: **drop a sample onto a drum row, program steps, play.**
 
 **M08 Windows-verified technical candidate (2026-10-16):** removes the misleading internal kick (empty sample rows are silent), supports mono/stereo WAV PCM 8/16/24/32-bit, IEEE float32 and common WAVE_FORMAT_EXTENSIBLE variants, and keeps recorded level at center pan (unity per channel, no normalization). GUI distinguishes load failure causes, and VSTGUI file-path drag/drop targets individual rows. **CI VERIFIED; real Studio Pro loading and dragged-file confirmation remain unverified until user test.** No release or FINAL label.
