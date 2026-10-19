@@ -698,6 +698,49 @@ int main(int argc,char** argv) {
            "Pattern paste regression cleanup");
    std::cout<<"Packaged VST3 StepEdit/PatternReplace, boundaries and state PASS\\n";
  }
+ // Batched VST3 control regressions: mute/solo/choke message boundaries,
+ // independent row state, persistence, and cleanup for following audio tests.
+ {
+   auto gate=[&](int row,int solo,int enabled)->tresult {
+     HostMessage msg;msg.setMessageID("Drumator.RowGate");
+     auto* a=msg.getAttributes();
+     require(a&&a->setInt("Row",row)==kResultOk&&
+             a->setInt("Solo",solo)==kResultOk&&
+             a->setInt("On",enabled)==kResultOk,"Gate attributes");
+     return processorPoint->notify(&msg);
+   };
+   auto choke=[&](int row,int group)->tresult {
+     HostMessage msg;msg.setMessageID("Drumator.RowChoke");
+     auto* a=msg.getAttributes();
+     require(a&&a->setInt("Row",row)==kResultOk&&
+             a->setInt("Group",group)==kResultOk,"Choke attributes");
+     return processorPoint->notify(&msg);
+   };
+   require(gate(3,0,1)==kResultOk&&gate(5,1,1)==kResultOk&&
+           choke(3,4)==kResultOk&&choke(5,1)==kResultOk,
+           "Valid mute/solo/choke controls rejected");
+   require(gate(16,0,1)!=kResultOk&&gate(3,2,1)!=kResultOk&&
+           gate(3,0,2)!=kResultOk&&gate(-1,1,1)!=kResultOk&&
+           choke(16,2)!=kResultOk&&choke(3,5)!=kResultOk&&
+           choke(3,-1)!=kResultOk,
+           "Mute/solo/choke accepted invalid control value");
+   Steinberg::ResizableMemoryIBStream snapshot;
+   require(component->getState(&snapshot)==kResultOk,
+           "Gate/choke state capture");
+   drumator::KitState state{};
+   require(drumator::KitCodec::decode(
+     static_cast<const std::uint8_t*>(snapshot.getData()),
+     snapshot.getCursor(),state),
+     "Gate/choke state decode");
+   require(state.muted==(std::uint16_t{1}<<3)&&
+           state.solo==(std::uint16_t{1}<<5)&&
+           state.choke[3]==4&&state.choke[5]==1,
+           "Mute/solo/choke VST3 state not persisted independently");
+   require(gate(3,0,0)==kResultOk&&gate(5,1,0)==kResultOk&&
+           choke(3,0)==kResultOk&&choke(5,0)==kResultOk,
+           "Gate/choke cleanup failed");
+   std::cout<<"Packaged VST3 mute/solo/choke bounds and state PASS\\n";
+ }
  // Functional QA: control messages must update actual saved component state.
  auto percentage=[&](const char* id,int number)->tresult {
    HostMessage message;message.setMessageID(id);
