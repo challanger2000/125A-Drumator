@@ -24,8 +24,8 @@
 
 namespace drumator {
 namespace {
-constexpr double kLabelX=16.0,kGridX=560.0,kGridY=108.0;
-constexpr double kCellWidth=21.0,kRowHeight=29.0;
+constexpr double kLabelX=16.0,kGridX=622.0,kGridY=108.0;
+constexpr double kCellWidth=19.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
 constexpr double kMinHeight=326.0;
 double contentHeight(std::size_t rows) {
@@ -399,22 +399,27 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    char chokeText[8]{};
    std::snprintf(chokeText,sizeof(chokeText),"%u",controller_.rowChoke(row));
    drawControl(c,{535,y+3,558,y+24},chokeText,controller_.rowChoke(row)!=0);
+   char randomLabel[24]{};
+   std::snprintf(randomLabel,sizeof(randomLabel),"RND %u%%",
+       controller_.rowRandomVelocity(row));
+   drawControl(c,{560,y+3,619,y+25},randomLabel,
+               controller_.rowRandomVelocity(row)>0);
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
      c->setFillColor(v>=112?on:(v>=80?VSTGUI::CColor{195,126,73,255}:(v>0?VSTGUI::CColor{122,100,83,255}:off)));
-     c->drawRect({x+2,y+4,x+18,y+22},VSTGUI::kDrawFilled);
+     c->drawRect({x+2,y+4,x+17,y+22},VSTGUI::kDrawFilled);
      // Five-level step display: OFF has no bar; 32/64/96/127
      // increase the inset bar height. Preserve the surrounding grid.
      if(v>0) {
        const double barHeight=3.0+13.0*static_cast<double>(v)/127.0;
        c->setFillColor(VSTGUI::CColor{244,235,213,255});
-       c->drawRect({x+14,y+21-barHeight,x+16,y+21},
+       c->drawRect({x+13,y+21-barHeight,x+15,y+21},
                    VSTGUI::kDrawFilled);
      }
      if(step%4==0) {
        c->setFrameColor(border);
-       c->drawRect({x+1,y+3,x+19,y+23},VSTGUI::kDrawStroked);
+       c->drawRect({x+1,y+3,x+18,y+23},VSTGUI::kDrawStroked);
      }
    }
  }
@@ -770,6 +775,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
    if(x>=kLabelX&&x<203) {
       load(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   }
+   if(x>=560&&x<619) {
+      const auto current=static_cast<int>(controller_.rowRandomVelocity(row));
+      const int delta=(buttons&VSTGUI::kControl)?-current:(x<589?-10:10);
+      if(!controller_.adjustRandomVelocity(row,delta))
+         status_="RANDOM VELOCITY NICHT UEBERNOMMEN";
+      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kGridX&&x<kGridRight) {
       const auto step=static_cast<std::size_t>((x-kGridX)/kCellWidth);
