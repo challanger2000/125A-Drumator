@@ -212,6 +212,30 @@ int main(int argc,char** argv) {
  audition(16,false,.5f);
  audition(24,false,.25f);
  audition(32,true,-.5f);
+ // Exercise actual packaged VST3 global master DSP at zero, half and double
+ // gain, including invalid control values and return to neutral gain.
+ auto setMaster=[&](int value)->tresult {
+   HostMessage message;
+   message.setMessageID("Drumator.MasterVolume");
+   require(message.getAttributes()->setInt("Percent",value)==kResultOk,
+           "Master percent host attribute");
+   return processorPoint->notify(&message);
+ };
+ auto verifyMaster=[&](int amount,double expected) {
+   require(setMaster(amount)==kResultOk,"Master control message rejected");
+   for(int tail=0;tail<12;++tail)run(-1);
+   run(36);
+   double measured=0;
+   for(int i=50;i<190;++i)measured+=left[i];
+   require(std::abs(measured/140.-expected)<0.018,
+           "Packaged VST3 master volume did not scale actual audio");
+ };
+ verifyMaster(0,0.0);
+ verifyMaster(50,-.25);
+ verifyMaster(200,-1.0);
+ require(setMaster(201)!=kResultOk&&setMaster(-1)!=kResultOk,
+         "Master volume accepted invalid percent");
+ verifyMaster(100,-.5);
  // M18 packaged host: verify actual per-row mix, not only core math.
  auto rowMix=[&](int gain,int pan)->tresult {
    HostMessage msg;msg.setMessageID("Drumator.RowMix");
