@@ -1,5 +1,6 @@
 #include "core/SequencerCore.h"
 #include "core/RowFill.h"
+#include "core/PatternOperations.h"
 #include "core/SongChain.h"
 #include "core/SampleFolderNavigation.h"
 #include "core/CompactRowViewport.h"
@@ -289,6 +290,36 @@ int main(){
       check(split[i].pattern==expected&&split[i].sampleOffset==offset,
             "ABA buffer dependence");
     }
+  }
+  // Per-instrument FILL must change exactly one row, and never touch the
+  // other instruments, even for ghost/galopp and clearing operations.
+  {
+    PatternSteps initial{};
+    for(std::size_t row=0;row<kRows;++row)
+      for(std::size_t step=0;step<kSteps;++step)
+        initial[row*kSteps+step]=static_cast<std::uint8_t>(
+          ((row*7+step*3)%5==0)?96:0);
+    const std::array<RowFill,9> all{
+      RowFill::Every2,RowFill::Every4,RowFill::Every8,
+      RowFill::Snare24,RowFill::All,RowFill::Clear,
+      RowFill::Offbeat8,RowFill::Gallop,RowFill::SnareGhost
+    };
+    for(const auto mode:all){
+      const auto changed=fillInstrument(initial,7,mode);
+      const auto expected=filledRow(mode);
+      for(std::size_t row=0;row<kRows;++row)
+        for(std::size_t step=0;step<kSteps;++step)
+          check(changed[row*kSteps+step]==
+                    (row==7?expected[step]:initial[row*kSteps+step]),
+                "FILL modified another instrument or wrong step/velocity");
+    }
+    check(fillInstrument(initial,kRows,RowFill::All)==initial,
+          "Invalid FILL row must not change pattern");
+    check(filledRow(RowFill::Snare24)[4]==127&&
+          filledRow(RowFill::Snare24)[12]==127&&
+          filledRow(RowFill::Snare24)[20]==127&&
+          filledRow(RowFill::Snare24)[28]==127,
+          "Snare 2/4 incorrect in the second bar");
   }
   std::cout<<"Drumator step core: all test groups PASS\n";
   return 0;
