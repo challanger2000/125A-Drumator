@@ -322,24 +322,20 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(">",VSTGUI::CRect(1033,39,1060,69));
  }
  const bool zoom150=editor_.getZoomFactor()>1.25;
- c->setFillColor(zoom150?panel:accent);
- c->drawRect({1070,39,1127,69},VSTGUI::kDrawFilled);
- c->setFillColor(zoom150?accent:panel);
- c->drawRect({1136,39,1217,69},VSTGUI::kDrawFilled);
- c->setFontColor(zoom150?letters:background);
- c->drawString("100%",VSTGUI::CRect(1070,39,1127,69));
- c->setFontColor(zoom150?background:letters);
- c->drawString("150%",VSTGUI::CRect(1136,39,1217,69));
+ drawControl(c,{1070,39,1127,69},"100%",!zoom150);
+ drawControl(c,{1136,39,1217,69},"150%",zoom150);
  char swingLabel[28]{};
  std::snprintf(swingLabel,sizeof(swingLabel),"SWING %u%%",controller_.swingPercent());
  c->setFontColor(accent);
  c->drawString(swingLabel,VSTGUI::CRect(16,74,182,98),VSTGUI::kLeftText);
- c->drawString("- / +",VSTGUI::CRect(185,74,244,98));
+ drawControl(c,{185,74,214,98},"-");
+ drawControl(c,{214,74,244,98},"+");
  char humanLabel[32]{};
  std::snprintf(humanLabel,sizeof(humanLabel),"HUMAN %u%%",controller_.humanizePercent());
  c->setFontColor(accent);
  c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
- c->drawString("- / +",VSTGUI::CRect(448,74,505,98));
+ drawControl(c,{448,74,477,98},"-");
+ drawControl(c,{477,74,505,98},"+");
  drawControl(c,{540,74,638,98},controller_.songEnabled()?"SONG ON":"SONG OFF",
              controller_.songEnabled());
  drawControl(c,{652,74,850,98},songEditorOpen_?"ZURUECK ZUM PATTERN":"SONG-KETTE EDITIEREN",
@@ -375,16 +371,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    }
    c->drawString(visibleName.c_str(),VSTGUI::CRect(kLabelX+36,y,202,y+26),
                  VSTGUI::kLeftText);
-   c->setFontColor(accent);
-   c->drawString("<",VSTGUI::CRect(203,y,216,y+26));
-   c->drawString(">",VSTGUI::CRect(216,y,229,y+26));
+   drawControl(c,{203,y+2,216,y+26},"<");
+   drawControl(c,{216,y+2,229,y+26},">");
    // sample name rendering above has its own bounds
 
    char busLabel[16]{};
    if(controller_.rowOutput(row)==0)std::snprintf(busLabel,sizeof(busLabel),"MAIN");
    else std::snprintf(busLabel,sizeof(busLabel),"O%02u",controller_.rowOutput(row)+1);
-   c->setFontColor(accent);
-   c->drawString(busLabel,VSTGUI::CRect(230,y,275,y+26));
+   drawControl(c,{230,y+2,275,y+26},busLabel);
    char value[32]{};
    c->setFontColor(accent);
    std::snprintf(value,sizeof(value),"VOL %u",controller_.rowGain(row));
@@ -400,17 +394,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
       c->drawString("-",VSTGUI::CRect(left,y+15,left+width/2.0,y+28));
       c->drawString("+",VSTGUI::CRect(left+width/2.0,y+15,left+width,y+28));
    }
-   c->setFillColor(controller_.isRowMuted(row)?on:off);
-   c->drawRect({478,y+3,500,y+24},VSTGUI::kDrawFilled);
-   c->setFontColor(letters);
-   c->drawString("M",VSTGUI::CRect(478,y+3,500,y+24));
-   c->setFillColor(controller_.isRowSolo(row)?accent:off);
-   c->drawRect({507,y+3,529,y+24},VSTGUI::kDrawFilled);
-   c->drawString("S",VSTGUI::CRect(507,y+3,529,y+24));
+   drawControl(c,{478,y+3,500,y+24},"M",controller_.isRowMuted(row));
+   drawControl(c,{507,y+3,529,y+24},"S",controller_.isRowSolo(row));
    char chokeText[8]{};
    std::snprintf(chokeText,sizeof(chokeText),"%u",controller_.rowChoke(row));
-   c->setFontColor(accent);
-   c->drawString(chokeText,VSTGUI::CRect(535,y+3,558,y+24));
+   drawControl(c,{535,y+3,558,y+24},chokeText,controller_.rowChoke(row)!=0);
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
