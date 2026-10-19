@@ -4,6 +4,7 @@
 #include "core/SequencerCore.h"
 #include "core/PatternOperations.h"
 #include "core/PatternUndo.h"
+#include "core/KitEditGeneration.h"
 #include "core/VisibleRows.h"
 #include "core/KitState.h"
 #include <array>
@@ -27,6 +28,7 @@ public:
  Steinberg::tresult PLUGIN_API setParamNormalized(Steinberg::Vst::ParamID,Steinberg::Vst::ParamValue) SMTG_OVERRIDE;
  void registerView(DrumatorView* view);
  void unregisterView(DrumatorView* view);
+ KitEditGeneration::Token editGeneration() const noexcept {return editGeneration_.current();}
  Steinberg::IPlugView* PLUGIN_API createView(Steinberg::FIDString name) SMTG_OVERRIDE;
  VSTGUI::CView* createCustomView(VSTGUI::UTF8StringPtr name,
                   const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
@@ -105,6 +107,7 @@ public:
  }
 private:
  void notifyViews(bool relayout);
+ void invalidateTransientEditsForRecall();
  std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
@@ -112,6 +115,8 @@ private:
  PatternSteps clipboard_{};
  PatternUndo undo_{};
  PatternSteps strokeBefore_{};
+ KitEditGeneration editGeneration_{};
+ KitEditGeneration::Token strokeGeneration_{0};
  std::size_t strokePattern_{kPatterns};
  bool clipboardValid_{false};
  bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true);

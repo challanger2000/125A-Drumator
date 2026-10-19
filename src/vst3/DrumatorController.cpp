@@ -47,6 +47,12 @@ void Controller::unregisterView(DrumatorView* view) {
 void Controller::notifyViews(bool relayout) {
  for(auto* view:views_)if(view)view->refreshFromHost(relayout);
 }
+void Controller::invalidateTransientEditsForRecall() {
+ strokePattern_=kPatterns;
+ strokeGeneration_=0;
+ editGeneration_.onSuccessfulRecall();
+ for(auto* view:views_)if(view)view->discardTransientEditsForRecall();
+}
 Steinberg::tresult PLUGIN_API Controller::setParamNormalized(
     Steinberg::Vst::ParamID id,Steinberg::Vst::ParamValue value) {
  const auto result=EditController::setParamNormalized(id,value);
@@ -82,15 +88,19 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
     !stream.readInt8u(zoom)||zoom>1)return Steinberg::kResultFalse;
  const double requested=zoom?1.5:1.0;
  const auto oldZoom=preferredZoom_;
- if(requested==oldZoom)return Steinberg::kResultOk;
- std::size_t updated=0;
- for(auto* view:views_) {
-   if(view&&!view->applyZoomFromState(requested)) {
-     for(std::size_t i=0;i<updated;++i)
-       if(views_[i])views_[i]->applyZoomFromState(oldZoom);
+ // Check actual view factors even when stored preference is unchanged.
+ std::vector<double> previous;
+ try {previous.reserve(views_.size());}
+ catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
+ for(auto* view:views_)previous.push_back(view?view->currentZoom():oldZoom);
+ for(std::size_t i=0;i<views_.size();++i) {
+   if(!views_[i]||views_[i]->zoomMatches(requested))continue;
+   if(!views_[i]->applyZoomFromState(requested)) {
+     for(std::size_t j=0;j<i;++j)
+       if(views_[j]&&!views_[j]->zoomMatches(previous[j]))
+         (void)views_[j]->applyZoomFromState(previous[j]);
      return Steinberg::kResultFalse;
    }
-   ++updated;
  }
  preferredZoom_=requested;
  return Steinberg::kResultOk;
@@ -132,6 +142,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
        if(stream.readRaw(encoded.data()+8,next)!=static_cast<Steinberg::TSize>(next)||
           !KitCodec::decode(encoded.data(),encoded.size(),candidate))
           return Steinberg::kResultFalse;
+       invalidateTransientEditsForRecall();
        grid_=candidate.grid;
        patternLengths_=candidate.patternLengths;
        customNames_=candidate.displayNames;
@@ -171,10 +182,12 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
    std::array<std::uint8_t,kCells> candidate{};
    for(auto& step:candidate)
        if(!stream.readInt8u(step)||step>127)return Steinberg::kResultFalse;
+   invalidateTransientEditsForRecall();
    grid_=candidate;
  }else if(magic==kOldState) {
    // DMR1 contains no grid; restore the identical factory pattern used by
    // the processor instead of retaining edits from the preceding project.
+   invalidateTransientEditsForRecall();
    grid_.fill(0);
    for(std::size_t p=0;p<kPatterns;++p)
      for(std::size_t step=0;step<kSteps;step+=4)
@@ -184,7 +197,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  patternLengths_.fill(32);
  customNames_.fill({});
  undo_.reset();
- strokePattern_=kPatterns; // A recalled kit invalidates an in-progress GUI stroke.
+ // Successful legacy state already invalidated all pending edits.
  clipboardValid_=false;
  samplePaths_.fill({});
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
@@ -200,7 +213,9 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
 Steinberg::IPlugView* PLUGIN_API Controller::createView(Steinberg::FIDString name) {
  if(name&&std::strcmp(name,Steinberg::Vst::ViewType::kEditor)==0) {
     auto* editor=new DrumatorEditor(this,"DrumatorView","Drumator.uidesc");
-    editor->setAllowedZoomFactors({1.0,1.5});
+    // Disable inherited VSTGUI Zoom context menu: it bypasses checked
+    // host resize and persistent zoom. Visible 100/150 controls remain.
+    editor->setAllowedZoomFactors({});
     editor->setZoomChecked(preferredZoom_);
     return editor;
  }
@@ -458,12 +473,15 @@ void Controller::beginVelocityStroke(std::size_t p) {
  if(p>=kPatterns)return;
  if(strokePattern_<kPatterns)endVelocityStroke(true);
  strokePattern_=p;
+ strokeGeneration_=editGeneration_.current();
  std::copy_n(grid_.begin()+p*kRows*kSteps,strokeBefore_.size(),strokeBefore_.begin());
 }
 void Controller::endVelocityStroke(bool commit) {
  if(strokePattern_>=kPatterns)return;
  const auto p=strokePattern_;
  strokePattern_=kPatterns;
+ if(!editGeneration_.matches(strokeGeneration_))return;
+ strokeGeneration_=0;
  PatternSteps after{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,after.size(),after.begin());
  if(!commit&&after!=strokeBefore_&&replacePattern(p,strokeBefore_,false))

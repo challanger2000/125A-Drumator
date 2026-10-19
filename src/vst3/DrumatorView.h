@@ -14,6 +14,9 @@ class DrumatorView final : public VSTGUI::CView, public VSTGUI::IDropTarget,
 public:
  ~DrumatorView() override;
  void refreshFromHost(bool relayout);
+ void discardTransientEditsForRecall();
+ double currentZoom() const;
+ bool zoomMatches(double factor) const;
  DrumatorView(const VSTGUI::CRect& size,Controller& controller,
               VSTGUI::VST3Editor& editor);
  void draw(VSTGUI::CDrawContext* context) override;
@@ -42,6 +45,7 @@ private:
  Controller& controller_;
  VSTGUI::CTextEdit* nameEdit_{nullptr};
  std::size_t editingNameRow_{kRows};
+ std::uint64_t nameEditGeneration_{0};
  void editName(std::size_t row);
  VSTGUI::VST3Editor& editor_;
  int fillMenuRow_{-1};
@@ -53,6 +57,7 @@ private:
  bool velocityLaneOpen_{false};
  bool laneDragActive_{false};
  std::size_t laneDragPattern_{0};
+ std::uint64_t laneDragGeneration_{0};
  bool laneErase_{false};
  bool compactViewport_{false};
  std::size_t compactPageRows_{4};

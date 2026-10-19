@@ -6,6 +6,7 @@
 #include "core/StepVelocity.h"
 #include "core/VelocityLane.h"
 #include "core/UiOverlayHitZones.h"
+#include "core/DropFeedback.h"
 #include "core/UiHeaderHitZones.h"
 #include "core/RowMixControl.h"
 #include "core/Utf8Path.h"
@@ -236,12 +237,18 @@ private:
 };
 VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
  std::string path;
- const bool hasPath=sampleDropTargetAt(data.pos.x,data.pos.y)&&
-                    DrumatorDropTarget::extractSamplePath(data.drag,path);
- status_=hasPath?"D&D: DATEIPFAD ERKANNT - AUF INSTRUMENTENZEILE ZIEHEN":
-                 "D&D: EREIGNIS EMPFANGEN, ABER KEIN WAV/FLAC-DATEIPFAD";
+ const bool allowed=sampleDropTargetAt(data.pos.x,data.pos.y);
+ const bool hasPath=allowed&&DrumatorDropTarget::extractSamplePath(data.drag,path);
+ switch(classifyDrop(allowed,hasPath)) {
+   case DropFeedback::TargetBlocked:
+     status_="D&D: VERDECKTES ODER UNGUELTIGES SAMPLE-ZIEL";break;
+   case DropFeedback::InvalidFilePath:
+     status_="D&D: KEIN GUELTIGER WAV/FLAC-DATEIPFAD";break;
+   case DropFeedback::ValidTarget:
+     status_="D&D: DATEIPFAD ERKANNT - AUF INSTRUMENTENZEILE ZIEHEN";break;
+ }
  invalid();
- return hasPath?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
+ return allowed&&hasPath?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
 }
 VSTGUI::DragOperation DrumatorView::onDragMove(VSTGUI::DragEventData data) {
  std::string path;
@@ -288,6 +295,7 @@ void DrumatorView::editName(std::size_t row) {
    getFrame()->addView(nameEdit_);
  }
  editingNameRow_=row;
+ nameEditGeneration_=controller_.editGeneration();
  nameEdit_->setViewSize({81,y+2,202,y+26});
  nameEdit_->setText(controller_.customName(row).empty()?controller_.label(row).c_str():
                    controller_.customName(row).c_str());
@@ -295,19 +303,41 @@ void DrumatorView::editName(std::size_t row) {
  nameEdit_->takeFocus();
 }
 void DrumatorView::valueChanged(VSTGUI::CControl* control) {
- if(control!=nameEdit_||editingNameRow_>=kRows)return;
+ if(control!=nameEdit_||editingNameRow_>=kRows||
+    nameEditGeneration_!=controller_.editGeneration())return;
  const auto text=std::string(nameEdit_->getText().getString());
  if(!controller_.renameRow(editingNameRow_,text))status_="INSTRUMENTENNAME NICHT UEBERNOMMEN";
  else status_="INSTRUMENTENNAME GESPEICHERT";
  nameEdit_->setVisible(false);
  editingNameRow_=kRows;
+ nameEditGeneration_=0;
  invalid();
 }
 void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
  if(edit!=nameEdit_)return;
  nameEdit_->setVisible(false);
  editingNameRow_=kRows;
+ nameEditGeneration_=0;
  invalid();
+}
+void DrumatorView::discardTransientEditsForRecall() {
+ // Invalidate both interactions before hiding the native edit control.
+ laneDragActive_=false;
+ laneDragGeneration_=0;
+ editingNameRow_=kRows;
+ nameEditGeneration_=0;
+ fillMenuRow_=-1;
+ if(nameEdit_)nameEdit_->setVisible(false);
+ invalid();
+}
+double DrumatorView::currentZoom() const {
+ return static_cast<const DrumatorEditor&>(editor_).getZoomFactor();
+}
+bool DrumatorView::zoomMatches(double factor) const {
+ auto& editor=static_cast<DrumatorEditor&>(editor_);
+ if(std::abs(editor.getZoomFactor()-factor)>0.0001)return false;
+ const auto* frame=editor.getFrame();
+ return !frame||std::abs(frame->getTransform().m11-editor.effectiveScale())<=0.001;
 }
 bool DrumatorView::applyZoomFromState(double factor) {
  auto& editor=static_cast<DrumatorEditor&>(editor_);
@@ -852,6 +882,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
     VelocityLane::hit(x,y,gridBottom)) {
     laneDragPattern_=controller_.currentPattern();
     controller_.beginVelocityStroke(laneDragPattern_);
+    laneDragGeneration_=controller_.editGeneration();
     laneDragActive_=true;
     laneErase_=(buttons&VSTGUI::kControl)!=0;
     const auto step=static_cast<std::size_t>(VelocityLane::stepAt(x));
@@ -1016,6 +1047,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
+ if(laneDragGeneration_!=controller_.editGeneration()) {
+   laneDragActive_=false;
+   laneDragGeneration_=0;
+   return VSTGUI::kMouseEventHandled;
+ }
  if(!(buttons&VSTGUI::kLButton)){
    laneDragActive_=false;
    controller_.endVelocityStroke(true);
@@ -1036,13 +1072,17 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
 VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
     VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
+ const bool fresh=laneDragGeneration_==controller_.editGeneration();
  laneDragActive_=false;
- controller_.endVelocityStroke(true);
+ laneDragGeneration_=0;
+ if(fresh)controller_.endVelocityStroke(true);
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel() {
+ const bool fresh=laneDragGeneration_==controller_.editGeneration();
  laneDragActive_=false;
- controller_.endVelocityStroke(false);
+ laneDragGeneration_=0;
+ if(fresh)controller_.endVelocityStroke(false);
  return VSTGUI::kMouseEventHandled;
 }
 }
