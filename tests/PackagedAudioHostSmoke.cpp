@@ -741,6 +741,47 @@ int main(int argc,char** argv) {
    patternKit.grid[drumator::AtomicPatternBank::index(1,0,0)]=0;
    std::cout<<"Packaged VST3 three-bar ABA audio playback PASS\\n";
  }
+ // Actual packaged VST3 per-row random velocity: 0% must be neutral,
+ // 100% must alter audio without modifying the persisted step matrix.
+ loadPattern(0);
+ auto rowRandom=[&](int percent)->tresult {
+   HostMessage msg;msg.setMessageID("Drumator.RowRandomVelocity");
+   auto* attr=msg.getAttributes();
+   require(attr->setInt("Row",0)==kResultOk&&
+           attr->setInt("Percent",percent)==kResultOk,
+           "Random audio test message");
+   return processorPoint->notify(&msg);
+ };
+ auto measureRandom=[&](int percent)->double {
+   require(rowRandom(percent)==kResultOk,"Random audio control rejected");
+   context.state=0;run(-1);
+   context.tempo=120.;
+   context.projectTimeMusic=0.;
+   context.state=ProcessContext::kPlaying|
+                 ProcessContext::kProjectTimeMusicValid|
+                 ProcessContext::kTempoValid;
+   run(-1);
+   double energy=0;
+   for(int n=50;n<190;++n)energy+=std::abs(left[n]);
+   return energy/140.;
+ };
+ const auto zeroRandom=measureRandom(0);
+ const auto fullRandom=measureRandom(100);
+ require(zeroRandom>0.05&&std::abs(fullRandom-zeroRandom)>0.0001,
+         "Packaged VST3 random velocity did not change rendered audio");
+ require(std::abs(measureRandom(0)-zeroRandom)<0.0001,
+         "Random velocity zero did not restore original audio");
+ Steinberg::ResizableMemoryIBStream randomSaved;
+ require(component->getState(&randomSaved)==kResultOk,
+         "Random audio state capture");
+ drumator::KitState randomKit{};
+ require(drumator::KitCodec::decode(
+     static_cast<const std::uint8_t*>(randomSaved.getData()),
+     randomSaved.getCursor(),randomKit),
+     "Random audio state decoding");
+ require(randomKit.grid[drumator::AtomicPatternBank::index(0,0,0)]==127,
+         "Realtime random velocity overwrote stored step velocity");
+ std::cout<<"Packaged VST3 realtime random velocity audio neutrality and persistence PASS\\n";
  loadPattern(0);
  context.tempo=120.;
  context.projectTimeMusic=0.;
