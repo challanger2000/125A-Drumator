@@ -34,3 +34,12 @@ Das Enddesign orientiert sich lose an klassischer blauer E-mu-/DMX-Studiomaschin
 5. Erst nach allen Gates die Asset Slots einfrieren und Grafiken einsetzen.
 
 **Keine V1-/Skin-Freigabe durch Code-Review oder grünen Validator allein.**
+
+## Umsetzung: Präzisionsregler und Sample-Zeilen
+- Die instrumentbezogenen Bedienelemente haben exakt definierte und gemeinsame Zeichen-/Hitboxbereiche in `src/core/UiRowControls.h`, darunter 164 Pixel Sample-Textfeld, 24-Pixel Sample-Pfeile und klar abgegrenzte MAIN/AUX-Auswahl. Die Instrumentzeile zeigt weiter schnelle Mix-Werte mit +/-; Choke und Random Velocity liegen vollständig im größeren Klangbereich.
+- Nach dem Raster-Footer folgt ein 64-Pixel-Klangbereich ab `gridBottom+70` mit Lautstärke (0..200 %, Standard 100), Panorama (-100..+100, Mitte 0), Pitch (-24..+24 Halbtöne, Standard 0), Random Velocity (0..100 %, Standard 0) und Choke (0..4, Standard 0). Die horizontale Präzisionsbedienung erlaubt +/- Tasten, absolute Reglerposition und Ziehen. Ctrl+Klick stellt den korrekten Parameterstandard her.
+- `src/core/UiDetailGeometry.h` bestimmt Hitboxen und lineare Zahlenzuordnung. `DrumatorView::changeDetailValue` benutzt ausschließlich die echten Controller-Aufrufe; keine DSP-/Projektformatänderungen und keine UI-Attrappen.
+- Die zuletzt angeklickte Instrumentzeile ist blau umrahmt; deren Werte erscheinen im Klangbereich. Andere Instrumente bleiben unabhängig. Ein Kit-Recall beendet unfertige Slider-Gesten.
+- Gesamt-Footer jetzt 174 logische Pixel; Statuszeile bei `gridBottom+144`. Fenster bleibt bei bis zu 16 normalen Zeilen unter 850 logischen Pixeln; bei geöffnetem Velocity bis 8 angezeigte Zeilen pro Seite. Größere Userzoom-/Windows-DPI-Kombinationen bleiben hostabhängig.
+- Automatische QA: `drumator_row_control_tests`, `drumator_detail_geometry_tests`, `drumator_row_geometry_tests` plus native Windows-Integration für direkte Parameter-Endwerte, Ctrl-Reset und Instrumentwechsel.
+- Nach Windows-QA weiterhin offen: unabhängige visuelle Text-/Fontmetrikprüfung bei allen Zoomstufen, finale Knob-Designer-Grafiken sowie Praxistest in Studio One.
