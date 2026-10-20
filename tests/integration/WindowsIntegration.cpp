@@ -659,6 +659,13 @@ void testRandomVelocityOneShot(){
        "RANDOM 2T failed to edit second bar");
  check(f.c->undoCurrentPattern()&&f.c->velocity(0,0,20)==64,
        "RANDOM second-bar undo failed");
+ check(f.c->togglePatternLength(0),"Button test return to one bar");
+ auto* view=IntegrationAccess::view(*f.c,0);
+ const auto before=f.c->velocity(0,0,0);
+ click(*view,496.,UiCompactLayout::header+68.);
+ check(f.c->velocity(0,0,0)!=before,"Button click did not randomize velocity");
+ check(f.c->velocity(0,0,1)==0&&f.c->velocity(0,0,20)==64,"Button changed empty/inactive step");
+ check(f.c->undoCurrentPattern()&&f.c->velocity(0,0,0)==before,"Button Undo failed");
  evidence("RANDOM one-shot occupied-only, 1T/2T, isolated row/pattern and Undo PASS");
 }
 void testVelocityResetPattern(){
