@@ -274,7 +274,8 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
     !(fill&&x>=650.0&&x<819.0&&y>=top&&y<top+225.0);
 }
 std::size_t DrumatorView::displayedRows() const noexcept {
- return compactViewport_?std::min(compactPageRows_,controller_.visibleRows()-firstRow_):controller_.visibleRows();
+ const auto total=controller_.visibleRows();
+ return compactViewport_?(firstRow_<total?std::min(compactPageRows_,total-firstRow_):0):total;
 }
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
@@ -374,6 +375,7 @@ bool DrumatorView::applyZoomFromState(double factor) {
 void DrumatorView::refreshFromHost(bool relayout) {
  if(controller_.visibleRows()>0)
    velocityRow_=std::min(velocityRow_,controller_.visibleRows()-1);
+ if(controller_.visibleRows()>0&&firstRow_>=controller_.visibleRows())firstRow_=0;
  if(relayout&&getParentView())adjustEditorHeight();
  else invalid();
 }
@@ -449,7 +451,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    char page[64]{};
    std::snprintf(page,sizeof(page),"ZEILEN %u-%u / %u",static_cast<unsigned>(firstRow_+1),
                  static_cast<unsigned>(firstRow_+displayedRows()),static_cast<unsigned>(controller_.visibleRows()));
-   c->drawString(page,VSTGUI::CRect(820,39,1030,69));
+   c->drawString(page,VSTGUI::CRect(838,39,1000,69));
    c->drawString("<",VSTGUI::CRect(1005,39,1030,69));
    c->drawString(">",VSTGUI::CRect(1033,39,1060,69));
  }
@@ -656,7 +658,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // in normal PATTERN view.
  if(songEditorOpen_) {
    c->setFillColor(background);
-   c->drawRect({8,101,1252,contentHeight(controller_.visibleRows())-1},VSTGUI::kDrawFilled);
+   c->drawRect({8,101,1252,contentHeight(displayedRows(),velocityLaneOpen_)-1},VSTGUI::kDrawFilled);
    c->setFont(VSTGUI::kNormalFont,13);
    c->setFontColor(letters);
    c->drawString("SONG-ABLAUF  |  POSITION ANKLICKEN  |  PATTERN UND LAENGE UNTEN DIREKT WAEHLEN",
