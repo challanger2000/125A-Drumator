@@ -65,6 +65,7 @@ private:
  std::size_t knobRow_{kRows};
  double knobStartY_{0.};
  int knobStartValue_{0};
+ bool knobFine_{false};
  std::uint64_t knobGeneration_{0};
  bool laneDragActive_{false};
  std::size_t laneDragPattern_{0};
