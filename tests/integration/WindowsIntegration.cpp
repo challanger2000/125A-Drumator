@@ -389,7 +389,14 @@ void testZoom(){
  evidence("Z02 PASS: attached 100/150, DPI 100/150/200, host refusals, saved reopen and atomic two-view rejection");
 }
 void testPrecisionPanel(){
- Fixture f;f.kit(namedKit('X'));f.open();
+ Fixture f;f.kit(namedKit('X'));
+ // Pitch recomputes the row's prepared sample; unlike gain/pan it needs a
+ // valid negotiated VST3 output sample rate before the host can accept it.
+ ProcessSetup setup{};
+ setup.sampleRate=48000.;setup.maxSamplesPerBlock=256;
+ setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
+ check(f.p->setupProcessing(setup)==kResultOk,"precision pitch fixture not host-configured");
+ f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
  const auto y=UiDetailGeometry::top(108.+4.*29.)+40.;
  const auto& z=UiDetailGeometry::slots;
