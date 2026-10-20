@@ -8,7 +8,10 @@
     "src/vst3/DrumatorView.cpp",
     "src/vst3/DrumatorView.h",
     "src/vst3/DrumatorController.cpp",
-    "tests/integration/WindowsIntegration.cpp"
+    "tests/integration/WindowsIntegration.cpp",
+    "src/core/UiSongLayout.h",
+    "docs/RV01-RANDOM-VELOCITY-ONE-SHOT-HANDOFF.md",
+    "docs/SO01-STUDIO-ONE-MULTIOUT-2026-10-20.md"
   ],
   "geometry": {
     "width": 1280,
@@ -26,7 +29,7 @@
     },
     "firstRow": "pageIndex*4",
     "rowY": "108+SUM(i=firstRow..row-1){94+(velocityExpanded[i]?30:0)}",
-    "windowHeight": "max(370,108+4-or-fewer visible rows each 94+(velocityExpanded[i]?30:0)+54)",
+    "windowHeight": "songEditorOpen ? 370 : max(370, UiCompactLayout::editorHeight(firstRow, displayedRows, expandedVelocities))",
     "velocityToggle": {
       "rect": "[1233,rowY+45,1266,rowY+79]",
       "label": "VELO / arrow (single row only)"
@@ -59,7 +62,6 @@
           82
         ],
         "menu": [
-          "LAENGE 1T / 2T",
           "KOPIEREN",
           "EINFUEGEN",
           "LOESCHEN",
@@ -141,7 +143,22 @@
           "default": 100,
           "unit": "%"
         }
-      ]
+      ],
+      "patternLengthButtons": {
+        "1TAKT": [
+          460,
+          8,
+          526,
+          34
+        ],
+        "2TAKTE": [
+          533,
+          8,
+          608,
+          34
+        ],
+        "note": "direct buttons; changes current pattern's loop length, not per-song-entry duration"
+      }
     },
     "instrument": {
       "row": {
@@ -257,16 +274,35 @@
         "expandedHeight": 30,
         "stepBars": "[622+19*i+2,rowY+97,622+19*i+17,rowY+120]",
         "validValues": "0=off, 1..127 active",
-        "edit": "click/paint in own row only; Ctrl erases; one undoable stroke; current row's step number/value visible"
+        "edit": "click/drag edits occupied note bars only (0 means note OFF); clicking blank bars must not add notes; Ctrl erases; one undoable stroke; current row's STEP n: value /127 appears at x195..390"
+      },
+      "legacyRandomVelocityKnob": {
+        "currentRuntime": true,
+        "status": "DEPRECATED FOR TARGET GUI, REMOVE BEFORE RELEASE",
+        "centerX": 496,
+        "centerY": "rowY+68",
+        "range": [
+          0,
+          100
+        ],
+        "migrationGate": "Legacy realtime randomVelocity_ >0 in saved kit continues altering audio after button replaces knob; decide explicit migration before release"
+      },
+      "targetRandomVelocityAction": {
+        "type": "per-instrument button (NOT rotary)",
+        "caption": "RANDOM VEL",
+        "controllerCall": "Controller::randomizeRowVelocity(row)",
+        "effect": "One-shot edits stored velocities on occupied 1T/2T steps in selected pattern, single Undo; zero steps remain zero",
+        "hitRect": "TO BE DEFINED by new GUI chat; previous knob circle is not an approved button hitbox",
+        "status": "backend implemented; visual mapping pending"
       }
     },
     "footer": {
       "y": "gridBottom()",
       "add": {
-        "rect": "[16,y+5,65,y+34]"
+        "rect": "[16,y+5,110,y+34]"
       },
       "removeLastEmpty": {
-        "rect": "[73,y+5,122,y+34]"
+        "rect": "[116,y+5,210,y+34]"
       },
       "pageLeft": {
         "rect": "[1068,y+5,1145,y+34]"
@@ -275,7 +311,7 @@
         "rect": "[1152,y+5,1229,y+34]"
       },
       "status": {
-        "rect": "[338,y+5,1016,y+34]"
+        "rect": "[414,y+5,1016,y+34]"
       },
       "removedFromV1": [
         "global VELOCITY AUSBLENDEN",
@@ -287,7 +323,8 @@
         "five-item full-width precision panel",
         "four separate zoom buttons",
         "standalone footer COPY/PASTE/CLEAR/UNDO/VELO VARIATE"
-      ]
+      ],
+      "note": "When host denies resize, page arrows are visible whenever totalRows>displayedRows(), even with <=4 total"
     },
     "songEditor": {
       "mode": "own overlay",
@@ -303,18 +340,45 @@
         101
       ],
       "drawOrder": "draw song panel before contextual menu popups",
-      "coverage": "Full logical width 0..1280 including right edge; test captures pixel 1260,140 to reject leaks."
+      "coverage": "Full logical width 0..1280 including right edge; test captures pixel 1260,140 to reject leaks.",
+      "slotsPerPage": 16,
+      "columns": 8,
+      "rows": 2,
+      "pageCount": 4,
+      "pageTop": 145,
+      "cellSize": [
+        150,
+        45
+      ],
+      "columnPitch": 154,
+      "rowPitch": 52,
+      "pageNav": {
+        "prev": [
+          988,
+          104,
+          1102,
+          134
+        ],
+        "next": [
+          1110,
+          104,
+          1244,
+          134
+        ]
+      },
+      "windowHeight": 370,
+      "missingSlotPolicy": "Only existing entries and immediate next +EINTRAG are clickable; Pattern and Length disabled if page contains no selected existing entry"
     }
   },
   "gestures": {
-    "rotary": "vertical mouse drag 2.5 logical px per parameter step; Ctrl+left-click or double-click resets to real parameter default; mouse-up/cancel and kit recall clear capture",
+    "rotary": "legacy rotary code: slot pitch/swing 2.5 logical px/step; other knobs 1.5 px/step; Shift latched at mouse-down => x4 fine movement; Ctrl+click/double-click resets actual default. Target GUI must delete legacy RANDOM VEL rotary",
     "popup": "click opens visible menu, outside closes without acting on underlying controls; menu row hit bounds match rendered rectangles",
     "zoom": "DZM1 100/150 state backward-compatible, DZM2 120/130; actual host resize may refuse",
     "sampleDragAndDrop": "accept only file-path on sample field, not steps, Velocity rows, menus or song board"
   },
   "visualGates": {
-    "priorVerifiedWindowsRun": "39425815341 (22/22 CTests, Steinberg 47/47, VST3/editor/audio PASS)",
-    "currentVisualReview": "pending Windows CI after visual-review branch integration",
+    "priorVerifiedWindowsRun": "39464692526 (22/22 CTests, Steinberg 47/47, SO01 16 kMain stereo output metadata, RV01 controller PASS; native Studio One not yet run)",
+    "currentVisualReview": "Runtime UI includes previous randomVelocity rotary and must not be considered final UX; see targetRandomVelocityAction",
     "requiredViews": [
       "four rows at 100/120/130/150",
       "one/two independent Velocity rows",
@@ -331,6 +395,12 @@
     "nativeVisualOracles": [
       "Song overlay fully covers x>=1252, including old VELO controls",
       "Zoom popup stops at x=1229 before VELO label at x=1233"
+    ],
+    "releaseBlockers": [
+      "Replace legacy RANDOM VEL rotary with one-shot button and decide legacy realtime-value migration",
+      "Owner native Studio One multiout activation after SO01 kMain patch",
+      "Final skin and 100/120/130/150 owner viewport acceptance",
+      "4-/8-bar concepts versus 32-Step cap require explicit design decision"
     ]
   }
 }
