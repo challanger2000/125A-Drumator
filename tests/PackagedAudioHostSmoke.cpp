@@ -1655,6 +1655,12 @@ int main(int argc,char** argv) {
    rt.symbolicSampleSize=kSample32;rt.processMode=kRealtime;rt.processContext=&clock;
    while(!stopAudio.load(std::memory_order_acquire)) {
      const auto epoch=wantedEpoch.load(std::memory_order_acquire);
+     // Stop clears the previous one-shot voices. Merely locating to PPQ zero
+     // does not stop them; repeated zero-position blocks would stack voices
+     // and turn a correct engine into a false mixed-generation failure.
+     clock.state=0;
+     if(audio->process(rt)!=kResultOk){audioFailed=true;break;}
+     clock.state=ProcessContext::kPlaying|ProcessContext::kProjectTimeMusicValid|ProcessContext::kTempoValid;
      if(audio->process(rt)!=kResultOk){audioFailed=true;break;}
      std::array<double,4> code{};
      bool silent=true;

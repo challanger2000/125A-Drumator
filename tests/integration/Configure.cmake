@@ -42,11 +42,16 @@ add_executable(drumator_integration_tests tests/integration/WindowsIntegration.c
   "${_qa}/vst3/DrumatorController.cpp" "${_qa}/vst3/DrumatorView.cpp"
   "${_qa}/vst3/DrumatorProcessor.cpp" src/vst3/FlacImport.cpp)
 target_include_directories(drumator_integration_tests BEFORE PRIVATE
-  "${_qa}" tests/integration src/vst3 "${_drflac_dir}")
+  "${_qa}" tests/integration src/vst3 src/core "${_drflac_dir}")
+# Generated core headers retain quoted sibling includes (SequencerCore.h).
+# Keep project/generated headers strict; classify only pinned upstream SDK
+# paths as external. CMake/MSVC emits /external:I for these SYSTEM paths.
+target_include_directories(drumator_integration_tests SYSTEM PRIVATE
+  "${_DrumatorSdkRoot}" "${_DrumatorSdkRoot}/vstgui4")
 target_link_libraries(drumator_integration_tests PRIVATE
   sdk vstgui_support drumator_core drumator_host_fixture)
 target_compile_features(drumator_integration_tests PRIVATE cxx_std_23)
-target_compile_options(drumator_integration_tests PRIVATE /W4 /WX)
+target_compile_options(drumator_integration_tests PRIVATE /W4 /WX /external:W0)
 add_dependencies(drumator_test_suite drumator_integration_tests)
 add_test(NAME drumator_integration_tests COMMAND drumator_integration_tests
   "${CMAKE_CURRENT_SOURCE_DIR}/resource")

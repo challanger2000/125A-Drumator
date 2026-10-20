@@ -26,6 +26,11 @@ implementations and linked pinned SDK/VSTGUI. Probe waits and allocation faults
 exist only in this test executable. They must never be interpreted as timing or
 realtime performance measurements. The shipped `Drumator` target is unaffected.
 
+The generated header's quoted sibling includes are resolved via the original
+`src/core` directory. Only the pinned SDK root and `vstgui4` directory are SYSTEM
+includes (`/external:I`, `/external:W0` under MSVC). Project and generated test
+sources retain `/W4 /WX`; no product/SDK header is edited to silence warnings.
+
 The test EXE initializes VSTGUI explicitly and provides a resource directory;
 the packaged editor smoke separately checks native attachment/resource lookup
 through the actual DLL. `IPlugView` methods are called through that public host
