@@ -179,7 +179,7 @@ HWND nameEditor(Fixture& f,std::size_t view=0,std::size_t row=0){
  SetActiveWindow(f.frames[view].hwnd);SetForegroundWindow(f.frames[view].hwnd);
  SetFocus(static_cast<HWND>(f.editors[view]->getFrame()->getPlatformFrame()->getPlatformRepresentation()));pump();
  auto* v=IntegrationAccess::view(*f.c,view);
- click(*v,100,108+static_cast<double>(row)*29+8,VSTGUI::kLButton|VSTGUI::kShift);
+ click(*v,120,108+static_cast<double>(row)*29+8,VSTGUI::kLButton|VSTGUI::kShift);
  pump();auto h=GetFocus();wchar_t cls[32]{};GetClassNameW(h,cls,32);
  check(h&&lstrcmpiW(cls,L"EDIT")==0,"native EDIT HWND/focus missing");
  check(IntegrationAccess::edit(*v)->getPlatformTextEdit()!=nullptr,"CTextEdit platform absent");return h;
