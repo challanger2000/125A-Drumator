@@ -4,7 +4,7 @@
   "artworkStatus": "No artwork, bitmap resources, or runtime skin bindings exist; other chat implements final graphics",
   "canvas": {
     "width": 1280,
-    "height": "max(326,108+displayedRows*(velocityVisible?56:29)+105)",
+    "height": "max(326,108+displayedRows*(velocityVisible?56:29)+174)",
     "units": "logical VSTGUI pixels",
     "zoom": [
       1,
@@ -13,7 +13,7 @@
       1.5
     ],
     "maxLogicalHeight": 850,
-    "maxExpectedContentHeightAt16RowsWithVelocity": 661,
+    "maxExpectedContentHeightAt16RowsWithVelocity": 730,
     "pageWhenVelocityEnabled": 8,
     "heightUnit": "logical px, host contentScaleFactor applied separately"
   },
@@ -23,7 +23,9 @@
     "src/vst3/DrumatorController.cpp",
     "src/core/VelocityLane.h",
     "resource/Drumator.uidesc",
-    "src/core/UiRowGeometry.h"
+    "src/core/UiRowGeometry.h",
+    "src/core/UiDetailGeometry.h",
+    "src/core/UiRowControls.h"
   ],
   "graphicFamilies": [
     {
@@ -75,6 +77,11 @@
       "id": "song_overlay",
       "purpose": "pattern and length selection",
       "status": "asset not created"
+    },
+    {
+      "id": "precision_controls",
+      "purpose": "Five large user-operated parameter tracks, +/- buttons, numeric values",
+      "status": "functional VSTGUI pending native visual QA"
     }
   ],
   "controls": {
@@ -266,136 +273,6 @@
       ],
       "slots": [
         {
-          "id": "fill",
-          "rect": [
-            16,
-            2,
-            48,
-            26
-          ],
-          "action": "show Fill choices"
-        },
-        {
-          "id": "preview",
-          "rect": [
-            52,
-            2,
-            78,
-            26
-          ],
-          "action": "audition sample"
-        },
-        {
-          "id": "name",
-          "rect": [
-            81,
-            0,
-            202,
-            26
-          ],
-          "action": "click load; Shift rename; Alt clear (clear catch region starts x=16)"
-        },
-        {
-          "id": "previous_sample",
-          "rect": [
-            203,
-            2,
-            216,
-            26
-          ],
-          "action": "folder -1"
-        },
-        {
-          "id": "next_sample",
-          "rect": [
-            216,
-            2,
-            229,
-            26
-          ],
-          "action": "folder +1"
-        },
-        {
-          "id": "stereo_output",
-          "rect": [
-            230,
-            2,
-            275,
-            26
-          ],
-          "action": "cycle destination"
-        },
-        {
-          "id": "volume",
-          "rect": [
-            280,
-            0,
-            345,
-            26
-          ],
-          "action": "left/right halves change, Ctrl default"
-        },
-        {
-          "id": "pan",
-          "rect": [
-            350,
-            0,
-            415,
-            26
-          ],
-          "action": "left/right halves change, Ctrl default"
-        },
-        {
-          "id": "pitch",
-          "rect": [
-            420,
-            0,
-            475,
-            26
-          ],
-          "action": "left/right halves change, Ctrl default"
-        },
-        {
-          "id": "mute",
-          "rect": [
-            478,
-            3,
-            500,
-            24
-          ],
-          "action": "toggle"
-        },
-        {
-          "id": "solo",
-          "rect": [
-            507,
-            3,
-            529,
-            24
-          ],
-          "action": "toggle"
-        },
-        {
-          "id": "choke",
-          "rect": [
-            535,
-            3,
-            558,
-            24
-          ],
-          "action": "cycle 0-4, Shift reverse"
-        },
-        {
-          "id": "random_velocity",
-          "rect": [
-            560,
-            3,
-            619,
-            25
-          ],
-          "action": "adjust; Ctrl reset"
-        },
-        {
           "id": "step",
           "rect": [
             "622+19*i",
@@ -404,6 +281,116 @@
             29
           ],
           "action": "Click toggle; Shift velocity cycle, i=0..31"
+        },
+        {
+          "id": "fill",
+          "rect": [
+            16,
+            2,
+            56,
+            26
+          ],
+          "action": "Fill actions"
+        },
+        {
+          "id": "preview",
+          "rect": [
+            61,
+            2,
+            95,
+            26
+          ],
+          "action": "Sample preview"
+        },
+        {
+          "id": "name",
+          "rect": [
+            102,
+            2,
+            266,
+            26
+          ],
+          "action": "Click file dialog, Shift rename, Alt clear"
+        },
+        {
+          "id": "previous_sample",
+          "rect": [
+            268,
+            2,
+            292,
+            26
+          ],
+          "action": "Previous sample in folder"
+        },
+        {
+          "id": "next_sample",
+          "rect": [
+            294,
+            2,
+            318,
+            26
+          ],
+          "action": "Next sample in folder"
+        },
+        {
+          "id": "stereo_output",
+          "rect": [
+            322,
+            2,
+            378,
+            26
+          ],
+          "action": "MAIN or stereo auxiliary output"
+        },
+        {
+          "id": "volume",
+          "rect": [
+            384,
+            2,
+            445,
+            26
+          ],
+          "action": "Volume from 0 to 200%, +/- and Ctrl default"
+        },
+        {
+          "id": "pan",
+          "rect": [
+            450,
+            2,
+            510,
+            26
+          ],
+          "action": "Pan L100..C..R100 +/- and Ctrl default"
+        },
+        {
+          "id": "pitch",
+          "rect": [
+            515,
+            2,
+            565,
+            26
+          ],
+          "action": "Pitch -24..+24st, +/- and Ctrl default"
+        },
+        {
+          "id": "mute",
+          "rect": [
+            569,
+            2,
+            592,
+            26
+          ],
+          "action": "Mute toggle"
+        },
+        {
+          "id": "solo",
+          "rect": [
+            596,
+            2,
+            619,
+            26
+          ],
+          "action": "Solo toggle"
         }
       ],
       "inlineVelocity": {
@@ -576,7 +563,8 @@
           ],
           "action": "+10"
         }
-      ]
+      ],
+      "statusY": "gridBottom+144"
     },
     "velocityLane": {
       "type": "inline-per-instrument",
@@ -624,6 +612,84 @@
         1239,
         303
       ]
+    },
+    "detailPanel": {
+      "bounds": [
+        16,
+        "gridBottom+70",
+        1240,
+        "gridBottom+134"
+      ],
+      "slots": [
+        {
+          "id": "volume",
+          "bounds": [
+            235,
+            419
+          ],
+          "range": [
+            0,
+            200
+          ],
+          "default": 100,
+          "unit": "%"
+        },
+        {
+          "id": "pan",
+          "bounds": [
+            432,
+            616
+          ],
+          "range": [
+            -100,
+            100
+          ],
+          "default": 0,
+          "unit": "L/C/R"
+        },
+        {
+          "id": "pitch",
+          "bounds": [
+            629,
+            813
+          ],
+          "range": [
+            -24,
+            24
+          ],
+          "default": 0,
+          "unit": "st"
+        },
+        {
+          "id": "random_velocity",
+          "bounds": [
+            826,
+            1010
+          ],
+          "range": [
+            0,
+            100
+          ],
+          "default": 0,
+          "unit": "%"
+        },
+        {
+          "id": "choke",
+          "bounds": [
+            1023,
+            1227
+          ],
+          "range": [
+            0,
+            4
+          ],
+          "default": 0,
+          "unit": "group"
+        }
+      ],
+      "input": "- / +, click/drag middle for exact absolute target, Ctrl click resets to actual default",
+      "selectedRow": "changes when any step/sample/row control clicked; indicated by accented row border",
+      "code": "src/core/UiDetailGeometry.h"
     }
   },
   "rules": [
@@ -633,12 +699,14 @@
     "Preserve host zoom, audio, MIDI, project recall",
     "Static pixel geometry and hit tests must originate in UiRowGeometry.h; never independently copy row pitch into new art or gestures",
     "At 120/130 percent use DZM2; read older DZM1 states unchanged",
-    "No asset export before Windows-attached GUI screenshots and owner review of 4/8/16 rows, velocity, song and zoom"
+    "No asset export before Windows-attached GUI screenshots and owner review of 4/8/16 rows, velocity, song and zoom",
+    "Instrument upper row ranges and row-name editor must match src/core/UiRowControls.h",
+    "Precision panel slider ranges, pointer mapping and Ctrl-defaults must match src/core/UiDetailGeometry.h"
   ],
   "sourceOfTruthForHeaderHitboxes": "src/core/UiHeaderHitZones.h",
   "skinIntegrationReady": false,
   "visualQAGate": {
-    "status": "NOT YET VERIFIED",
+    "status": "WINDOWS BUILD NOT VERIFIED for precision controls",
     "windowsBuild": "NOT YET VERIFIED",
     "nativeStudioOne": "NOT YET VERIFIED",
     "states": [
