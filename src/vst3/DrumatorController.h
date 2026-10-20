@@ -87,7 +87,9 @@ public:
  bool addRow();
  bool hideLastEmptyRow();
  double preferredZoom() const noexcept {return preferredZoom_;}
- void rememberZoom(double factor) noexcept {preferredZoom_=(factor>1.25)?1.5:1.0;}
+ void rememberZoom(double factor) noexcept {
+   preferredZoom_=factor==1.0||factor==1.2||factor==1.3||factor==1.5?factor:1.0;
+ }
  bool restoreVisibleRows(std::size_t previous);
  std::size_t visibleRows() const noexcept {return visibleRows_;}
  bool canHideLast() const noexcept;
