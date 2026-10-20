@@ -226,7 +226,7 @@ void testArbitration(bool zero,bool busy,const std::vector<unsigned>& points){
  auto next=namedKit('Y');next.selected=6;next.grid.fill(0);
  next.gain[0]=100;next.pan[0]=100;next.pitch[0]=24;next.masterVolume=100;
  next.wav[0]=constantStereo(.4f,-.2f);
- for(std::size_t p=0;p<kPatterns;++p)next.grid[p*kRows*kSteps]=static_cast<std::uint8_t>(16+p*16);
+ for(std::size_t p=0;p<kPatterns;++p)next.grid[p*kRows*kSteps]=static_cast<std::uint8_t>(12+p*16);
  auto bytes=Fixture::encode(next);
  arm(busy?qa::restoreMidCommit:qa::restoreSnapshot);
  tresult restored=kResultFalse;
