@@ -486,253 +486,203 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  controller_.registerView(this);
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
+ const auto bottom=gridBottom();
+ const auto fullHeight=getViewSize().getHeight();
  c->setFillColor(background);
- c->drawRect({0,0,1280,contentHeight(displayedRows(),velocityLaneOpen_)},VSTGUI::kDrawFilled);
- c->setFont(VSTGUI::kNormalFont,18);
- c->setFontColor(letters);
- c->drawString("125A  /  DRUMATOR",VSTGUI::CRect(16,8,323,32),
-               VSTGUI::kLeftText);
- c->setFont(VSTGUI::kNormalFont,12);
- c->setFontColor(accent);
- c->drawString("P: VORHOEREN  |  SHIFT: EDIT",VSTGUI::CRect(16,47,320,67),
-               VSTGUI::kLeftText);
- const double gridBottom=UiRowGeometry::gridBottom(displayedRows(),velocityLaneOpen_);
- const double statusY=gridBottom+144.0;
- c->drawString(status_.c_str(),VSTGUI::CRect(16,statusY,1240,statusY+21),
-               VSTGUI::kLeftText);
- c->setFontColor(letters);
+ c->drawRect({0,0,1280,fullHeight},VSTGUI::kDrawFilled);
+ c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
+ c->drawString("125A  DRUMATOR",{16,5,304,35},VSTGUI::kLeftText);
+ c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+ c->drawString("DRUM SAMPLER  /  STEP SEQUENCER",{16,31,303,50},VSTGUI::kLeftText);
+ c->drawString("PATTERN",{330,13,460,33},VSTGUI::kLeftText);
  for(std::size_t pattern=0;pattern<8;++pattern) {
-   const double x=kPatternX+pattern*kPatternWidth;
    char label[12]{};
    std::snprintf(label,sizeof(label),"%c %uT",static_cast<char>('A'+pattern),
                  controller_.patternLength(pattern)==16?1u:2u);
-   drawControl(c,{x,kHeaderY,x+54,kHeaderY+30},label,
+   const auto x=kPatternX+pattern*kPatternWidth;
+   drawControl(c,{x,kPatternY,x+49,kPatternY+30},label,
                pattern==controller_.currentPattern());
  }
- if(compactViewport_){
-   c->setFontColor(accent);
-   char page[64]{};
-   std::snprintf(page,sizeof(page),"ZEILEN %u-%u / %u",static_cast<unsigned>(firstRow_+1),
-                 static_cast<unsigned>(firstRow_+displayedRows()),static_cast<unsigned>(controller_.visibleRows()));
-   c->drawString(page,VSTGUI::CRect(838,39,1000,69));
-   c->drawString("<",VSTGUI::CRect(1005,39,1030,69));
-   c->drawString(">",VSTGUI::CRect(1033,39,1060,69));
- }
- const double zoom=editor_.getZoomFactor();
- drawControl(c,{1070,9,1127,34},"120%",std::abs(zoom-1.2)<0.001);
- drawControl(c,{1136,9,1217,34},"130%",std::abs(zoom-1.3)<0.001);
- drawControl(c,{1070,39,1127,69},"100%",std::abs(zoom-1.0)<0.001);
- drawControl(c,{1136,39,1217,69},"150%",std::abs(zoom-1.5)<0.001);
- char swingLabel[28]{};
- std::snprintf(swingLabel,sizeof(swingLabel),"SWING %u%%",controller_.swingPercent());
- c->setFontColor(accent);
- c->drawString(swingLabel,VSTGUI::CRect(16,74,182,98),VSTGUI::kLeftText);
- drawControl(c,{185,74,214,98},"-");
- drawControl(c,{214,74,244,98},"+");
- char humanLabel[32]{};
- std::snprintf(humanLabel,sizeof(humanLabel),"HUMAN %u%%",controller_.humanizePercent());
- c->setFontColor(accent);
- c->drawString(humanLabel,VSTGUI::CRect(275,74,447,98),VSTGUI::kLeftText);
- drawControl(c,{448,74,477,98},"-");
- drawControl(c,{477,74,505,98},"+");
- drawControl(c,{540,74,638,98},controller_.songEnabled()?"SONG ON":"SONG OFF",
+ drawControl(c,{782,52,901,82},"PATTERN ...",popup_==2);
+ drawControl(c,{910,52,991,82},controller_.songEnabled()?"SONG ON":"SONG OFF",
              controller_.songEnabled());
- drawControl(c,{652,74,850,98},songEditorOpen_?"ZURUECK ZUM PATTERN":"SONG-KETTE EDITIEREN",
-             songEditorOpen_);
- char masterLabel[32]{};
- std::snprintf(masterLabel,sizeof(masterLabel),"MASTER %u%%",controller_.masterVolume());
- c->setFontColor(accent);
- c->drawString(masterLabel,VSTGUI::CRect(1037,74,1135,98),VSTGUI::kLeftText);
- drawControl(c,{1140,74,1180,98},"-");
- drawControl(c,{1184,74,1228,98},"+");
- char songSummary[64]{};
- std::snprintf(songSummary,sizeof(songSummary),"KETTE: %u / 64",
-               static_cast<unsigned>(controller_.songCount()));
- c->setFontColor(accent);
- c->drawString(songSummary,VSTGUI::CRect(866,74,1030,98),VSTGUI::kLeftText);
- c->setFont(VSTGUI::kNormalFont,12);
- for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
-   const double y=rowTopOnPage(row-firstRow_);
-   c->setFillColor(row%2==0?panel:background);
-   c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
-   if(row==velocityRow_){c->setFrameColor(accent);c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawStroked);}
-   c->setFontColor(letters);
-   // Every painted x-range is the same UiRowControls slot used by hit tests.
-   auto rr=[&](UiRowControls::Slot slot,double t=2.,double b=26.) {
-     return VSTGUI::CRect{slot.left,y+t,slot.right,y+b};
-   };
-   drawControl(c,rr(UiRowControls::fill),"FILL");
-   drawControl(c,rr(UiRowControls::preview),"P");
-   const auto& name=controller_.label(row);
-   std::string visibleName=name;
-   c->setFont(VSTGUI::kNormalFont,11);
-   // Fit to the actual glyph widths, not an arbitrary number of bytes.
-   // UTF-8 codepoints remain whole and the WAV/FLAC extension survives.
-   const double available=UiRowControls::sample.right-UiRowControls::sample.left-6.0;
-   if(c->getStringWidth(visibleName.c_str())>available) {
-     const auto dot=name.find_last_of('.');
-     const std::string suffix=(dot!=std::string::npos&&
-          name.size()-dot<=7)?name.substr(dot):std::string{};
-     auto endPrefix=name.size()-suffix.size();
-     bool fitted=false;
-     while(endPrefix>0) {
-       --endPrefix;
-       while(endPrefix>0&&
-            (static_cast<unsigned char>(name[endPrefix])&0xC0u)==0x80u)
-         --endPrefix;
-       const std::string candidate=name.substr(0,endPrefix)+"..."+suffix;
-       if(c->getStringWidth(candidate.c_str())<=available) {
-         visibleName=candidate;fitted=true;break;
-       }
-     }
-     if(!fitted) {
-       visibleName="..."+suffix;
-       if(c->getStringWidth(visibleName.c_str())>available)
-         visibleName="...";
-     }
-   }
-   c->setFontColor(letters);
-   c->drawString(visibleName.c_str(),rr(UiRowControls::sample,0,26),VSTGUI::kLeftText);
-   drawControl(c,rr(UiRowControls::previous),"<");
-   drawControl(c,rr(UiRowControls::next),">");
-   char bus[16]{};
-   if(controller_.rowOutput(row)==0)std::snprintf(bus,sizeof(bus),"MAIN");
-   else std::snprintf(bus,sizeof(bus),"O%02u",controller_.rowOutput(row)+1);
-   drawControl(c,rr(UiRowControls::output),bus);
-   char value[32]{};
-   const auto panValue=controller_.rowPan(row);
-   const auto renderMix=[&](UiRowControls::Slot slot,const char* txt) {
-     c->setFillColor(background);
-     c->drawRect(rr(slot,1,28),VSTGUI::kDrawFilled);
-     c->setFrameColor(border);
-     c->drawRect(rr(slot,1,28),VSTGUI::kDrawStroked);
-     c->setFont(VSTGUI::kNormalFont,11);
-     c->setFontColor(accent);
-     c->drawString(txt,rr(slot,1,18));
-     c->setFontColor(letters);
-     c->drawString("-",VSTGUI::CRect{slot.left,y+16,UiRowControls::mid(slot),y+28});
-     c->drawString("+",VSTGUI::CRect{UiRowControls::mid(slot),y+16,slot.right,y+28});
-   };
-   std::snprintf(value,sizeof(value),"VOL %u%%",controller_.rowGain(row));
-   renderMix(UiRowControls::volume,value);
-   if(panValue==0)std::snprintf(value,sizeof(value),"PAN C");
-   else std::snprintf(value,sizeof(value),"PAN %c%d",panValue<0?'L':'R',std::abs(panValue));
-   renderMix(UiRowControls::pan,value);
-   std::snprintf(value,sizeof(value),"P %+dst",controller_.rowPitch(row));
-   renderMix(UiRowControls::pitch,value);
-   drawControl(c,rr(UiRowControls::mute,3,24),"M",controller_.isRowMuted(row));
-   drawControl(c,rr(UiRowControls::solo,3,24),"S",controller_.isRowSolo(row));
+ drawControl(c,{998,52,1098,82},songEditorOpen_?"PATTERN":"SONG EDIT",songEditorOpen_);
+ const auto zoom=editor_.getZoomFactor();
+ char zoomLabel[32]{};
+ std::snprintf(zoomLabel,sizeof(zoomLabel),"ZOOM %u%%   v",
+               static_cast<unsigned>(std::lround(zoom*100.)));
+ drawControl(c,{1120,7,1250,35},zoomLabel,popup_==1);
+ char text[36]{};
+ std::snprintf(text,sizeof(text),"%u%%",controller_.swingPercent());
+ drawRotary(c,80,76,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
+ std::snprintf(text,sizeof(text),"%u%%",controller_.humanizePercent());
+ drawRotary(c,178,76,controller_.humanizePercent()/100.,"HUMANIZE",text,activeKnob_==5);
+ std::snprintf(text,sizeof(text),"%u%%",controller_.masterVolume());
+ drawRotary(c,1178,76,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
+ // Four full-fledged rows per page: the selection has its own independent hit box.
+ for(std::size_t i=0;i<displayedRows();++i) {
+   const auto row=firstRow_+i,y=rowTopOnPage(i);
+   const bool chosen=row==velocityRow_;
+   const auto rowH=UiCompactLayout::baseRow+(velocityExpanded_[row]?UiCompactLayout::velocityRow:0.);
+   c->setFillColor(chosen?VSTGUI::CColor{42,69,88,255}:(i%2?background:panel));
+   c->drawRect({9,y,1270,y+rowH-2.},VSTGUI::kDrawFilled);
+   c->setFrameColor(chosen?accent:border);
+   c->drawRect({9,y,1270,y+rowH-2.},VSTGUI::kDrawStroked);
+   char name[16]{};
+   std::snprintf(name,sizeof(name),"%02u",static_cast<unsigned>(row+1));
+   drawControl(c,{16,y+5,74,y+35},name,chosen);
+   // Sample name remains editable on Shift-click; click opens WAV/FLAC picker.
+   const auto& raw=controller_.label(row);
+   std::string fitted=raw;
    c->setFont(VSTGUI::kNormalFont,12);
-   for(std::size_t step=0;step<kSteps;++step) {
-     const double x=kGridX+step*kCellWidth;
-     const auto v=controller_.velocity(controller_.currentPattern(),row,step);
-     c->setFillColor(v>=112?on:(v>=80?VSTGUI::CColor{195,126,73,255}:(v>0?VSTGUI::CColor{122,100,83,255}:off)));
-     c->drawRect({x+2,y+4,x+17,y+22},VSTGUI::kDrawFilled);
-     // Five-level step display: OFF has no bar; 32/64/96/127
-     // increase the inset bar height. Preserve the surrounding grid.
-     if(v>0) {
-       const double barHeight=3.0+13.0*static_cast<double>(v)/127.0;
-       c->setFillColor(VSTGUI::CColor{244,235,213,255});
-       c->drawRect({x+13,y+21-barHeight,x+15,y+21},
-                   VSTGUI::kDrawFilled);
+   const double space=UiCompactLayout::sample.right-UiCompactLayout::sample.left-8.;
+   if(c->getStringWidth(fitted.c_str())>space) {
+     const auto pos=raw.find_last_of('.');
+     const auto suffix=(pos!=std::string::npos&&raw.size()-pos<=7)?raw.substr(pos):std::string{};
+     std::size_t n=raw.size()-suffix.size();
+     while(n>0) {
+       --n;
+       while(n>0&&(static_cast<unsigned char>(raw[n])&0xC0u)==0x80u)--n;
+       fitted=raw.substr(0,n)+"..."+suffix;
+       if(c->getStringWidth(fitted.c_str())<=space)break;
      }
-     if(step%4==0||step==16) {
-       c->setFrameColor(border);
-       c->drawRect({x+1,y+3,x+18,y+23},VSTGUI::kDrawStroked);
+     if(c->getStringWidth(fitted.c_str())>space)fitted="...";
+   }
+   c->setFillColor(background);
+   c->drawRect({78,y+5,301,y+35},VSTGUI::kDrawFilled);
+   c->setFrameColor(border);c->drawRect({78,y+5,301,y+35},VSTGUI::kDrawStroked);
+   c->setFontColor(letters);
+   c->drawString(fitted.c_str(),{83,y+5,298,y+35},VSTGUI::kLeftText);
+   drawControl(c,{303,y+5,329,y+35},"<");
+   drawControl(c,{332,y+5,358,y+35},">");
+   drawControl(c,{362,y+5,398,y+35},"P");
+   drawControl(c,{403,y+5,452,y+35},"FILL");
+   drawControl(c,{457,y+5,491,y+35},"M",controller_.isRowMuted(row));
+   drawControl(c,{496,y+5,530,y+35},"S",controller_.isRowSolo(row));
+   std::snprintf(name,sizeof(name),"CH%u",controller_.rowChoke(row));
+   drawControl(c,{535,y+5,574,y+35},name,popup_==4&&popupRow_==row);
+   const auto out=controller_.rowOutput(row);
+   if(out==0)std::snprintf(name,sizeof(name),"M v");
+   else std::snprintf(name,sizeof(name),"%u v",out+1);
+   drawControl(c,{580,y+5,615,y+35},name,popup_==3&&popupRow_==row);
+   const double centers[]={133.,254.,375.,496.};
+   const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
+                       controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
+   const char* labels[]={"VOL","PAN","PITCH","RANDOM"};
+   for(int k=0;k<4;++k){
+     const int lo=UiCompactLayout::minValue(k),hi=UiCompactLayout::maxValue(k);
+     const int v=values[k];
+     char desc[24]{};
+     if(k==0||k==3)std::snprintf(desc,sizeof(desc),"%d%%",v);
+     else if(k==1){
+       if(v==0)std::snprintf(desc,sizeof(desc),"C");
+       else std::snprintf(desc,sizeof(desc),"%c%d",v<0?'L':'R',std::abs(v));
+     }else std::snprintf(desc,sizeof(desc),"%+d st",v);
+     drawRotary(c,centers[k],y+68,
+                static_cast<double>(v-lo)/static_cast<double>(hi-lo),
+                labels[k],desc,chosen&&activeKnob_==k);
+   }
+   const auto steps=controller_.patternLength(controller_.currentPattern());
+   for(std::size_t step=0;step<32;++step) {
+     const auto sx=kGridX+step*kCellWidth;
+     const auto velocity=controller_.velocity(controller_.currentPattern(),row,step);
+     const bool inactive=step>=steps;
+     if(step%4==0) {
+       char index[8]{};
+       std::snprintf(index,sizeof(index),"%u",static_cast<unsigned>(step+1));
+       c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(border);
+       c->drawString(index,{sx,y+10,sx+32,y+28},VSTGUI::kLeftText);
+     }
+     c->setFillColor(inactive?off:velocity>=100?on:velocity>0?VSTGUI::CColor{148,119,88,255}:off);
+     c->drawRect({sx+2,y+45,sx+17,y+77},VSTGUI::kDrawFilled);
+     c->setFrameColor(step%4==0?letters:border);
+     c->drawRect({sx+1,y+44,sx+18,y+78},VSTGUI::kDrawStroked);
+     if(velocity>0) {
+       c->setFillColor(letters);
+       c->drawRect({sx+13,y+77.-static_cast<double>(velocity)*24./127.,sx+15,y+77.},VSTGUI::kDrawFilled);
      }
    }
-   if(velocityLaneOpen_) {
-     const auto length=controller_.patternLength(controller_.currentPattern());
+   drawControl(c,{1233,y+45,1266,y+79},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
+   if(velocityExpanded_[row]){
      c->setFillColor(background);
-     c->drawRect({10,y+29,1246,y+55},VSTGUI::kDrawFilled);
-     c->setFontColor(accent);
-     c->setFont(VSTGUI::kNormalFont,11);
-     char rowInfo[48]{};
-     std::snprintf(rowInfo,sizeof(rowInfo),"VELOCITY  |  ZEILE %u",
-         static_cast<unsigned>(row+1));
-     c->drawString(rowInfo,VSTGUI::CRect(17,y+30,267,y+55),VSTGUI::kLeftText);
+     c->drawRect({16,y+94,1266,y+123},VSTGUI::kDrawFilled);
+     c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+     c->drawString("VELOCITY",{78,y+94,170,y+122},VSTGUI::kLeftText);
      if(row==velocityRow_) {
-       char info[48]{};
-       std::snprintf(info,sizeof(info),"STEP %u: %u / 127",
+       char current[48]{};
+       std::snprintf(current,sizeof(current),"STEP %u : %u / 127",
          static_cast<unsigned>(velocityStep_+1),
          static_cast<unsigned>(controller_.velocity(controller_.currentPattern(),row,velocityStep_)));
-       c->drawString(info,VSTGUI::CRect(290,y+30,608,y+55),VSTGUI::kLeftText);
+       c->drawString(current,{195,y+94,390,y+122},VSTGUI::kLeftText);
      }
-     for(std::size_t step=0;step<kSteps;++step) {
-       const double x=kGridX+step*kCellWidth;
-       const auto velocity=controller_.velocity(controller_.currentPattern(),row,step);
-       const bool inactive=step>=length;
-       c->setFillColor(inactive?off:panel);
-       c->drawRect({x+2,y+31,x+17,y+54},VSTGUI::kDrawFilled);
-       if(velocity>0) {
-         const double height=21.0*static_cast<double>(velocity)/127.0;
-         c->setFillColor(inactive?border:accent);
-         c->drawRect({x+3,y+53-height,x+16,y+53},VSTGUI::kDrawFilled);
+     for(std::size_t step=0;step<32;++step){
+       const double sx=kGridX+step*kCellWidth;
+       const auto vel=controller_.velocity(controller_.currentPattern(),row,step);
+       c->setFillColor(step>=steps?off:panel);
+       c->drawRect({sx+2,y+97,sx+17,y+120},VSTGUI::kDrawFilled);
+       if(vel>0) {
+         c->setFillColor(step>=steps?border:accent);
+         c->drawRect({sx+3,y+119.-21.*vel/127.,sx+16,y+119.},VSTGUI::kDrawFilled);
        }
-       c->setFrameColor(row==velocityRow_&&step==velocityStep_?letters:border);
-       if(step%4==0||step==16||(row==velocityRow_&&step==velocityStep_))
-         c->drawRect({x+1,y+30,x+18,y+55},VSTGUI::kDrawStroked);
      }
    }
  }
- const double buttonsY=gridBottom+5.0;
- c->setFillColor(controller_.visibleRows()<kRows?accent:panel);
- c->drawRect({16,buttonsY,213,buttonsY+29},VSTGUI::kDrawFilled);
- c->setFontColor(controller_.visibleRows()<kRows?background:VSTGUI::CColor{175,190,201,255});
- c->drawString(controller_.visibleRows()<kRows?"+ INSTRUMENT HINZUFUEGEN":"MAX. 16 INSTRUMENTE",
-               VSTGUI::CRect(16,buttonsY,213,buttonsY+29));
- c->setFillColor(controller_.canHideLast()?panel:background);
- c->drawRect({226,buttonsY,266,buttonsY+29},VSTGUI::kDrawFilled);
- c->setFontColor(letters);
- c->drawString("-",VSTGUI::CRect(226,buttonsY,266,buttonsY+29));
- char rowsLabel[40]{};
- std::snprintf(rowsLabel,sizeof(rowsLabel),"%u / 16 ZEILEN",
-               static_cast<unsigned>(controller_.visibleRows()));
- c->drawString(rowsLabel,VSTGUI::CRect(277,buttonsY,455,buttonsY+29),
-               VSTGUI::kLeftText);
- const char* actions[]={"COPY","PASTE","CLEAR","UNDO"};
- for(int i=0;i<4;++i) {
-   const double x=480+i*90.;
-   drawControl(c,{x,buttonsY,x+85,buttonsY+29},actions[i],
-               false,i!=3||controller_.canUndoCurrentPattern());
+ // Only row management and one status line remain at the bottom.
+ drawControl(c,{16,bottom+5,65,bottom+34},"+");
+ drawControl(c,{73,bottom+5,122,bottom+34},"-",false,controller_.canHideLast());
+ char range[64]{};
+ std::snprintf(range,sizeof(range),"%u-%u / %u INSTRUMENTE",
+   static_cast<unsigned>(firstRow_+1),static_cast<unsigned>(firstRow_+displayedRows()),
+   static_cast<unsigned>(controller_.visibleRows()));
+ c->setFontColor(accent);c->setFont(VSTGUI::kNormalFont,12);
+ c->drawString(range,{132,bottom+5,325,bottom+34},VSTGUI::kLeftText);
+ c->drawString(status_.c_str(),{338,bottom+5,1016,bottom+34},VSTGUI::kLeftText);
+ if(controller_.visibleRows()>UiCompactLayout::perPage) {
+   drawControl(c,{1068,bottom+5,1145,bottom+34},"<");
+   drawControl(c,{1152,bottom+5,1229,bottom+34},">");
  }
- drawControl(c,{844,buttonsY,1014,buttonsY+29},"VELOCITY VARIIEREN");
- drawControl(c,{1024,buttonsY,1220,buttonsY+29},"VELOCITY RESET 100");
- const auto selectedVelocity=controller_.velocity(controller_.currentPattern(),velocityRow_,velocityStep_);
- char velocityInfo[90]{};
- std::snprintf(velocityInfo,sizeof(velocityInfo),"STEP-VELOCITY  ZEILE %u / STEP %u : %u",
-      static_cast<unsigned>(velocityRow_+1),static_cast<unsigned>(velocityStep_+1),
-      static_cast<unsigned>(selectedVelocity));
- c->setFontColor(accent);
- c->drawString(velocityInfo,VSTGUI::CRect(480,buttonsY+34,915,buttonsY+64),VSTGUI::kLeftText);
- drawControl(c,{916,buttonsY+34,986,buttonsY+64},"-10");
- drawControl(c,{994,buttonsY+34,1064,buttonsY+64},"-1");
- drawControl(c,{1072,buttonsY+34,1142,buttonsY+64},"+1");
- drawControl(c,{1150,buttonsY+34,1220,buttonsY+64},"+10");
- // Row selection and explicit show/hide; no extra overlay on the steps.
- drawControl(c,{16,buttonsY+34,266,buttonsY+64},
-             velocityLaneOpen_?"VELOCITY AUSBLENDEN":"VELOCITY EINBLENDEN",
-             velocityLaneOpen_);
- drawControl(c,{280,buttonsY+34,324,buttonsY+64},"<");
- char laneRowLabel[32]{};
- const auto selectedRow=std::min(velocityRow_,controller_.visibleRows()-1);
- std::snprintf(laneRowLabel,sizeof(laneRowLabel),"ZEILE %02u",
-               static_cast<unsigned>(selectedRow+1));
- drawControl(c,{328,buttonsY+34,404,buttonsY+64},laneRowLabel,
-             velocityLaneOpen_);
- drawControl(c,{408,buttonsY+34,455,buttonsY+64},">");
- drawPrecisionPanel(c,controller_,selectedRow,gridBottom);
+ // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-    const double top=std::max(0.0,std::min(UiRowGeometry::rowTop(static_cast<std::size_t>(std::max(0,fillMenuRow_-static_cast<int>(firstRow_))),velocityLaneOpen_),getViewSize().getHeight()-230.0));
-    const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HIHAT","GALOPP","SNARE + GHOST"};
-    for(int i=0;i<9;++i){const double y=top+i*25.;drawControl(c,{650,y,819,y+24},names[i]);}
+   const double top=std::clamp(rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_)+36.,
+                               108.,fullHeight-230.);
+   const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALOPP","SNARE + GHOST"};
+   for(int i=0;i<9;++i)drawControl(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
  }
- // Full 64-slot chain board. Pattern and length choices are direct buttons.
- // Board overlays the step matrix, leaving drag-and-drop behavior untouched
- // in normal PATTERN view.
+ if(popup_==1) {
+   for(std::size_t i=0;i<UiCompactLayout::userZooms.size();++i) {
+     char z[20]{};
+     std::snprintf(z,sizeof(z),"%u%%",static_cast<unsigned>(
+                   std::lround(UiCompactLayout::userZooms[i]*100.)));
+     drawControl(c,{1120,39.+i*30.,1250,68.+i*30.},z,
+                std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
+   }
+ }else if(popup_==2) {
+   const char* options[]={"LAENGE 1T / 2T","KOPIEREN","EINFUEGEN","LOESCHEN","RUECKGAENGIG","VELO VARIIEREN","VELO 100"};
+   for(int i=0;i<7;++i)
+     drawControl(c,{782,86.+i*26.,968,111.+i*26.},options[i],
+                 false,i!=4||controller_.canUndoCurrentPattern());
+ }else if(popup_==3&&popupRow_<controller_.visibleRows()) {
+   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-210.);
+   for(unsigned i=0;i<16;++i) {
+     char z[16]{};
+     if(i==0)std::snprintf(z,sizeof(z),"MAIN");
+     else std::snprintf(z,sizeof(z),"OUT %u",i+1);
+     const auto col=i/8,row=i%8;
+     drawControl(c,{413+col*102.,top+row*25.,511+col*102.,top+row*25.+24.},z,
+                 controller_.rowOutput(popupRow_)==i);
+   }
+ }else if(popup_==4&&popupRow_<controller_.visibleRows()) {
+   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-145.);
+   for(unsigned i=0;i<5;++i) {
+     char z[12]{};
+     std::snprintf(z,sizeof(z),"CHOKE %u",i);
+     drawControl(c,{515,top+i*27.,615,top+i*27.+26.},z,
+                 controller_.rowChoke(popupRow_)==i);
+   }
+ }
  if(songEditorOpen_) {
    c->setFillColor(background);
-   c->drawRect({8,101,1252,contentHeight(displayedRows(),velocityLaneOpen_)-1},VSTGUI::kDrawFilled);
+   c->drawRect({8,101,1252,getViewSize().getHeight()-1},VSTGUI::kDrawFilled);
    c->setFont(VSTGUI::kNormalFont,13);
    c->setFontColor(letters);
    c->drawString("SONG-ABLAUF  |  POSITION ANKLICKEN  |  PATTERN UND LAENGE UNTEN DIREKT WAEHLEN",
@@ -775,6 +725,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{1012,277,1110,303},"+ EINTRAG",false,count<64);
    drawControl(c,{1118,277,1239,303},"LETZTEN LOESCHEN",false,count>1);
  }
+
  setDirty(false);
 }
 bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
