@@ -69,7 +69,7 @@ struct UiCompactLayout final {
    return slot==1?-100:slot==2?-24:0;
  }
  static constexpr int maxValue(int slot) noexcept {
-   return slot==0||slot==6?200:slot==1||slot==3||slot==4||slot==5?100:24;
+   return slot==0||slot==6?200:slot==4?50:slot==1||slot==3||slot==5?100:24;
  }
 };
 }
