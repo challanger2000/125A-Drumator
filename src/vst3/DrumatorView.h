@@ -60,6 +60,9 @@ private:
  std::size_t laneDragPattern_{0};
  std::uint64_t laneDragGeneration_{0};
  bool laneErase_{false};
+ int detailDragControl_{-1};
+ std::size_t detailDragRow_{kRows};
+ bool changeDetailValue(std::size_t row,int slot,int requested);
  bool compactViewport_{false};
  std::size_t compactPageRows_{4};
  std::size_t displayedRows() const noexcept;
