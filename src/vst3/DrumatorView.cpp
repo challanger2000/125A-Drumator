@@ -1083,6 +1083,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
           invalid();return done;
         }
         velocityRow_=row;velocityStep_=static_cast<std::size_t>(step);
+        // Editing a blank velocity bar must never activate a new note.
+        // Notes are created with the dedicated Step buttons above the lane.
+        if(controller_.velocity(controller_.currentPattern(),row,velocityStep_)==0){
+          status_="LEERER STEP: ZUERST IM RASTER AKTIVIEREN";
+          invalid();return done;
+        }
         laneDragPattern_=controller_.currentPattern();
         laneDragGeneration_=controller_.editGeneration();
         controller_.beginVelocityStroke(laneDragPattern_);
@@ -1216,6 +1222,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
    return VSTGUI::kMouseEventHandled;
  const auto idx=velocityRow_-firstRow_;
  velocityStep_=static_cast<std::size_t>(step);
+ // Pointer movement across empty columns must not silently add steps.
+ if(controller_.velocity(laneDragPattern_,velocityRow_,velocityStep_)==0)
+   return VSTGUI::kMouseEventHandled;
  const auto value=UiCompactLayout::velocityAt(pos.y,rowTopOnPage(idx),laneErase_);
  if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,velocityStep_,value))
    status_="VELOCITY-ZIEHEN NICHT UEBERNOMMEN";
