@@ -37,7 +37,11 @@ public:
   const auto total=static_cast<std::int64_t>(totalSteps());
   if(total==0)return {};
   const auto phase=absoluteStep%total,origin=originStep%total;
-  auto offset=(phase-origin+total)%total;
+  // C++ signed remainder may be negative. Adding the song length just once
+  // is insufficient when phase<0 and origin>0 (negative pre-roll/seek).
+  // Normalize the bounded difference before choosing a chain entry.
+  auto offset=(phase-origin)%total;
+  if(offset<0)offset+=total;
   for(std::size_t i=0;i<count_;++i) {
    if(offset<entries_[i].steps)
     return {entries_[i].pattern,static_cast<std::uint8_t>(offset),i};

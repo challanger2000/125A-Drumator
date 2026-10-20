@@ -333,6 +333,35 @@ int main(){
             "ABA buffer dependence");
     }
   }
+  // S06 full scheduler: a pre-roll step before PPQ zero, with a
+  // positive musical origin, must still produce the expected chain hit.
+  {
+    SongChain chain;
+    check(chain.setCount(3)&&chain.configure(0,0,16)&&
+          chain.configure(1,1,8)&&chain.configure(2,2,32),
+          "S06 configure signed chain");
+    struct SignedSongBank {
+      const SongChain& chain;
+      std::uint8_t selected() const noexcept{return 0;}
+      SongChain::Position mapStep(std::int64_t absolute,
+                                  std::int64_t origin) const noexcept {
+        return chain.at(absolute,origin);
+      }
+      std::uint8_t get(std::size_t pattern,std::size_t row,
+                       std::size_t step) const noexcept {
+        return pattern==0&&row==0&&step==7?120:0;
+      }
+    } bank{chain};
+    std::vector<Trigger> observed;
+    const auto result=StepScheduler::run(
+       bank,Clock{-13.75,120.,48000.,256,true,0.,0.,50},
+       [&](Trigger hit){observed.push_back(hit);});
+    check(result.status==ScheduleStatus::Ok&&result.count==1&&
+          observed.size()==1&&observed[0].pattern==0&&
+          observed[0].step==7&&observed[0].row==0&&
+          observed[0].sampleOffset==0&&observed[0].velocity==120,
+          "S06 negative-PPQ song position dropped or corrupted a hit");
+  }
   // Per-instrument FILL must change exactly one row, and never touch the
   // other instruments, even for ghost/galopp and clearing operations.
   {
