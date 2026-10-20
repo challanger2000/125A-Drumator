@@ -450,6 +450,8 @@ void DrumatorView::refreshFromHost(bool relayout) {
    songSlot_=controller_.songCount()-1;
    songPage_=UiSongLayout::pageOf(songSlot_);
  }
+ if(UiSongLayout::first(songPage_)>controller_.songCount())
+   songPage_=UiSongLayout::pageOf(songSlot_);
  if(relayout&&getParentView())adjustEditorHeight();
  else invalid();
 }
@@ -662,6 +664,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({0,101,1280,getViewSize().getHeight()},VSTGUI::kDrawFilled);
    const auto count=controller_.songCount();
    const auto first=UiSongLayout::first(songPage_);
+   const bool selectionVisible=songSlot_>=first&&
+       songSlot_<first+UiSongLayout::perPage&&songSlot_<count;
    char header[128]{};
    std::snprintf(header,sizeof(header),
        "SONG-ABLAUF   %02u-%02u / 64   |   POSITION WAEHLEN, DANACH PATTERN UND LAENGE",
@@ -690,22 +694,28 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      drawControl(c,{sx,sy,sx+UiSongLayout::cellWidth,sy+UiSongLayout::cellHeight},
                  cell,index==songSlot_&&index<count);
    }
+   c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+   char selectionLabel[80]{};
+   if(selectionVisible)
+     std::snprintf(selectionLabel,sizeof(selectionLabel),"POSITION %02u AUSGEWAEHLT",static_cast<unsigned>(songSlot_+1));
+   else std::snprintf(selectionLabel,sizeof(selectionLabel),"ZUERST EINTRAG HINZUFUEGEN ODER WAEHLEN");
+   c->drawString(selectionLabel,{16,246,490,272},VSTGUI::kLeftText);
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
    c->drawString("PATTERN:",VSTGUI::CRect(16,277,120,301),VSTGUI::kLeftText);
    for(std::size_t idx=0;idx<8;++idx) {
-     const auto chosen=controller_.songEntry(std::min(songSlot_,count-1)).pattern==idx;
+     const auto chosen=selectionVisible&&controller_.songEntry(songSlot_).pattern==idx;
      const double bx=115+idx*56.0;
      char letter[2]{static_cast<char>('A'+idx),0};
-     drawControl(c,{bx,277,bx+50,303},letter,chosen);
+     drawControl(c,{bx,277,bx+50,303},letter,chosen,selectionVisible);
    }
    c->setFontColor(accent);
    c->drawString("LAENGE:",VSTGUI::CRect(594,277,681,303),VSTGUI::kLeftText);
    const char* lenNames[]={"1/2 TAKT","1 TAKT","2 TAKTE"};
    const std::uint8_t lenSteps[]={8,16,32};
    for(int idx=0;idx<3;++idx) {
-     const auto chosen=controller_.songEntry(std::min(songSlot_,count-1)).steps==lenSteps[idx];
+     const auto chosen=selectionVisible&&controller_.songEntry(songSlot_).steps==lenSteps[idx];
      const double bx=678+idx*106.;
-     drawControl(c,{bx,277,bx+100,303},lenNames[idx],chosen);
+     drawControl(c,{bx,277,bx+100,303},lenNames[idx],chosen,selectionVisible);
    }
    drawControl(c,{1012,277,1110,303},"+ EINTRAG",false,count<64);
    drawControl(c,{1118,277,1239,303},"LETZTEN LOESCHEN",false,count>1);
@@ -954,9 +964,17 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    bool ok=true;
    const auto count=controller_.songCount();
    if(UiSongLayout::previousHit(x,y)){
-     if(songPage_>0)--songPage_;
+     if(songPage_>0){
+       --songPage_;
+       const auto first=UiSongLayout::first(songPage_);
+       if(first<count)songSlot_=first;
+     }
    }else if(UiSongLayout::nextHit(x,y)){
-     if(UiSongLayout::canNext(songPage_,count))++songPage_;
+     if(UiSongLayout::canNext(songPage_,count)){
+       ++songPage_;
+       const auto first=UiSongLayout::first(songPage_);
+       if(first<count)songSlot_=first;
+     }
    }else if(const auto slot=UiSongLayout::slotAt(x,y,songPage_);
              slot<SongChain::kCapacity) {
      if(slot<count){
@@ -971,11 +989,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }else if(y>=277&&y<303) {
      const auto selectedSlot=std::min(songSlot_,count-1);
      const auto current=controller_.songEntry(selectedSlot);
-     if(x>=115&&x<563) {
+     const bool selectionVisible=songSlot_>=UiSongLayout::first(songPage_)&&
+         songSlot_<UiSongLayout::first(songPage_)+UiSongLayout::perPage&&songSlot_<count;
+     if(selectionVisible&&x>=115&&x<563) {
        const auto index=static_cast<std::size_t>((x-115)/56.);
        if(index<8&&x<115+index*56.+50.)
          ok=controller_.setSongEntry(selectedSlot,static_cast<std::uint8_t>(index),current.steps);
-     }else if(x>=678&&x<996) {
+     }else if(selectionVisible&&x>=678&&x<996) {
        const auto index=static_cast<std::size_t>((x-678)/106.);
        if(index<3&&x<678+index*106.+100.) {
          const std::uint8_t lengths[]={8,16,32};
