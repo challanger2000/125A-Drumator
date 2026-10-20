@@ -402,7 +402,7 @@ void DrumatorView::discardTransientEditsForRecall() noexcept {
  laneDragGeneration_=0;
  detailDragControl_=-1;
  detailDragRow_=kRows;
- activeKnob_=-1;knobRow_=kRows;knobGeneration_=0;
+ activeKnob_=-1;knobRow_=kRows;knobGeneration_=0;knobFine_=false;
  closeTransientMenus();
  editingNameRow_=kRows;
  nameEditGeneration_=0;
@@ -930,6 +930,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         invalid();return done;
       }
       activeKnob_=i;knobRow_=kRows;knobStartY_=y;knobStartValue_=previous;
+       knobFine_=(buttons&VSTGUI::kShift)!=0;
       knobGeneration_=controller_.editGeneration();
       invalid();return VSTGUI::kMouseEventHandled;
    }
@@ -1020,6 +1021,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(velocityExpanded_[row]&&UiCompactLayout::velocityHit(y,top)) {
       const auto step=UiCompactLayout::stepAt(x);
       if(step>=0) {
+        if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
+          status_="STEP AUSSERHALB DER PATTERN-LAENGE: 2 TAKTE WAEHLEN";
+          invalid();return done;
+        }
         velocityRow_=row;velocityStep_=static_cast<std::size_t>(step);
         laneDragPattern_=controller_.currentPattern();
         laneDragGeneration_=controller_.editGeneration();
@@ -1087,6 +1092,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(y>=top+45&&y<top+79){
      const auto step=UiCompactLayout::stepAt(x);
      if(step>=0){
+       if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
+         status_="STEP AUSSERHALB DER PATTERN-LAENGE: 2 TAKTE WAEHLEN";
+         invalid();return done;
+       }
        velocityStep_=static_cast<std::size_t>(step);
        const bool ok=(buttons&VSTGUI::kShift)?
          controller_.cycleStepVelocity(controller_.currentPattern(),row,velocityStep_):
@@ -1109,6 +1118,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          invalid();return done;
        }
        activeKnob_=i;knobRow_=row;knobStartY_=y;knobStartValue_=previous;
+        knobFine_=(buttons&VSTGUI::kShift)!=0;
        knobGeneration_=controller_.editGeneration();
        invalid();return VSTGUI::kMouseEventHandled;
      }
@@ -1123,15 +1133,17 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
      activeKnob_=-1;knobRow_=kRows;invalid();
      return VSTGUI::kMouseEventHandled;
    }
-   const auto requested=UiCompactLayout::knobValue(
-        knobStartY_,pos.y,knobStartValue_,
-        UiCompactLayout::minValue(activeKnob_),UiCompactLayout::maxValue(activeKnob_));
+   const auto requested=UiCompactLayout::knobValueForSlot(
+        activeKnob_,knobStartY_,pos.y,knobStartValue_,knobFine_);
    if(!changeKnobValue(activeKnob_,knobRow_,requested))
       status_="REGLERWERT NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
- if(laneDragGeneration_!=controller_.editGeneration()){
+ if(laneDragGeneration_!=controller_.editGeneration()||
+    laneDragPattern_!=controller_.currentPattern()){
+   if(laneDragGeneration_==controller_.editGeneration())
+     controller_.endVelocityStroke(false);
    laneDragActive_=false;laneDragGeneration_=0;
    return VSTGUI::kMouseEventHandled;
  }
@@ -1141,7 +1153,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
    return VSTGUI::kMouseEventHandled;
  }
  const auto step=UiCompactLayout::stepAt(pos.x);
- if(step<0||songEditorOpen_||velocityRow_<firstRow_||
+ if(step<0||static_cast<std::size_t>(step)>=controller_.patternLength(laneDragPattern_)||
+    songEditorOpen_||velocityRow_<firstRow_||
     velocityRow_>=firstRow_+displayedRows()||!velocityExpanded_[velocityRow_])
    return VSTGUI::kMouseEventHandled;
  const auto idx=velocityRow_-firstRow_;
@@ -1158,7 +1171,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
    invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
- const bool fresh=laneDragGeneration_==controller_.editGeneration();
+ const bool fresh=laneDragGeneration_==controller_.editGeneration()&&
+                   laneDragPattern_==controller_.currentPattern();
  laneDragActive_=false;laneDragGeneration_=0;
  if(fresh)controller_.endVelocityStroke(true);
  return VSTGUI::kMouseEventHandled;
