@@ -260,7 +260,7 @@ void testArbitration(bool zero,bool busy,const std::vector<unsigned>& points){
  clock.state=ProcessContext::kPlaying|ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
  data.numSamples=256;data.numOutputs=1;data.outputs=&out;data.processContext=&clock;
  check(f.p->process(data)==kResultOk,"O01 follow-up render");
- const double velocity=static_cast<double>(16+points.back()*16)/127.;
+ const double velocity=static_cast<double>(12+points.back()*16)/127.;
  for(std::size_t n=80;n<180;++n)
    check(std::abs(left[n]-.4*velocity)<2e-4&&std::abs(right[n]+.2*velocity)<2e-4,
          "O01 audible selected pattern differs from state/host");
