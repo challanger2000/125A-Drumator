@@ -1092,72 +1092,59 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseEventNotHandled;
    const auto row=firstRow_+index;
    if(velocityRow_!=row){velocityRow_=row;invalid();}
-   if(x>=16&&x<48) {
+   if(UiRowControls::hit(UiRowControls::fill,x)) {
      fillMenuRow_=static_cast<int>(row);
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if((x>=280&&x<345)||(x>=350&&x<415)||(x>=420&&x<475)) {
-      const bool pitch=x>=420;
-      const bool pan=x>=350&&x<415;
-      // Direct left/right half controls, modifier-free at the default zoom.
-      const double start=pitch?420.0:(pan?350.0:280.0);
-      const double width=pitch?55.0:65.0;
-      const bool reset=(buttons&VSTGUI::kControl)!=0;
-      const auto control=pitch?RowControl::Pitch:(pan?RowControl::Pan:RowControl::Volume);
-      const int current=pitch?controller_.rowPitch(row):
-                        pan?controller_.rowPan(row):static_cast<int>(controller_.rowGain(row));
-      const int next=rowControlNext(control,current,x<start+width/2.0?-1:1,reset);
-      const int delta=next-current;
-      if(delta!=0) {
-         const bool ok=pitch?controller_.adjustRowPitch(row,delta):
-                             controller_.adjustRowMix(row,pan,delta);
-         if(!ok)status_="REGLERWERT NICHT UEBERNOMMEN";
-      }
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(x>=478&&x<500) {
-      if(!controller_.toggleRowGate(row,false))status_="MUTE NICHT UEBERNOMMEN";
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(x>=507&&x<529) {
-      if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(x>=535&&x<558) {
-      if(!controller_.cycleRowChoke(row,(buttons&VSTGUI::kShift)?-1:1))status_="CHOKE NICHT UEBERNOMMEN";
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(x>=203&&x<230&&(buttons&VSTGUI::kAlt)==0) {
-     const auto result=controller_.stepSample(row,x<216?-1:1);
-     status_=result==Controller::LoadStatus::Accepted?"SAMPLE GEWECHSELT":"SAMPLEWECHSEL NICHT MOEGLICH";
+   if(UiRowControls::hit(UiRowControls::volume,x)||
+      UiRowControls::hit(UiRowControls::pan,x)||
+      UiRowControls::hit(UiRowControls::pitch,x)) {
+     const int slot=UiRowControls::hit(UiRowControls::pitch,x)?2:
+         UiRowControls::hit(UiRowControls::pan,x)?1:0;
+     const auto zone=slot==2?UiRowControls::pitch:
+         slot==1?UiRowControls::pan:UiRowControls::volume;
+     const auto control=slot==2?RowControl::Pitch:
+         slot==1?RowControl::Pan:RowControl::Volume;
+     const int current=slot==2?controller_.rowPitch(row):
+         slot==1?controller_.rowPan(row):static_cast<int>(controller_.rowGain(row));
+     const int target=rowControlNext(control,current,x<UiRowControls::mid(zone)?-1:1,
+                                   (buttons&VSTGUI::kControl)!=0);
+     if(current!=target&&!changeDetailValue(row,slot,target))
+       status_="KLANGREGLER NICHT UEBERNOMMEN";
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=230&&x<275&&(buttons&VSTGUI::kAlt)==0) {
-      if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiRowControls::hit(UiRowControls::mute,x)) {
+     if(!controller_.toggleRowGate(row,false))status_="MUTE NICHT UEBERNOMMEN";
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=52&&x<78) {
-      status_=controller_.previewSample(row)?"SAMPLE-VORSCHAU ANGEFORDERT":
-                       "VORSCHAU NICHT MOEGLICH: SAMPLE LADEN / HOST-AUDIO PRUEFEN";
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiRowControls::hit(UiRowControls::solo,x)) {
+     if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=81&&x<203&&(buttons&VSTGUI::kShift)!=0) {
-      editName(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiRowControls::hit(UiRowControls::previous,x)||
+      UiRowControls::hit(UiRowControls::next,x)) {
+     const auto direction=UiRowControls::hit(UiRowControls::previous,x)?-1:1;
+     const auto result=controller_.stepSample(row,direction);
+     status_=result==Controller::LoadStatus::Accepted?"SAMPLE GEWECHSELT":
+                                                   "SAMPLEWECHSEL NICHT MOEGLICH";
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=kLabelX&&x<203&&(buttons&VSTGUI::kAlt)!=0) {
-      if(controller_.clearSample(row))status_="SAMPLE ENTFERNT - STEPS BLEIBEN";
-      else status_="SAMPLE KONNTE NICHT ENTFERNT WERDEN";
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiRowControls::hit(UiRowControls::output,x)) {
+     if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=kLabelX&&x<203) {
-      load(row);return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiRowControls::hit(UiRowControls::preview,x)) {
+     status_=controller_.previewSample(row)?"SAMPLE-VORSCHAU ANGEFORDERT":
+                                "VORSCHAU NICHT MOEGLICH: SAMPLE LADEN / HOST-AUDIO PRUEFEN";
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
-   if(x>=560&&x<619) {
-      const auto current=static_cast<int>(controller_.rowRandomVelocity(row));
-      const int delta=(buttons&VSTGUI::kControl)?-current:(x<589?-10:10);
-      if(!controller_.adjustRandomVelocity(row,delta))
-         status_="RANDOM VELOCITY NICHT UEBERNOMMEN";
-      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiRowControls::hit(UiRowControls::sample,x)) {
+     if(buttons&VSTGUI::kShift)editName(row);
+     else if(buttons&VSTGUI::kAlt) {
+       status_=controller_.clearSample(row)?"SAMPLE ENTFERNT - STEPS BLEIBEN":
+                                               "SAMPLE KONNTE NICHT ENTFERNT WERDEN";
+     } else load(row);
+     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
    if(x>=kGridX&&x<kGridRight) {
       const auto step=static_cast<std::size_t>((x-kGridX)/kCellWidth);
