@@ -575,6 +575,50 @@ void testPrecisionPanel(){
  check(f.c->rowGain(0)==130,"V2 stale knob edited restored kit");
  evidence("V2 rotary drag, exact defaults, menus, selection and recall PASS");
 }
+void testVelocityLaneExistingStepsOnly(){
+ Fixture f;
+ auto kit=namedKit('X',4);
+ kit.grid.fill(0);
+ kit.grid[0]=100;kit.grid[2]=90;
+ f.kit(kit);f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ const double top=UiCompactLayout::header;
+ const double barY=top+UiCompactLayout::baseRow+10.;
+ const auto col=[](std::size_t step)->double {
+   return UiCompactLayout::stepX+static_cast<double>(step)*UiCompactLayout::stepWidth+8.;
+ };
+ click(*v,1248.,top+60.);
+ check(IntegrationAccess::velocityExpanded(*v,0),
+       "Velocity blank-gate fixture lane did not expand");
+ click(*v,col(1),barY);
+ check(f.c->velocity(0,0,1)==0&&
+       !f.c->canUndoCurrentPattern(),
+       "UX blank velocity bar created an unintended step or Undo");
+ {
+   VSTGUI::CPoint point(col(0),barY);
+   v->onMouseDown(point,VSTGUI::CButtonState(VSTGUI::kLButton));
+   point.x=col(1);
+   v->onMouseMoved(point,VSTGUI::CButtonState(VSTGUI::kLButton));
+   point.x=col(2);
+   v->onMouseMoved(point,VSTGUI::CButtonState(VSTGUI::kLButton));
+   v->onMouseUp(point,{});
+ }
+ check(f.c->velocity(0,0,0)>0&&f.c->velocity(0,0,0)!=100&&
+       f.c->velocity(0,0,2)>0&&f.c->velocity(0,0,2)!=90,
+       "UX occupied velocity bars did not change during row drag");
+ check(f.c->velocity(0,0,1)==0,
+       "UX dragging across empty column activated a new note");
+ check(f.c->canUndoCurrentPattern()&&f.c->undoCurrentPattern(),
+       "UX occupied velocity drag not undoable as one action");
+ check(f.c->velocity(0,0,0)==100&&f.c->velocity(0,0,1)==0&&
+       f.c->velocity(0,0,2)==90,
+       "UX velocity drag Undo did not restore exact original steps");
+ // Standard Step buttons remain the explicit way to add notes.
+ click(*v,col(1),top+61.);
+ check(f.c->velocity(0,0,1)>0,
+       "UX standard Step click no longer enables a blank note");
+ evidence("UX velocity lane edits occupied notes only; drag/Undo and explicit Step creation PASS");
+}
 void testRandomVelocityOneShot(){
  Fixture f;
  auto kit=namedKit('X',4);
@@ -784,6 +828,7 @@ int main(int argc,char** argv){
  run("VSTGUI native pixel render set",testVisualRender);
  run("UX direct pattern length",testPatternLengthControls);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
+ run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
  run("UX paged Song board",testPagedSongEditor);
  run("UX compact Song viewport",testSongCompactViewport);
  run("Z03 Win32 name editor",testNativeName);
