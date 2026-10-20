@@ -573,7 +573,12 @@ void testPrecisionPanel(){
  evidence("V2 rotary drag, exact defaults, menus, selection and recall PASS");
 }
 void testPatternLengthControls(){
- Fixture f;f.kit(namedKit('X'));f.open();
+ Fixture f;
+ auto kit=namedKit('X');
+ // Row five must actually be empty for the existing safe-removal contract.
+ kit.displayNames[4]="LEER - WAV LADEN";
+ kit.names[4].clear();
+ f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
  check(f.c->patternLength(0)==32,"UX pattern length initial state");
  click(*v,481.,20.);
