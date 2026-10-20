@@ -494,7 +494,6 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
  c->drawString("125A  DRUMATOR",{16,5,304,35},VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
- c->drawString("DRUM SAMPLER  /  STEP SEQUENCER",{16,31,303,50},VSTGUI::kLeftText);
  c->drawString("PATTERN",{330,13,460,33},VSTGUI::kLeftText);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    char label[12]{};
@@ -551,22 +550,25 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(c->getStringWidth(fitted.c_str())>space)fitted="...";
    }
    c->setFillColor(background);
-   c->drawRect({78,y+5,301,y+35},VSTGUI::kDrawFilled);
-   c->setFrameColor(border);c->drawRect({78,y+5,301,y+35},VSTGUI::kDrawStroked);
+   c->drawRect({78,y+5,272,y+35},VSTGUI::kDrawFilled);
+   c->setFrameColor(border);c->drawRect({78,y+5,272,y+35},VSTGUI::kDrawStroked);
    c->setFontColor(letters);
-   c->drawString(fitted.c_str(),{83,y+5,298,y+35},VSTGUI::kLeftText);
+   c->drawString(fitted.c_str(),{83,y+5,270,y+35},VSTGUI::kLeftText);
+   drawControl(c,{275,y+5,301,y+35},"...");
    drawControl(c,{303,y+5,329,y+35},"<");
    drawControl(c,{332,y+5,358,y+35},">");
-   drawControl(c,{362,y+5,398,y+35},"P");
+   drawControl(c,{362,y+5,398,y+35},"PLAY");
    drawControl(c,{403,y+5,452,y+35},"FILL");
    drawControl(c,{457,y+5,491,y+35},"M",controller_.isRowMuted(row));
    drawControl(c,{496,y+5,530,y+35},"S",controller_.isRowSolo(row));
-   std::snprintf(name,sizeof(name),"CH%u",controller_.rowChoke(row));
-   drawControl(c,{535,y+5,574,y+35},name,popup_==4&&popupRow_==row);
    const auto out=controller_.rowOutput(row);
-   if(out==0)std::snprintf(name,sizeof(name),"M v");
-   else std::snprintf(name,sizeof(name),"%u v",out+1);
-   drawControl(c,{580,y+5,615,y+35},name,popup_==3&&popupRow_==row);
+   if(out==0)std::snprintf(name,sizeof(name),"MAIN v");
+   else std::snprintf(name,sizeof(name),"OUT %u v",out+1);
+   drawControl(c,{535,y+5,615,y+35},name,popup_==3&&popupRow_==row);
+   std::snprintf(name,sizeof(name),"CH%u v",controller_.rowChoke(row));
+   c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
+   c->drawString("CHOKE",{570,y+37,615,y+52});
+   drawControl(c,{570,y+54,615,y+86},name,popup_==4&&popupRow_==row);
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
@@ -604,6 +606,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        c->drawRect({sx+13,y+77.-static_cast<double>(velocity)*24./127.,sx+15,y+77.},VSTGUI::kDrawFilled);
      }
    }
+   c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
+   c->drawString("VELO",{1233,y+12,1266,y+35});
    drawControl(c,{1233,y+45,1266,y+79},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
    if(velocityExpanded_[row]){
      c->setFillColor(background);
@@ -642,45 +646,6 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  if(controller_.visibleRows()>UiCompactLayout::perPage) {
    drawControl(c,{1068,bottom+5,1145,bottom+34},"<");
    drawControl(c,{1152,bottom+5,1229,bottom+34},">");
- }
- // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
- if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-   const double top=std::clamp(rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_)+36.,
-                               108.,fullHeight-230.);
-   const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALOPP","SNARE + GHOST"};
-   for(int i=0;i<9;++i)drawControl(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
- }
- if(popup_==1) {
-   for(std::size_t i=0;i<UiCompactLayout::userZooms.size();++i) {
-     char z[20]{};
-     std::snprintf(z,sizeof(z),"%u%%",static_cast<unsigned>(
-                   std::lround(UiCompactLayout::userZooms[i]*100.)));
-     drawControl(c,{1120,39.+i*30.,1250,68.+i*30.},z,
-                std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
-   }
- }else if(popup_==2) {
-   const char* options[]={"LAENGE 1T / 2T","KOPIEREN","EINFUEGEN","LOESCHEN","RUECKGAENGIG","VELO VARIIEREN","VELO 100"};
-   for(int i=0;i<7;++i)
-     drawControl(c,{782,86.+i*26.,968,111.+i*26.},options[i],
-                 false,i!=4||controller_.canUndoCurrentPattern());
- }else if(popup_==3&&popupRow_<controller_.visibleRows()) {
-   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-210.);
-   for(unsigned i=0;i<16;++i) {
-     char z[16]{};
-     if(i==0)std::snprintf(z,sizeof(z),"MAIN");
-     else std::snprintf(z,sizeof(z),"OUT %u",i+1);
-     const auto col=i/8,row=i%8;
-     drawControl(c,{413+col*102.,top+row*25.,511+col*102.,top+row*25.+24.},z,
-                 controller_.rowOutput(popupRow_)==i);
-   }
- }else if(popup_==4&&popupRow_<controller_.visibleRows()) {
-   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-145.);
-   for(unsigned i=0;i<5;++i) {
-     char z[12]{};
-     std::snprintf(z,sizeof(z),"CHOKE %u",i);
-     drawControl(c,{515,top+i*27.,615,top+i*27.+26.},z,
-                 controller_.rowChoke(popupRow_)==i);
-   }
  }
  if(songEditorOpen_) {
    c->setFillColor(background);
@@ -728,6 +693,51 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{1118,277,1239,303},"LETZTEN LOESCHEN",false,count>1);
  }
 
+ // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
+ if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
+   const double top=std::clamp(rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_)+36.,
+                               108.,fullHeight-230.);
+   const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALOPP","SNARE + GHOST"};
+   for(int i=0;i<9;++i)drawControl(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
+ }
+ if(popup_==1) {
+   for(std::size_t i=0;i<UiCompactLayout::userZooms.size();++i) {
+     char z[20]{};
+     std::snprintf(z,sizeof(z),"%u%%",static_cast<unsigned>(
+                   std::lround(UiCompactLayout::userZooms[i]*100.)));
+     drawControl(c,{1120,39.+i*30.,1250,68.+i*30.},z,
+                std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
+   }
+ }else if(popup_==2) {
+   const char* options[]={"LAENGE 1T / 2T","KOPIEREN","EINFUEGEN","LOESCHEN","RUECKGAENGIG","VELO VARIIEREN","VELO 100"};
+   for(int i=0;i<7;++i)
+     drawControl(c,{782,86.+i*26.,968,111.+i*26.},options[i],
+                 false,i!=4||controller_.canUndoCurrentPattern());
+ }else if(popup_==3&&popupRow_<controller_.visibleRows()) {
+   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-210.);
+   for(unsigned i=0;i<16;++i) {
+     char z[16]{};
+     if(i==0)std::snprintf(z,sizeof(z),"MAIN");
+     else std::snprintf(z,sizeof(z),"OUT %u",i+1);
+     const auto col=i/8,row=i%8;
+     drawControl(c,{413+col*102.,top+row*25.,511+col*102.,top+row*25.+24.},z,
+                 controller_.rowOutput(popupRow_)==i);
+   }
+ }else if(popup_==5&&popupRow_<controller_.visibleRows()) {
+   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,
+                               std::max(108.,fullHeight-100.));
+   const char* options[]={"SAMPLE LADEN","INSTRUMENT UMBENENNEN","SAMPLE ENTFERNEN"};
+   for(int i=0;i<3;++i)
+      drawControl(c,{78,top+i*30.,304,top+i*30.+29.},options[i]);
+ }else if(popup_==4&&popupRow_<controller_.visibleRows()) {
+   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-145.);
+   for(unsigned i=0;i<5;++i) {
+     char z[12]{};
+     std::snprintf(z,sizeof(z),"CHOKE %u",i);
+     drawControl(c,{515,top+i*27.,615,top+i*27.+26.},z,
+                 controller_.rowChoke(popupRow_)==i);
+   }
+ }
  setDirty(false);
 }
 bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
