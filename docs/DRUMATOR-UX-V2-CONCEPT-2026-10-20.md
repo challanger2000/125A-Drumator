@@ -11,7 +11,7 @@ Ein Beat entsteht durch drei Schritte: Sample in Zeile laden/ziehen → Steps se
 | Länge 16/32 Steps | kompaktes Wahlmenü direkt neben Pattern | Shift-Klick als unauffälliger Ersatz darf bleiben, wird nicht vorausgesetzt |
 | Pattern Copy/Paste/Clear/Undo | **ein** PATTERN-AKTIONEN Menü oben neben A–H | vier räumlich getrennte Buttons unten fallen weg |
 | Velocity Variation / Reset | Menüeinträge in PATTERN-AKTIONEN | zwei Großbuttons unten fallen weg; keine Änderung von Random Velocity |
-| Swing | echter bipolar? Nein: **unipolarer Drehregler** 0..100 % mit Wert | +/- fallen weg; 0 % = kein Swing |
+| Swing | echter bipolar? Nein: **unipolarer Drehregler** 0..50 % (bestehende DSP-/Controllergrenze) mit Wert | +/- fallen weg; 0 % = kein Swing |
 | Humanize | Drehregler 0..100 % im Kopf | keine zusätzliche Fußzeile |
 | Master Volume | eigenständiger größerer Drehregler im Kopf, 0..200 % mit neutralem 100 | +/- fallen weg |
 | Zoom | ein Auswahlmenü 100/120/130/150 % rechts oben | keine vier Zoom-Kästchen. 140 % erst mit Controller-State-Test ergänzen; niemals rein optische Fake-Auswahl |
