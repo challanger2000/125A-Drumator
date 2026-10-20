@@ -10,6 +10,8 @@
 #include "ByteStream.h"
 #include "vst3/DrumatorController.h"
 #include "vst3/DrumatorView.h"
+#include "core/UiDetailGeometry.h"
+#include "core/UiRowControls.h"
 #include "vst3/DrumatorProcessor.h"
 #include "vst3/DrumatorEditor.h"
 #include "vst3/PluginIDs.h"
@@ -385,6 +387,40 @@ void testZoom(){
    IntegrationAccess::view(*f.c,0)->zoomMatches(1.5)&&IntegrationAccess::view(*f.c,1)->zoomMatches(1.5),"Z02 partial multi-view change");
  evidence("Z02 PASS: attached 100/150, DPI 100/150/200, host refusals, saved reopen and atomic two-view rejection");
 }
+void testPrecisionPanel(){
+ Fixture f;f.kit(namedKit('X'));f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ const auto y=UiDetailGeometry::top(108.+4.*29.)+40.;
+ const auto& z=UiDetailGeometry::slots;
+ auto clickAbsolute=[&](std::size_t index,bool upper){
+   const auto x=upper?z[index].right-46.:z[index].left+46.;
+   click(*v,x,y);
+   VSTGUI::CPoint pt(x,y);v->onMouseUp(pt,{});
+ };
+ click(*v,z[0].right-20.,y);
+ check(f.c->rowGain(0)==110,"GUI volume increment failed");
+ click(*v,z[0].left+20.,y,VSTGUI::kLButton|VSTGUI::kControl);
+ check(f.c->rowGain(0)==100,"GUI volume Ctrl-reset failed");
+ clickAbsolute(0,true);
+ check(f.c->rowGain(0)==200,"GUI volume end stop failed");
+ clickAbsolute(1,false);
+ check(f.c->rowPan(0)==-100,"GUI panorama end stop failed");
+ click(*v,z[1].left+20.,y,VSTGUI::kLButton|VSTGUI::kControl);
+ check(f.c->rowPan(0)==0,"GUI panorama Ctrl-centre failed");
+ clickAbsolute(2,true);
+ check(f.c->rowPitch(0)==24,"GUI pitch end stop failed");
+ clickAbsolute(3,true);
+ check(f.c->rowRandomVelocity(0)==100,"GUI random velocity end stop failed");
+ clickAbsolute(4,true);
+ check(f.c->rowChoke(0)==4,"GUI choke group end stop failed");
+ click(*v,z[4].left+20.,y,VSTGUI::kLButton|VSTGUI::kControl);
+ check(f.c->rowChoke(0)==0,"GUI choke Ctrl-reset failed");
+ click(*v,UiRowControls::mute.left+10.,108.+29.+12.);
+ click(*v,z[0].right-20.,y);
+ check(f.c->rowGain(1)==110&&f.c->rowGain(0)==200,
+       "GUI precision controls updated wrong instrument");
+ evidence("VSTGUI precision panel endpoints, Ctrl resets, selected-row controller routing PASS");
+}
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
    Fixture f;f.kit(namedKit('X',16));f.open();f.open();
@@ -431,6 +467,7 @@ int main(int argc,char** argv){
  run("Z01 full Controller allocation injection",testRecallOOM);
  run("Z01 legacy Controller",testLegacyReject);
  run("Z02 native attached views",testZoom);
+ run("VSTGUI precision controls",testPrecisionPanel);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
