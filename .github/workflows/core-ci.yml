@@ -107,6 +107,12 @@ jobs:
             throw 'Packaged VST3 WAV/MIDI/audio host simulation FAILED'
           }
           $bundleFiles | Select-Object FullName,Length | Format-Table
+      - name: Archive native VSTGUI pixel renderings
+        uses: actions/upload-artifact@v4
+        with:
+          name: 125A-Drumator-VSTGUI-Native-Renderings
+          path: gui-shots/
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: 125A-Drumator-M11-Full-Kit-Stress-QA
