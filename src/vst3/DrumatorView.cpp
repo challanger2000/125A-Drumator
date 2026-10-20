@@ -652,7 +652,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  }
  if(songEditorOpen_) {
    c->setFillColor(background);
-   c->drawRect({8,101,1252,getViewSize().getHeight()-1},VSTGUI::kDrawFilled);
+   c->drawRect({0,101,1280,getViewSize().getHeight()},VSTGUI::kDrawFilled);
    c->setFont(VSTGUI::kNormalFont,13);
    c->setFontColor(letters);
    c->drawString("SONG-ABLAUF  |  POSITION ANKLICKEN  |  PATTERN UND LAENGE UNTEN DIREKT WAEHLEN",
@@ -708,7 +708,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      char z[20]{};
      std::snprintf(z,sizeof(z),"%u%%",static_cast<unsigned>(
                    std::lround(UiCompactLayout::userZooms[i]*100.)));
-     drawControl(c,{1120,39.+i*30.,1250,68.+i*30.},z,
+     drawControl(c,{1098,39.+i*30.,1229,68.+i*30.},z,
                 std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
    }
  }else if(popup_==2) {
@@ -815,7 +815,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    const auto target=popupRow_;
    popup_=0;popupRow_=kRows;
    bool acted=false,ok=true;
-   if(kind==1&&x>=1120&&x<1250&&y>=39&&y<159) {
+   if(kind==1&&x>=1098&&x<1229&&y>=39&&y<159) {
       const auto option=static_cast<std::size_t>((y-39)/30.);
       if(option<UiCompactLayout::userZooms.size()) {
         const auto factor=UiCompactLayout::userZooms[option];
