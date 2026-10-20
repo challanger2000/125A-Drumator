@@ -1,6 +1,8 @@
 // Windows-only real Controller/View/Processor integration. Probe calls are
 // inserted in generated copies; shipped sources and VST3 ABI remain untouched.
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <objbase.h>
 #include <malloc.h>
@@ -18,6 +20,7 @@
 #include "vstgui/lib/platform/platformfactory.h"
 #include "vstgui/lib/platform/win32/win32factory.h"
 #include "vstgui/lib/controls/ctextedit.h"
+#include "vstgui/lib/platform/iplatformframe.h"
 #include <array>
 #include <atomic>
 #include <cstdlib>
@@ -138,15 +141,15 @@ struct Fixture {
  }
  void closeLast(){
    const auto n=editors.size()-1;auto* e=editors.back();editors.pop_back();
-   e->removed();e->setFrame(nullptr);e->release();DestroyWindow(frames[n].hwnd);frames[n].hwnd=nullptr;
+   static_cast<IPlugView*>(e)->removed();static_cast<IPlugView*>(e)->setFrame(nullptr);e->release();DestroyWindow(frames[n].hwnd);frames[n].hwnd=nullptr;
  }
  DrumatorEditor& open(){
    const auto n=editors.size();check(n<frames.size(),"too many fixture views");
    auto* e=dynamic_cast<DrumatorEditor*>(c->createView(ViewType::kEditor));check(e!=nullptr,"create real editor");
    auto& h=frames[n];h.hwnd=CreateWindowExW(0,L"STATIC",L"Drumator native QA",WS_OVERLAPPEDWINDOW|WS_VISIBLE,
      0,0,1280,850,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
-   check(h.hwnd!=nullptr,"create parent HWND");e->setFrame(&h);
-   check(e->attached(h.hwnd,kPlatformTypeHWND)==kResultOk,"attach actual VSTGUI editor");
+   check(h.hwnd!=nullptr,"create parent HWND");static_cast<IPlugView*>(e)->setFrame(&h);
+   check(static_cast<IPlugView*>(e)->attached(h.hwnd,kPlatformTypeHWND)==kResultOk,"attach actual VSTGUI editor");
    editors.push_back(e);pump();return *e;
  }
  static std::vector<std::uint8_t> encode(const KitState& kit){std::vector<std::uint8_t> b;check(KitCodec::encode(kit,b),"valid kit encode");return b;}
@@ -172,11 +175,12 @@ void click(DrumatorView& v,double x,double y,int buttons=VSTGUI::kLButton){
  VSTGUI::CPoint at(x,y);v.onMouseDown(at,VSTGUI::CButtonState(buttons));
 }
 HWND nameEditor(Fixture& f,std::size_t view=0,std::size_t row=0){
- SetActiveWindow(f.frames[view].hwnd);SetForegroundWindow(f.frames[view].hwnd);pump();
+ SetActiveWindow(f.frames[view].hwnd);SetForegroundWindow(f.frames[view].hwnd);
+ SetFocus(static_cast<HWND>(f.editors[view]->getFrame()->getPlatformFrame()->getPlatformRepresentation()));pump();
  auto* v=IntegrationAccess::view(*f.c,view);
  click(*v,100,108+static_cast<double>(row)*29+8,VSTGUI::kLButton|VSTGUI::kShift);
  pump();auto h=GetFocus();wchar_t cls[32]{};GetClassNameW(h,cls,32);
- check(h&&std::wstring(cls)==L"Edit","native EDIT HWND/focus missing");
+ check(h&&lstrcmpiW(cls,L"EDIT")==0,"native EDIT HWND/focus missing");
  check(IntegrationAccess::edit(*v)->getPlatformTextEdit()!=nullptr,"CTextEdit platform absent");return h;
 }
 void testPatternOverlap(){
