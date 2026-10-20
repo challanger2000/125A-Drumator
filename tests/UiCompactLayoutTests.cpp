@@ -40,6 +40,19 @@ int main(){
  EXPECT(UiCompactLayout::maxValue(4)==50);
  EXPECT(UiCompactLayout::defaultValue(4)==0);
  EXPECT(UiCompactLayout::minValue(2)==-24);
+ // Drag sensitivity must be scaled to each parameter's numerical range.
+ EXPECT(UiCompactLayout::knobValueForSlot(0,100.,75.,100)==117);
+ EXPECT(UiCompactLayout::knobValueForSlot(0,100.,85.,100,true)==103);
+ EXPECT(UiCompactLayout::knobValueForSlot(0,100.,85.,100,false)==110);
+ EXPECT(UiCompactLayout::knobValueForSlot(2,100.,40.,0)==24);
+ EXPECT(UiCompactLayout::knobValueForSlot(4,100.,-25.,0)==50);
+ EXPECT(UiCompactLayout::knobValueForSlot(6,100.,-1000.,100)==200);
+ EXPECT(UiCompactLayout::knobValueForSlot(1,100.,1000.,0)==-100);
+ EXPECT(UiCompactLayout::rowAdd.right<=UiCompactLayout::rowRemove.left);
+ EXPECT(UiCompactLayout::hit(76.,UiCompactLayout::rowAdd));
+ EXPECT(UiCompactLayout::hit(150.,UiCompactLayout::rowRemove));
+ EXPECT(!UiCompactLayout::hit(113.,UiCompactLayout::rowAdd));
+
 
  return 0;
 }
