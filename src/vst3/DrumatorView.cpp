@@ -464,7 +464,9 @@ bool DrumatorView::adjustEditorHeight() {
  const auto total=controller_.visibleRows();
  if(firstRow_>=total)firstRow_=total>0?((total-1)/UiCompactLayout::perPage)*UiCompactLayout::perPage:0;
  const auto page=std::min(UiCompactLayout::perPage,total-firstRow_);
- const auto height=std::max(370.,UiCompactLayout::editorHeight(firstRow_,page,velocityExpanded_));
+ // The Song board needs only its own 370px surface.
+ const auto height=songEditorOpen_?370.:
+     std::max(370.,UiCompactLayout::editorHeight(firstRow_,page,velocityExpanded_));
  const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  if(!editor_.requestResize({1280.*scale,height*scale})){
    compactViewport_=true;
@@ -653,7 +655,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFontColor(accent);c->setFont(VSTGUI::kNormalFont,12);
  c->drawString(range,{222,bottom+5,410,bottom+34},VSTGUI::kLeftText);
  c->drawString(status_.c_str(),{414,bottom+5,1016,bottom+34},VSTGUI::kLeftText);
- if(controller_.visibleRows()>UiCompactLayout::perPage) {
+ if(controller_.visibleRows()>displayedRows()) {
    drawControl(c,{1068,bottom+5,1145,bottom+34},"<");
    drawControl(c,{1152,bottom+5,1229,bottom+34},">");
  }
@@ -931,7 +933,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  if(x>=998&&x<1098&&y>=52&&y<82) {
    songEditorOpen_=!songEditorOpen_;
-   if(songEditorOpen_)adjustEditorHeight();
+   // Resize in both directions. If refused, preserve accessible row paging.
+   (void)adjustEditorHeight();
    invalid();return done;
  }
  if(y>=kPatternY&&y<kPatternY+30&&x>=kPatternX&&x<kPatternX+8*kPatternWidth){
@@ -1047,17 +1050,22 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        status_="NUR LEERE LETZTE ZEILE ENTFERNBAR";
      invalid();return done;
    }
-   if(controller_.visibleRows()>UiCompactLayout::perPage&&x>=1068&&x<1229){
+   if(controller_.visibleRows()>displayedRows()&&x>=1068&&x<1229){
      const auto previous=firstRow_;
-     if(x<1145)firstRow_=firstRow_>=UiCompactLayout::perPage?
-        firstRow_-UiCompactLayout::perPage:0;
-     else if(x>=1152&&firstRow_+UiCompactLayout::perPage<controller_.visibleRows())
-        firstRow_+=UiCompactLayout::perPage;
+     const auto stride=std::max<std::size_t>(1,std::min(
+         UiCompactLayout::perPage,compactPageRows_));
+     if(x<1145)firstRow_=firstRow_>=stride?firstRow_-stride:0;
+     else if(x>=1152&&firstRow_+displayedRows()<controller_.visibleRows())
+       firstRow_+=stride;
      if(firstRow_!=previous) {
        if(velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
          velocityRow_=firstRow_;
        closeTransientMenus();
-       if(!adjustEditorHeight()){firstRow_=previous;(void)adjustEditorHeight();}
+       // Fixed-size hosts still permit the visible, smaller row pages.
+       if(!adjustEditorHeight()&&!compactViewport_){
+         firstRow_=previous;
+         (void)adjustEditorHeight();
+       }
      }
      invalid();return done;
    }
