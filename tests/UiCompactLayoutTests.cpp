@@ -1,6 +1,8 @@
 #include "core/UiCompactLayout.h"
+#include "core/UiSongLayout.h"
 #include <iostream>
 using drumator::UiCompactLayout;
+using drumator::UiSongLayout;
 #define EXPECT(v) do{if(!(v)){std::cerr<<__LINE__<<" " #v "\n";return __LINE__;}}while(false)
 int main(){
  std::array<bool,16> expanded{};
@@ -40,6 +42,27 @@ int main(){
  EXPECT(UiCompactLayout::maxValue(4)==50);
  EXPECT(UiCompactLayout::defaultValue(4)==0);
  EXPECT(UiCompactLayout::minValue(2)==-24);
+ // Song geometry is shared by VSTGUI painting and pointer input.
+ EXPECT(UiSongLayout::perPage==16);
+ EXPECT(UiSongLayout::pageOf(0)==0);
+ EXPECT(UiSongLayout::pageOf(16)==1);
+ EXPECT(UiSongLayout::pageOf(63)==3);
+ EXPECT(UiSongLayout::slotAt(16.,145.,0)==0);
+ EXPECT(UiSongLayout::slotAt(17.,198.,0)==8);
+ EXPECT(UiSongLayout::slotAt(1096.,202.,2)==47);
+ EXPECT(UiSongLayout::slotAt(16.,145.,1)==16);
+ EXPECT(UiSongLayout::slotAt(167.,160.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(15.,145.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(18.,191.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(18.,249.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(18.,160.,4)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::previousHit(1000.,119.));
+ EXPECT(UiSongLayout::nextHit(1130.,119.));
+ EXPECT(!UiSongLayout::nextHit(1105.,119.));
+ EXPECT(!UiSongLayout::canNext(0,15));
+ EXPECT(UiSongLayout::canNext(0,16));
+ EXPECT(!UiSongLayout::canNext(3,64));
+
  // Drag sensitivity must be scaled to each parameter's numerical range.
  EXPECT(UiCompactLayout::knobValueForSlot(0,100.,75.,100)==117);
  EXPECT(UiCompactLayout::knobValueForSlot(0,100.,85.,100,true)==103);
