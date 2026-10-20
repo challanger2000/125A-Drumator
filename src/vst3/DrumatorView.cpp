@@ -7,6 +7,7 @@
 #include "core/VelocityLane.h"
 #include "core/UiRowGeometry.h"
 #include "core/UiDetailGeometry.h"
+#include "core/UiRowControls.h"
 #include "core/UiOverlayHitZones.h"
 #include "core/DropFeedback.h"
 #include "core/UiHeaderHitZones.h"
@@ -346,13 +347,13 @@ void DrumatorView::editName(std::size_t row) {
  if(row>=controller_.visibleRows()||!getFrame())return;
  const double y=UiRowGeometry::rowTop(row-firstRow_,velocityLaneOpen_);
  if(!nameEdit_){
-   nameEdit_=new VSTGUI::CTextEdit({81,y+2,202,y+26},this,1001,controller_.label(row).c_str());
+   nameEdit_=new VSTGUI::CTextEdit({UiRowControls::sample.left,y+2,UiRowControls::sample.right,y+26},this,1001,controller_.label(row).c_str());
    nameEdit_->registerTextEditListener(this);
    getFrame()->addView(nameEdit_);
  }
  editingNameRow_=row;
  nameEditGeneration_=controller_.editGeneration();
- nameEdit_->setViewSize({81,y+2,202,y+26});
+ nameEdit_->setViewSize({UiRowControls::sample.left,y+2,UiRowControls::sample.right,y+26});
  nameEdit_->setText(controller_.customName(row).empty()?controller_.label(row).c_str():
                    controller_.customName(row).c_str());
  nameEdit_->setVisible(true);
@@ -562,63 +563,58 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
    if(row==velocityRow_){c->setFrameColor(accent);c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawStroked);}
    c->setFontColor(letters);
-   // Visible per-row FILL button, not a hidden action behind a row number.
-   drawControl(c,{16,y+2,48,y+26},"FILL");
-   drawControl(c,{52,y+2,78,y+26},"P");
+   // Every painted x-range is the same UiRowControls slot used by hit tests.
+   auto rr=[&](UiRowControls::Slot slot,double t=2.,double b=26.) {
+     return VSTGUI::CRect{slot.left,y+t,slot.right,y+b};
+   };
+   drawControl(c,rr(UiRowControls::fill),"FILL");
+   drawControl(c,rr(UiRowControls::preview),"P");
    const auto& name=controller_.label(row);
-   // Fit the filename in the fixed row area; preserve the extension where possible.
    std::string visibleName=name;
-   // Reserve space for previous/next sample buttons and the output selector.
-   if(visibleName.size()>13) {
-     // Truncate on UTF-8 codepoint boundaries, never inside a character.
-     auto prefixEnd=std::min<std::size_t>(6,name.size());
+   if(visibleName.size()>18){
+     auto prefixEnd=std::min<std::size_t>(10,name.size());
      while(prefixEnd>0&&prefixEnd<name.size()&&
            (static_cast<unsigned char>(name[prefixEnd])&0xC0u)==0x80u)
        --prefixEnd;
-     auto suffixBegin=name.size()-4;
+     auto suffixBegin=name.size()-5;
      while(suffixBegin<name.size()&&
            (static_cast<unsigned char>(name[suffixBegin])&0xC0u)==0x80u)
        ++suffixBegin;
      visibleName=name.substr(0,prefixEnd)+"..."+name.substr(suffixBegin);
    }
-   c->drawString(visibleName.c_str(),VSTGUI::CRect(81,y,202,y+26),
-                 VSTGUI::kLeftText);
-   drawControl(c,{203,y+2,216,y+26},"<");
-   drawControl(c,{216,y+2,229,y+26},">");
-   // sample name rendering above has its own bounds
-
-   char busLabel[16]{};
-   if(controller_.rowOutput(row)==0)std::snprintf(busLabel,sizeof(busLabel),"MAIN");
-   else std::snprintf(busLabel,sizeof(busLabel),"O%02u",controller_.rowOutput(row)+1);
-   drawControl(c,{230,y+2,275,y+26},busLabel);
-   char value[32]{};
-   c->setFontColor(accent);
    c->setFont(VSTGUI::kNormalFont,11);
-   std::snprintf(value,sizeof(value),"VOL %u%%",controller_.rowGain(row));
-   c->drawString(value,VSTGUI::CRect(280,y,345,y+26),VSTGUI::kLeftText);
-   const auto p=controller_.rowPan(row);
-   if(p==0)std::snprintf(value,sizeof(value),"PAN C");
-   else std::snprintf(value,sizeof(value),"%c %d",p<0?'L':'R',std::abs(p));
-   c->drawString(value,VSTGUI::CRect(350,y,415,y+26),VSTGUI::kLeftText);
-   std::snprintf(value,sizeof(value),"P %+dst",controller_.rowPitch(row));
-   c->drawString(value,VSTGUI::CRect(420,y,475,y+26),VSTGUI::kLeftText);
-   // Visible decrement/increment zones: left/right half of each control.
    c->setFontColor(letters);
-   for(double left:{280.0,350.0,420.0}) {
-      const double width=left==420.0?55.0:65.0;
-      c->drawString("-",VSTGUI::CRect(left,y+15,left+width/2.0,y+28));
-      c->drawString("+",VSTGUI::CRect(left+width/2.0,y+15,left+width,y+28));
-   }
-   drawControl(c,{478,y+3,500,y+24},"M",controller_.isRowMuted(row));
-   drawControl(c,{507,y+3,529,y+24},"S",controller_.isRowSolo(row));
-   char chokeText[8]{};
-   std::snprintf(chokeText,sizeof(chokeText),"%u",controller_.rowChoke(row));
-   drawControl(c,{535,y+3,558,y+24},chokeText,controller_.rowChoke(row)!=0);
-   char randomLabel[24]{};
-   std::snprintf(randomLabel,sizeof(randomLabel),"RND %u%%",
-       controller_.rowRandomVelocity(row));
-   drawControl(c,{560,y+3,619,y+25},randomLabel,
-               controller_.rowRandomVelocity(row)>0);
+   c->drawString(visibleName.c_str(),rr(UiRowControls::sample,0,26),VSTGUI::kLeftText);
+   drawControl(c,rr(UiRowControls::previous),"<");
+   drawControl(c,rr(UiRowControls::next),">");
+   char bus[16]{};
+   if(controller_.rowOutput(row)==0)std::snprintf(bus,sizeof(bus),"MAIN");
+   else std::snprintf(bus,sizeof(bus),"O%02u",controller_.rowOutput(row)+1);
+   drawControl(c,rr(UiRowControls::output),bus);
+   char value[32]{};
+   const auto panValue=controller_.rowPan(row);
+   const auto renderMix=[&](UiRowControls::Slot slot,const char* txt) {
+     c->setFillColor(background);
+     c->drawRect(rr(slot,1,28),VSTGUI::kDrawFilled);
+     c->setFrameColor(border);
+     c->drawRect(rr(slot,1,28),VSTGUI::kDrawStroked);
+     c->setFont(VSTGUI::kNormalFont,11);
+     c->setFontColor(accent);
+     c->drawString(txt,rr(slot,1,18));
+     c->setFontColor(letters);
+     c->drawString("-",VSTGUI::CRect{slot.left,y+16,UiRowControls::mid(slot),y+28});
+     c->drawString("+",VSTGUI::CRect{UiRowControls::mid(slot),y+16,slot.right,y+28});
+   };
+   std::snprintf(value,sizeof(value),"VOL %u%%",controller_.rowGain(row));
+   renderMix(UiRowControls::volume,value);
+   if(panValue==0)std::snprintf(value,sizeof(value),"PAN C");
+   else std::snprintf(value,sizeof(value),"%c %d",panValue<0?'L':'R',std::abs(panValue));
+   renderMix(UiRowControls::pan,value);
+   std::snprintf(value,sizeof(value),"P %+dst",controller_.rowPitch(row));
+   renderMix(UiRowControls::pitch,value);
+   drawControl(c,rr(UiRowControls::mute,3,24),"M",controller_.isRowMuted(row));
+   drawControl(c,rr(UiRowControls::solo,3,24),"S",controller_.isRowSolo(row));
+   c->setFont(VSTGUI::kNormalFont,12);
    for(std::size_t step=0;step<kSteps;++step) {
      const double x=kGridX+step*kCellWidth;
      const auto v=controller_.velocity(controller_.currentPattern(),row,step);
