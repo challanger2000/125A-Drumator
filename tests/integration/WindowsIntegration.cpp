@@ -102,6 +102,7 @@ struct IntegrationAccess {
    if(v.nameEdit_)platform=v.nameEdit_->getPlatformTextEdit();
    return std::tuple{v.laneDragActive_,v.laneDragGeneration_,v.editingNameRow_,v.nameEditGeneration_,
      v.fillMenuRow_,v.getViewSize(),static_cast<const void*>(platform),v.laneDragPattern_,v.laneErase_,
+      v.detailDragControl_,v.detailDragRow_,
      v.velocityRow_,v.velocityStep_,v.firstRow_,v.songSlot_,v.songEditorOpen_,v.velocityLaneOpen_,
      v.compactViewport_,v.compactPageRows_,v.status_};
  }
@@ -419,6 +420,14 @@ void testPrecisionPanel(){
  click(*v,z[0].right-20.,y);
  check(f.c->rowGain(1)==110&&f.c->rowGain(0)==200,
        "GUI precision controls updated wrong instrument");
+ // A stale precision drag must never rewrite a newly restored kit.
+ click(*v,UiRowControls::mute.left+10.,108.+12.);
+ click(*v,(z[0].left+z[0].right)/2.,y);
+ check(f.recall(Fixture::encode(namedKit('Y')))==kResultOk,"precision recall failed");
+ VSTGUI::CPoint stale(z[0].right-46.,y);
+ v->onMouseMoved(stale,VSTGUI::CButtonState(VSTGUI::kLButton));
+ v->onMouseUp(stale,{});
+ check(f.c->rowGain(0)==130,"stale precision slider edited restored kit");
  evidence("VSTGUI precision panel endpoints, Ctrl resets, selected-row controller routing PASS");
 }
 void testNativeName(){
