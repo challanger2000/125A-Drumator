@@ -39,8 +39,10 @@ Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context
  const auto result=AudioEffect::initialize(context);
  if(result!=Steinberg::kResultOk)return result;
  addAudioOutput(STR16("MAIN"),Steinberg::Vst::SpeakerArr::kStereo);
- // Rows 2-16 are optional mono-instrument stereo stems, disabled by default.
- // Existing hosts using only the main bus retain their stereo drum mix.
+ // Studio One shows kAux VST3 output buses but may refuse to enable them.
+ // Report all independent instrument output buses as kMain (Steinberg
+ // developer forum); still request stems inactive at startup via flags=0.
+ // This does not modify voice routing, project state, or bus order.
  for(int row=1;row<static_cast<int>(kRows);++row) {
    Steinberg::Vst::String128 name{};
    const auto* prefix=STR16("DRUM ");
@@ -49,7 +51,7 @@ Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context
    name[5]=static_cast<Steinberg::char16>('0'+number/10);
    name[6]=static_cast<Steinberg::char16>('0'+number%10);
    addAudioOutput(name,Steinberg::Vst::SpeakerArr::kStereo,
-                  Steinberg::Vst::BusTypes::kAux,0);
+                  Steinberg::Vst::BusTypes::kMain,0);
  }
  addEventInput(STR16("MIDI Input"),16);
  processContextRequirements.needProjectTimeMusic().needTempo().needTransportState();
