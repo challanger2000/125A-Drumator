@@ -13,6 +13,7 @@
 #include "core/UiDetailGeometry.h"
 #include "core/UiRowControls.h"
 #include "core/UiCompactLayout.h"
+#include "core/UiSongLayout.h"
 #include "vst3/DrumatorProcessor.h"
 #include "vst3/DrumatorEditor.h"
 #include "vst3/PluginIDs.h"
@@ -117,6 +118,8 @@ struct IntegrationAccess {
   static double rowTop(DrumatorView& v,std::size_t i){return v.rowTopOnPage(i);}
   static bool velocityExpanded(DrumatorView& v,std::size_t row){return v.velocityExpanded_[row];}
   static int activeKnob(DrumatorView& v){return v.activeKnob_;}
+ static std::size_t songPage(DrumatorView& v){return v.songPage_;}
+ static std::size_t songSlot(DrumatorView& v){return v.songSlot_;}
  static const auto& paths(Controller& c){return c.samplePaths_;}
 };
 }
@@ -604,6 +607,44 @@ void testPatternLengthControls(){
  check(f.c->visibleRows()==4,"UX - ZEILE not clickable");
  evidence("UX direct length and no duplicate pattern menu control PASS");
 }
+void testPagedSongEditor(){
+ Fixture f;
+ auto kit=namedKit('X',4);
+ check(kit.chain.setCount(16),"UX song fixture capacity");
+ f.kit(kit);f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ click(*v,1026.,65.); // SONG EDIT opens
+ check(IntegrationAccess::songPage(*v)==0,"UX song page initial selection");
+ // The page before slot 17 must be reachable even when only 16 are configured.
+ click(*v,1170.,119.);
+ check(IntegrationAccess::songPage(*v)==1,"UX song next page unavailable at boundary");
+ click(*v,17.,160.); // first empty slot 17 is an add action
+ check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
+       "UX song add slot 17 via its own cell failed");
+ click(*v,115.+2.*56.+25.,290.); // select Pattern C for entry 17
+ check(f.c->songEntry(16).pattern==2,"UX song pattern selector missed selected entry");
+ click(*v,707.,290.); // half bar
+ check(f.c->songEntry(16).steps==8,"UX song length selector missed selected entry");
+ const auto snapshot=IntegrationAccess::snapshot(*f.c);
+ click(*v,167.,160.); // 4px gutter between song items, must be inert
+ check(IntegrationAccess::songSlot(*v)==16&&
+       IntegrationAccess::snapshot(*f.c)==snapshot,"UX song gutter changed entry");
+ click(*v,320.,160.); // slot 19 is not yet available: inactive
+ check(f.c->songCount()==17,"UX future Song item should not implicitly add");
+ click(*v,1032.,119.);
+ check(IntegrationAccess::songPage(*v)==0,"UX song previous page failed");
+ click(*v,1170.,160.); // slot 8 on page 1
+ check(IntegrationAccess::songSlot(*v)==7,"UX song cell selection hit unexpected slot");
+ click(*v,1060.,290.); // add 18th slot (automatically selects its page)
+ check(f.c->songCount()==18&&IntegrationAccess::songPage(*v)==1&&
+       IntegrationAccess::songSlot(*v)==17,"UX Song + EINTRAG did not auto-page");
+ click(*v,1172.,290.); // delete last (must select 17)
+ check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
+       "UX Song last-entry removal selection incorrect");
+ check(f.c->songEntry(16).pattern==2&&f.c->songEntry(16).steps==8,
+       "UX Song pagination corrupted edited entry");
+ evidence("UX paged Song editor selection, paging, boundaries, add/remove, pattern+length PASS");
+}
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
    Fixture f;f.kit(namedKit('X',16));f.open();f.open();
@@ -653,6 +694,7 @@ int main(int argc,char** argv){
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
  run("UX direct pattern length",testPatternLengthControls);
+ run("UX paged Song board",testPagedSongEditor);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
