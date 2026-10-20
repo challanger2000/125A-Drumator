@@ -275,6 +275,10 @@ const std::string& Controller::label(std::size_t row) const noexcept {
 bool Controller::renameRow(std::size_t row,const std::string& name) {
  if(row>=kRows||!validRowLabel(name))return false;
  if(customNames_[row]==name)return true;
+ // Allocate BEFORE asking the processor to commit. Updating the controller
+ // after success must be noexcept, or an OOM leaves both sides inconsistent.
+ std::string prepared;
+ try {prepared=name;}catch(const std::bad_alloc&) {return false;}
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.RenameRow");
  auto* attrs=msg->getAttributes();
@@ -284,7 +288,7 @@ bool Controller::renameRow(std::size_t row,const std::string& name) {
  }
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok){customNames_[row]=name;notifyViews(false);}
+ if(ok){customNames_[row].swap(prepared);notifyViews(false);}
  return ok;
 }
 bool Controller::configureSong(bool enabled,std::size_t count,const SongChain& chain) {
@@ -646,13 +650,16 @@ bool Controller::previewSample(std::size_t row) {
 }
 bool Controller::clearSample(std::size_t row) {
  if(row>=kRows)return false;
+ std::string emptyLabel;
+ try {emptyLabel="LEER - WAV LADEN";}
+ catch(const std::bad_alloc&) {return false;}
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.ClearSample");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok){labels_[row]="LEER - WAV LADEN";samplePaths_[row].clear();}
+ if(ok){labels_[row].swap(emptyLabel);samplePaths_[row].clear();}
  return ok;
 }
 bool Controller::setRowOutput(std::size_t row,unsigned requested) {
@@ -810,7 +817,12 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  // processor. Do not display "loaded" in that case.
  if(!getPeer())return LoadStatus::NoProcessorConnection;
  const auto last=path.find_last_of("/\\");
- const auto name=last==std::string::npos?path:path.substr(last+1);
+ std::string name;
+ std::string stagedPath;
+ try {
+   name=last==std::string::npos?path:path.substr(last+1);
+   stagedPath=path;
+ }catch(const std::bad_alloc&) {return LoadStatus::ReadError;}
  if(name.empty()||name.size()>kMaxKitName||name.find('\0')!=std::string::npos)
     return LoadStatus::Rejected;
  auto* msg=allocateMessage();
@@ -832,8 +844,8 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  if(!accepted)return LoadStatus::Rejected;
  // Success means the processor accepted the immutable asset for the
  // next audio block; no claim is made that the buffer has already rendered.
- labels_[row]=name;
- samplePaths_[row]=path;
+ labels_[row].swap(name);
+ samplePaths_[row].swap(stagedPath);
  return LoadStatus::Accepted;
 }
 }

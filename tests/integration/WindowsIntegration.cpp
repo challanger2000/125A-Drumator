@@ -871,6 +871,63 @@ void testSongCompactViewport(){
        "UX compact fallback cannot recover after host accepts again");
  evidence("UX 370px Song viewport, return to Steps and refused-resize row navigation PASS");
 }
+void testControllerMetadataCommit(){
+ Fixture f;auto initial=namedKit('X');
+ initial.displayNames[1].clear(); // row 2 has no custom label
+ f.kit(initial);
+ // The controller must not notify a successful processor mutation before
+ // allocating its replacement display label (OOM before commit).
+ std::string replacement(64,'R');
+ const auto before=IntegrationAccess::snapshot(*f.c);
+ allocationFail=0;
+ bool escaped=false,ok=false;
+ try {ok=f.c->renameRow(0,replacement);}
+ catch(const std::bad_alloc&) {escaped=true;}
+ allocationFail=-1;
+ check(!escaped&&!ok&&IntegrationAccess::snapshot(*f.c)==before,
+       "N11 Controller rename OOM escaped or mutated local state");
+ auto savedKit=[&] {
+   ResizableMemoryIBStream stream;KitState state;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                          static_cast<std::size_t>(stream.getCursor()),state),
+         "N11 processor state decode");
+   return state;
+ };
+ check(savedKit().displayNames[0]==initial.displayNames[0],
+       "N11 Controller rename OOM already changed processor");
+ check(f.c->renameRow(0,replacement)&&
+       f.c->customName(0)==replacement&&
+       savedKit().displayNames[0]==replacement,
+       "N11 controller/processor success inconsistent");
+ // The actual WAV load must record the filename/path only after a successful
+ // processor load. Clear must leave a valid, synchronized empty slot.
+ prepareAudio(*f.p);
+ const auto candidate=constantStereo(.25f,-.25f);
+ const auto path=std::filesystem::current_path()/
+       "125A-Drumator-N11-test-sample.wav";
+ { std::ofstream out(path,std::ios::binary|std::ios::trunc);
+   check(out.good(),"N11 create sample file");
+   out.write(reinterpret_cast<const char*>(candidate.data()),
+             static_cast<std::streamsize>(candidate.size()));
+   check(out.good(),"N11 sample write failed");
+ }
+ const auto pathText=path.string();
+ check(f.c->loadWav(1,pathText)==Controller::LoadStatus::Accepted,
+       "N11 processor rejected valid sample file");
+ check(IntegrationAccess::paths(*f.c)[1]==pathText&&
+       savedKit().names[1]==path.filename().string()&&
+       f.c->label(1)==path.filename().string(),
+       "N11 loaded sample filename/path/processor state diverged");
+ check(f.c->clearSample(1)&&IntegrationAccess::paths(*f.c)[1].empty()&&
+       f.c->label(1)=="LEER - WAV LADEN"&&
+       savedKit().names[1].empty()&&savedKit().wav[1].empty(),
+       "N11 clear sample did not atomically reset metadata");
+ std::error_code ec;std::filesystem::remove(path,ec);
+ check(!ec,"N11 fixture sample cleanup failed");
+ f.p->setProcessing(false);f.p->setActive(false);
+ evidence("N11 Controller metadata allocation, WAV load and clear consistency PASS");
+}
 void testHostNameAllocationRollback(){
  Fixture f;auto baseline=namedKit('X');f.kit(baseline);
  // Construct the host message before fault injection: only the processor's
@@ -958,6 +1015,7 @@ int main(int argc,char** argv){
  run("UX paged Song board",testPagedSongEditor);
  run("UX compact Song viewport",testSongCompactViewport);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
+ run("N11 controller metadata transactional commit",testControllerMetadataCommit);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
