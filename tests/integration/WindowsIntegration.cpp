@@ -553,7 +553,22 @@ void testPrecisionPanel(){
  drag(375.,top+68.,-60.);
  check(f.c->rowPitch(0)==24,"V2 pitch rotary maximum failed");
  drag(496.,top+68.,-250.);
- check(f.c->rowRandomVelocity(0)==100,"V2 Random Velocity rotary failed");
+ check(f.c->rowRandomVelocity(0)==0,"V2 button unexpectedly enabled legacy realtime random");
+ // Existing projects with stored nonzero RT retain their usable old control.
+ {
+  Fixture legacy;
+  auto oldKit=namedKit('X');
+  oldKit.randomVelocity[0]=30;
+  legacy.kit(oldKit);legacy.open();
+  auto* oldView=IntegrationAccess::view(*legacy.c,0);
+  VSTGUI::CPoint first(496.,top+68.);
+  oldView->onMouseDown(first,VSTGUI::CButtonState(VSTGUI::kLButton));
+  VSTGUI::CPoint last(496.,top-182.);
+  oldView->onMouseMoved(last,VSTGUI::CButtonState(VSTGUI::kLButton));
+  oldView->onMouseUp(last,{});
+  check(legacy.c->rowRandomVelocity(0)==100,
+        "V2 legacy realtime random knob failed");
+ }
  click(*v,597.,top+20.);
  click(*v,560.,top+36.+13.);
  check(f.c->rowOutput(0)==8,"V2 direct output selection OUT 9 failed");
