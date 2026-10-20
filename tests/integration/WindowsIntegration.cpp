@@ -661,6 +661,29 @@ void testRandomVelocityOneShot(){
        "RANDOM second-bar undo failed");
  evidence("RANDOM one-shot occupied-only, 1T/2T, isolated row/pattern and Undo PASS");
 }
+void testVelocityResetPattern(){
+ Fixture f;
+ auto kit=namedKit('X',4);
+ kit.grid.fill(0);
+ kit.grid[0]=1;kit.grid[4]=127;kit.grid[20]=64;
+ kit.grid[kSteps]=88; // second instrument, same pattern
+ kit.grid[kRows*kSteps]=72; // next pattern must remain untouched
+ f.kit(kit);f.open();
+ check(f.c->resetPatternVelocity(),"VELO 100 reset rejected");
+ for(const auto index:{0u,4u,20u,kSteps})
+   check(f.c->velocity(0,index/kSteps,index%kSteps)==100,
+         "VELO 100 did not reset occupied step to 100");
+ check(f.c->velocity(0,0,1)==0&&f.c->velocity(0,1,1)==0,
+       "VELO 100 created notes on empty steps");
+ check(f.c->velocity(1,0,0)==72,"VELO 100 modified another pattern");
+ check(f.c->canUndoCurrentPattern()&&f.c->undoCurrentPattern(),
+       "VELO 100 must be one undoable operation");
+ check(f.c->velocity(0,0,0)==1&&f.c->velocity(0,0,4)==127&&
+       f.c->velocity(0,0,20)==64&&f.c->velocity(0,1,0)==88,
+       "VELO 100 Undo did not restore exact prior velocities");
+ check(!f.c->canUndoCurrentPattern(),"VELO 100 left extra undo operations");
+ evidence("VELO 100 all occupied notes, no new notes, isolated pattern and single Undo PASS");
+}
 void testPatternLengthControls(){
  Fixture f;
  auto kit=namedKit('X');
@@ -830,6 +853,7 @@ int main(int argc,char** argv){
  run("VSTGUI native pixel render set",testVisualRender);
  run("UX direct pattern length",testPatternLengthControls);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
+  run("VELO 100 reset existing notes",testVelocityResetPattern);
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
  run("UX paged Song board",testPagedSongEditor);
  run("UX compact Song viewport",testSongCompactViewport);
