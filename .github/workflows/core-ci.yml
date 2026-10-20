@@ -111,7 +111,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 125A-Drumator-VSTGUI-Native-Renderings
-          path: gui-shots/
+          # CTest runs from build/, so native render outputs are placed there.
+          path: build/gui-shots/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
