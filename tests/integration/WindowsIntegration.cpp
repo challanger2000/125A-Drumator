@@ -670,7 +670,7 @@ void testVelocityResetPattern(){
  kit.grid[kRows*kSteps]=72; // next pattern must remain untouched
  f.kit(kit);f.open();
  check(f.c->resetPatternVelocity(),"VELO 100 reset rejected");
- for(const auto index:{0u,4u,20u,kSteps})
+ for(const std::size_t index : {std::size_t{0},std::size_t{4},std::size_t{20},std::size_t{kSteps}})
    check(f.c->velocity(0,index/kSteps,index%kSteps)==100,
          "VELO 100 did not reset occupied step to 100");
  check(f.c->velocity(0,0,1)==0&&f.c->velocity(0,1,1)==0,
