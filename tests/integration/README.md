@@ -35,6 +35,13 @@ The test EXE initializes VSTGUI explicitly and provides a resource directory;
 the packaged editor smoke separately checks native attachment/resource lookup
 through the actual DLL. `IPlugView` methods are called through that public host
 interface, as required by the pinned SDK (its concrete overrides are protected).
+The standalone EXE also compiles the SDK's original
+`public.sdk/source/vst/vstgui_win32_bundle_support.cpp`: `vstgui_support` is
+built with `SMTG_MODULE_IS_BUNDLE=1`, while manual Windows bundle assembly
+disables the SDK's automatic addition of that implementation to the library.
+The product already receives it via `smtg_target_prepare_bundle(Drumator)`;
+the separate test EXE needs its own definition. No dummy helper or product
+resource/lifecycle change is used.
 
 ## Oracles
 

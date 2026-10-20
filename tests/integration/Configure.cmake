@@ -41,6 +41,11 @@ file(WRITE "${_qa}/core/AtomicPatternBank.h" "#include \"Probe.h\"\n${_bank}")
 add_executable(drumator_integration_tests tests/integration/WindowsIntegration.cpp
   "${_qa}/vst3/DrumatorController.cpp" "${_qa}/vst3/DrumatorView.cpp"
   "${_qa}/vst3/DrumatorProcessor.cpp" src/vst3/FlacImport.cpp)
+# The shared vstgui_support library is built with SMTG_MODULE_IS_BUNDLE=1.
+# Drumator receives this implementation via smtg_target_prepare_bundle, but
+# this standalone EXE must also link the real SDK definition (no stub).
+target_sources(drumator_integration_tests PRIVATE
+  "${_DrumatorSdkRoot}/public.sdk/source/vst/vstgui_win32_bundle_support.cpp")
 target_include_directories(drumator_integration_tests BEFORE PRIVATE
   "${_qa}" tests/integration src/vst3 src/core "${_drflac_dir}")
 # Generated core headers retain quoted sibling includes (SequencerCore.h).
