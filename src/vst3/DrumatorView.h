@@ -5,6 +5,7 @@
 #include "vstgui/lib/dragging.h"
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include <string>
+#include <array>
 #include "core/SequencerCore.h"
 namespace VSTGUI {class CTextEdit;}
 namespace drumator {
@@ -55,7 +56,16 @@ private:
  std::size_t firstRow_{0};
  std::size_t songSlot_{0};
  bool songEditorOpen_{false};
- bool velocityLaneOpen_{false};
+ // UI-only: each instrument controls its own Velocity lane.
+ std::array<bool,kRows> velocityExpanded_{};
+ // 0=no popup, 1=Zoom, 2=Pattern actions, 3=Output, 4=Choke.
+ int popup_{0};
+ std::size_t popupRow_{kRows};
+ int activeKnob_{-1}; // 0..3 row, 4=Swing,5=Humanize,6=Master
+ std::size_t knobRow_{kRows};
+ double knobStartY_{0.};
+ int knobStartValue_{0};
+ std::uint64_t knobGeneration_{0};
  bool laneDragActive_{false};
  std::size_t laneDragPattern_{0};
  std::uint64_t laneDragGeneration_{0};
@@ -66,6 +76,12 @@ private:
  bool compactViewport_{false};
  std::size_t compactPageRows_{4};
  std::size_t displayedRows() const noexcept;
+ double rowTopOnPage(std::size_t pageIndex) const noexcept;
+ double gridBottom() const noexcept;
+ bool toggleRowVelocity(std::size_t row);
+ bool changeKnobValue(int slot,std::size_t row,int value);
+ void closeTransientMenus() noexcept;
+
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
  void load(std::size_t row);
  bool adjustEditorHeight();
