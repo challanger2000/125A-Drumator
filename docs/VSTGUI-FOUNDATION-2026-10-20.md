@@ -1,6 +1,6 @@
 # 125A Drumator – Funktionale VSTGUI-Vorlage
-Datum: 20.10.2026. Branch: `design/vstgui-foundation-2026-10-20`.
-Status: **Entwicklung; Windows-Build, visuelle QA und DAW-Abnahme noch NICHT nachgewiesen.**
+Datum: 20.10.2026. Aktive Branch: `develop/v1.0.0`.
+Status: **Technische VSTGUI für Commit `eaa035bb` auf Windows geprüft: 21/21 CTests, 47/47 Validator, 9 echte VSTGUI-Renderings ([Windows #39418839905](https://github.com/challanger2000/125A-Drumator/actions/runs/39418839905)). Finaler Grafik-Skin und Studio-One-DAW-Abnahme weiterhin offen.**
 
 ## Produktprinzip / Anwendersicht
 Zuerst Sample laden, danach Step aktivieren und sofort hören. Pattern A–H, Song-Kette und Master sind oben. Sample und Instrumentinformationen sind links, die 32 Steps rechts. Die Bedienung darf keine unbeschrifteten verdeckten Funktionen voraussetzen. Der blaue Mockup aus dem Chat ist ein atmosphärisches **Referenzbild, kein geometrischer Bauplan**.
@@ -50,3 +50,8 @@ Das Enddesign orientiert sich lose an klassischer blauer E-mu-/DMX-Studiomaschin
 - Follow-up native fixture adds 16 instruments / 2 pages in expanded Velocity, variation in bar heights and page-2 row hit validation; page change now selects the first visible instrument rather than displaying a hidden row in the precision panel.
 - Normal pan values retain the `PAN` label with L/C/R; sample labels fit available pixels using the renderer's actual glyph metrics while keeping WAV/FLAC extension visible when practical.
 - Only the technical VSTGUI template is being validated. The final approved Logo Master and professional bitmap knob/button skin are later visual asset integration, not part of this GUI source QA.
+
+## Nachprüfung und technische GUI-Basis für spätere Grafiken
+- Endgültig geprüfter Programmstand `eaa035bb43cc9fa20682f711b8631a75da0ece4d`. Vollständig neue Ausgabe mit korrigierter Kontrastanzeige des deaktivierten 16-Zeilen-Buttons, PAN-Präfix für L/C/R, zwei 8er-Seiten mit dynamischen Velocity-Balken bei 16 Instrumenten und geprüften Seiten-Klickflächen.
+- [VSTGUI-Rendering-Artefakt](https://github.com/challanger2000/125A-Drumator/actions/runs/39418839905/artifacts/12262412156) (9 Windows-Offscreen-BMPs) persönlich visuell geprüft: Header keine Überschneidungen; Patternbuttons, Zoom, 16/32-Step-Raster, Velocity-Zeilen, Song-Board und Präzisionsparameter bleiben innerhalb ihrer geometrischen Grenzen. Bei 16+Velocity wird nach Seitenwechsel auch `ZEILE 09 | KLANG` statt des vorher versteckten Instruments angezeigt. Die Variante zeigt programmierte Velocity-Unterschiede und eine Stummschaltung auf Zeile 9.
+- [Installierbare VST3-Testversion](https://github.com/challanger2000/125A-Drumator/actions/runs/39418839905/artifacts/12262387312) ist zum **Owner-Praxistest**, nicht zur V1-Veröffentlichung. Die echte Studio-One-Maus-/Zoom-/D&D-/Recall-Abnahme sowie der finale Render-Skin bleiben ausständig.
