@@ -413,6 +413,38 @@ bool Controller::undoCurrentPattern(){
  undo_.consume(p);
  return true;
 }
+bool Controller::randomizeRowVelocity(std::size_t row){
+ if(row>=visibleRows_)return false;
+ const auto p=currentPattern();
+ const auto active=static_cast<std::size_t>(patternLength(p));
+ if(active!=16&&active!=32)return false;
+ PatternSteps data{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
+ auto candidate=data;
+ const auto variation=velocityVariation_+1u;
+ bool any=false;
+ for(std::size_t step=0;step<active;++step){
+   const auto index=row*kSteps+step;
+   if(data[index]==0)continue; // never invent new notes
+   any=true;
+   std::uint32_t hash=static_cast<std::uint32_t>((row+1u)*0x9e3779b9u)^
+       static_cast<std::uint32_t>((step+1u)*0x85ebca6bu)^(variation*0xc2b2ae35u);
+   hash^=hash>>16;hash*=0x7feb352du;hash^=hash>>15;
+   hash*=0x846ca68bu;hash^=hash>>16;
+   const int offset=static_cast<int>(hash%49u)-24;
+   const int source=static_cast<int>(data[index]);
+   int next=std::clamp(source+offset,1,127);
+   // A press must visibly change every existing note, including saturated
+   // source values 1 and 127, rather than looking like a no-op.
+   if(next==source)next=source==127?126:source==1?2:
+       source+((hash&1u)?1:-1);
+   candidate[index]=static_cast<std::uint8_t>(next);
+ }
+ if(!any)return false; // no content and no undo entry
+ if(!replacePattern(p,candidate))return false;
+ velocityVariation_=variation;
+ return true;
+}
 bool Controller::varyPatternVelocity(){
  const auto p=currentPattern();
  PatternSteps data{};
