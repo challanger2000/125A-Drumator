@@ -92,7 +92,7 @@
           35
         ],
         "popup": {
-          "rect": "[1120,39+30*i,1250,68+30*i]",
+          "rect": "[1098,39+30*i,1229,68+30*i]",
           "options": [
             "100%",
             "120%",
@@ -299,10 +299,11 @@
         "2 TAKTE"
       ],
       "origin": [
-        8,
+        0,
         101
       ],
-      "drawOrder": "draw song panel before contextual menu popups"
+      "drawOrder": "draw song panel before contextual menu popups",
+      "coverage": "Full logical width 0..1280 including right edge; test captures pixel 1260,140 to reject leaks."
     }
   },
   "gestures": {
@@ -326,6 +327,10 @@
       "song board",
       "16 instruments paged to last page"
     ],
-    "ownerStudioOneQA": "NOT RUN; mandatory"
+    "ownerStudioOneQA": "NOT RUN; mandatory",
+    "nativeVisualOracles": [
+      "Song overlay fully covers x>=1252, including old VELO controls",
+      "Zoom popup stops at x=1229 before VELO label at x=1233"
+    ]
   }
 }
