@@ -682,6 +682,17 @@ void testVelocityResetPattern(){
        f.c->velocity(0,0,20)==64&&f.c->velocity(0,1,0)==88,
        "VELO 100 Undo did not restore exact prior velocities");
  check(!f.c->canUndoCurrentPattern(),"VELO 100 left extra undo operations");
+ // Exercise actual native popup hit zones, not just the Controller API.
+ click(*IntegrationAccess::view(*f.c,0),840.,65.); // PATTERN menu
+ click(*IntegrationAccess::view(*f.c,0),840.,229.); // VELO 100 (item six)
+ check(f.c->velocity(0,0,0)==100&&f.c->velocity(0,0,4)==100&&
+       f.c->velocity(0,1,0)==100&&f.c->velocity(0,0,1)==0,
+       "VELO 100 popup did not reset occupied notes only");
+ click(*IntegrationAccess::view(*f.c,0),840.,65.);
+ click(*IntegrationAccess::view(*f.c,0),840.,177.); // Undo (item four)
+ check(f.c->velocity(0,0,0)==1&&f.c->velocity(0,0,4)==127&&
+       f.c->velocity(0,1,0)==88&&f.c->velocity(0,0,1)==0,
+       "VELO 100 popup Undo did not restore previous velocities");
  evidence("VELO 100 all occupied notes, no new notes, isolated pattern and single Undo PASS");
 }
 void testPatternLengthControls(){
