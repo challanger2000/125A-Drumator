@@ -550,8 +550,43 @@ void testPrecisionPanel(){
    click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
    check(f.c->rowGain(0)==100,"UX fine knob Ctrl reset failed");
  }
+ // P11: actual VSTGUI PAN +100 must be reachable AND reversible;
+ // regress the original owner report where a fully right-panned knob stuck.
+ drag(254.,top+68.,-150.);
+ check(f.c->rowPan(0)==100,"P11 PAN +100 rotary endpoint unreachable");
+ {
+   ResizableMemoryIBStream saved;KitState state;
+   check(f.p->getState(&saved)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(saved.getData()),
+             static_cast<std::size_t>(saved.getCursor()),state)&&state.pan[0]==200,
+         "P11 +100 panorama not persisted by actual processor");
+ }
+ drag(254.,top+68.,30.);
+ check(f.c->rowPan(0)==80,"P11 PAN jammed at +100 on reverse drag");
+ drag(254.,top+68.,300.);
+ check(f.c->rowPan(0)==-100,"P11 PAN -100 endpoint unreachable");
+ {
+   ResizableMemoryIBStream saved;KitState state;
+   check(f.p->getState(&saved)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(saved.getData()),
+             static_cast<std::size_t>(saved.getCursor()),state)&&state.pan[0]==0,
+         "P11 -100 panorama not persisted by actual processor");
+ }
+ click(*v,254.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ check(f.c->rowPan(0)==0,"P11 PAN Ctrl reset to center failed");
+ // Volume must also leave its maximum, and default must stay at 100%.
+ drag(133.,top+68.,-150.);
+ check(f.c->rowGain(0)==200,"P11 VOL 200% endpoint unreachable");
+ drag(133.,top+68.,30.);
+ check(f.c->rowGain(0)==180,"P11 VOL stuck at 200% after reversing");
+ click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ check(f.c->rowGain(0)==100,"P11 VOL Ctrl reset not 100%");
  drag(375.,top+68.,-60.);
  check(f.c->rowPitch(0)==24,"V2 pitch rotary maximum failed");
+ drag(375.,top+68.,30.);
+ check(f.c->rowPitch(0)==12,"P11 PITCH stuck at +24 semitones");
+ click(*v,375.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ check(f.c->rowPitch(0)==0,"P11 PITCH Ctrl reset failed");
  drag(496.,top+68.,-250.);
  check(f.c->rowRandomVelocity(0)==0,"V2 button unexpectedly enabled legacy realtime random");
  // Existing projects with stored nonzero RT retain their usable old control.
