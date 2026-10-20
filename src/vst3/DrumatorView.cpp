@@ -1080,60 +1080,59 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
- if(detailDragControl_>=0) {
-   if(!(buttons&VSTGUI::kLButton)){
-     detailDragControl_=-1;detailDragRow_=kRows;
+ if(activeKnob_>=0){
+   if(knobGeneration_!=controller_.editGeneration()||!(buttons&VSTGUI::kLButton)){
+     activeKnob_=-1;knobRow_=kRows;invalid();
      return VSTGUI::kMouseEventHandled;
    }
-   const int lows[]={0,-100,-24,0,0},highs[]={200,100,24,100,4};
-   const auto i=static_cast<std::size_t>(detailDragControl_);
-   const int next=UiDetailGeometry::absoluteAt(pos.x,detailDragControl_,lows[i],highs[i]);
-   if(!changeDetailValue(detailDragRow_,detailDragControl_,next))
-     status_="KLANGREGLER: AENDERUNG VOM PROZESSOR ABGELEHNT";
+   const auto requested=UiCompactLayout::knobValue(
+        knobStartY_,pos.y,knobStartValue_,
+        UiCompactLayout::minValue(activeKnob_),UiCompactLayout::maxValue(activeKnob_));
+   if(!changeKnobValue(activeKnob_,knobRow_,requested))
+      status_="REGLERWERT NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
- if(laneDragGeneration_!=controller_.editGeneration()) {
-   laneDragActive_=false;
-   laneDragGeneration_=0;
+ if(laneDragGeneration_!=controller_.editGeneration()){
+   laneDragActive_=false;laneDragGeneration_=0;
    return VSTGUI::kMouseEventHandled;
  }
  if(!(buttons&VSTGUI::kLButton)){
-   laneDragActive_=false;
+   laneDragActive_=false;laneDragGeneration_=0;
    controller_.endVelocityStroke(true);
    return VSTGUI::kMouseEventHandled;
  }
- const auto step=UiRowGeometry::stepAt(pos.x);
- if(step<0||!velocityLaneOpen_||songEditorOpen_||
-    velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
+ const auto step=UiCompactLayout::stepAt(pos.x);
+ if(step<0||songEditorOpen_||velocityRow_<firstRow_||
+    velocityRow_>=firstRow_+displayedRows()||!velocityExpanded_[velocityRow_])
    return VSTGUI::kMouseEventHandled;
- const auto mapped=UiRowGeometry::velocityAt(pos.y,velocityRow_-firstRow_,laneErase_);
+ const auto idx=velocityRow_-firstRow_;
  velocityStep_=static_cast<std::size_t>(step);
- if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,
-                                 velocityStep_,mapped))
+ const auto value=UiCompactLayout::velocityAt(pos.y,rowTopOnPage(idx),laneErase_);
+ if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,velocityStep_,value))
    status_="VELOCITY-ZIEHEN NICHT UEBERNOMMEN";
- invalid();
- return VSTGUI::kMouseEventHandled;
+ invalid();return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
     VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
- if(detailDragControl_>=0) {
-   detailDragControl_=-1;detailDragRow_=kRows;
-   return VSTGUI::kMouseEventHandled;
+ if(activeKnob_>=0){
+   activeKnob_=-1;knobRow_=kRows;
+   invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
  const bool fresh=laneDragGeneration_==controller_.editGeneration();
- laneDragActive_=false;
- laneDragGeneration_=0;
+ laneDragActive_=false;laneDragGeneration_=0;
  if(fresh)controller_.endVelocityStroke(true);
  return VSTGUI::kMouseEventHandled;
 }
-VSTGUI::CMouseEventResult DrumatorView::onMouseCancel() {
+VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
+ activeKnob_=-1;knobRow_=kRows;
  detailDragControl_=-1;detailDragRow_=kRows;
- const bool fresh=laneDragGeneration_==controller_.editGeneration();
- laneDragActive_=false;
- laneDragGeneration_=0;
+ const bool fresh=laneDragActive_&&
+                  laneDragGeneration_==controller_.editGeneration();
+ laneDragActive_=false;laneDragGeneration_=0;
  if(fresh)controller_.endVelocityStroke(false);
- return VSTGUI::kMouseEventHandled;
+ invalid();return VSTGUI::kMouseEventHandled;
 }
+
 }
