@@ -43,7 +43,7 @@ int main(){
  EXPECT(UiCompactLayout::defaultValue(4)==0);
  EXPECT(UiCompactLayout::minValue(2)==-24);
  // Song geometry is shared by VSTGUI painting and pointer input.
- EXPECT(UiSongLayout::perPage==16);
+ static_assert(UiSongLayout::perPage==16);
  EXPECT(UiSongLayout::pageOf(0)==0);
  EXPECT(UiSongLayout::pageOf(16)==1);
  EXPECT(UiSongLayout::pageOf(63)==3);
