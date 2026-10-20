@@ -468,6 +468,12 @@ void testVisualRender(){
    Fixture f;f.kit(namedKit('X',16));f.open();
    auto* v=IntegrationAccess::view(*f.c,0);
    captureVstgui(*v,"v2-16-rows-page-1",1.0);
+   click(*v,820.,65.);
+   captureVstgui(*v,"v2-pattern-actions-menu",1.0);
+   click(*v,15.,390.);
+   click(*v,1150.,20.);
+   captureVstgui(*v,"v2-zoom-menu",1.0);
+   click(*v,15.,390.);
    click(*v,1248,108.+60.);
    check(IntegrationAccess::velocityExpanded(*v,0),"V2 row 1 expansion failed");
    const auto row2=IntegrationAccess::rowTop(*v,1);
@@ -475,6 +481,18 @@ void testVisualRender(){
    check(IntegrationAccess::velocityExpanded(*v,0)&&
          IntegrationAccess::velocityExpanded(*v,1),"V2 expansion changed another row");
    captureVstgui(*v,"v2-two-velocity-rows",1.0);
+   click(*v,289.,108.+19.); // explicit SAMPLE actions menu
+   captureVstgui(*v,"v2-sample-actions-menu",1.0);
+   click(*v,15.,400.); // outside dismisses without triggering a step
+   click(*v,575.,108.+19.); // MAIN / OUT selector
+   captureVstgui(*v,"v2-output-menu",1.0);
+   click(*v,15.,400.);
+   click(*v,592.,108.+69.); // discrete CHOKE selector
+   captureVstgui(*v,"v2-choke-menu",1.0);
+   click(*v,15.,400.);
+   click(*v,425.,108.+19.); // row-local Fill menu
+   captureVstgui(*v,"v2-fill-menu",1.0);
+   click(*v,15.,400.);
    for(int i=0;i<2;++i){
      const auto bottom=v->getViewSize().getHeight()-UiCompactLayout::footer;
      click(*v,1190,bottom+17.);
@@ -516,7 +534,7 @@ void testPrecisionPanel(){
  click(*v,597.,top+20.);
  click(*v,560.,top+36.+13.);
  check(f.c->rowOutput(0)==8,"V2 direct output selection OUT 9 failed");
- click(*v,553.,top+20.);
+ click(*v,590.,top+69.); // choke is beside the row's random-velocity knob
  click(*v,554.,top+36.+4.*27.+12.);
  check(f.c->rowChoke(0)==4,"V2 Choke 4 direct selection failed");
  click(*v,45.,top+UiCompactLayout::baseRow+12.);
@@ -537,19 +555,17 @@ void testPrecisionPanel(){
 void testPatternLengthControls(){
  Fixture f;f.kit(namedKit('X'));f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
- const auto initial=f.c->patternLength(0);
- check(initial==32,"UX pattern length fixture initial value changed");
+ check(f.c->patternLength(0)==32,"UX pattern length initial state");
  click(*v,481.,20.);
  check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
  click(*v,481.,20.);
- check(f.c->patternLength(0)==16,"UX 1 TAKT should be idempotent");
+ check(f.c->patternLength(0)==16,"UX selected length not idempotent");
  click(*v,557.,20.);
  check(f.c->patternLength(0)==32,"UX visible 2 TAKTE control failed");
- // The pattern operations menu must no longer duplicate length.
  click(*v,820.,65.);
  click(*v,820.,98.);
- check(f.c->patternLength(0)==32,"UX copy pattern menu item incorrectly changes length");
- evidence("UX direct 1/2 bar pattern controls and unduplicated actions PASS");
+ check(f.c->patternLength(0)==32,"UX copy changed length via duplicate menu");
+ evidence("UX direct length and no duplicate pattern menu control PASS");
 }
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
@@ -598,8 +614,8 @@ int main(int argc,char** argv){
  run("Z01 legacy Controller",testLegacyReject);
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
- run("UX pattern length",testPatternLengthControls);
  run("VSTGUI native pixel render set",testVisualRender);
+ run("UX direct pattern length",testPatternLengthControls);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;

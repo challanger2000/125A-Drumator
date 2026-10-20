@@ -58,7 +58,7 @@ private:
  bool songEditorOpen_{false};
  // UI-only: each instrument controls its own Velocity lane.
  std::array<bool,kRows> velocityExpanded_{};
- // 0=no popup, 1=Zoom, 2=Pattern actions, 3=Output, 4=Choke.
+ // 0=no popup, 1=Zoom, 2=Pattern actions, 3=Output, 4=Choke, 5=Sample actions.
  int popup_{0};
  std::size_t popupRow_{kRows};
  int activeKnob_{-1}; // 0..3 row, 4=Swing,5=Humanize,6=Master

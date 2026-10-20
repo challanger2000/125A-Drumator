@@ -1,633 +1,216 @@
 {
-  "name": "125A-Drumator functional VSTGUI layout contract — 2026-10-20",
-  "functionalSource": "develop/v1.0.0 (resolve exact HEAD against matching Windows QA run)",
-  "artworkStatus": "Technical VSTGUI functional and Windows-rendered; future branded bitmap skin not yet integrated",
-  "canvas": {
-    "width": 1280,
-    "height": "max(326,108+displayedRows*(velocityVisible?56:29)+174)",
-    "units": "logical VSTGUI pixels",
-    "zoom": [
-      1,
-      1.2,
-      1.3,
-      1.5
-    ],
-    "maxLogicalHeight": 850,
-    "maxExpectedContentHeightAt16RowsWithVelocity": 730,
-    "pageWhenVelocityEnabled": 8,
-    "heightUnit": "logical px, host contentScaleFactor applied separately",
-    "maxExpandedPageRows": 8
-  },
-  "sources": [
+  "name": "125A Drumator – VSTGUI UX V2 slot contract",
+  "date": "2026-10-20",
+  "version": "UX V2 functional development candidate; owner Studio One acceptance required",
+  "artworkStatus": "Actual functional Windows VSTGUI custom-drawn rotaries and menus. Final approved knob-filmstrip skin not integrated.",
+  "sourceOfTruth": [
+    "src/core/UiCompactLayout.h",
     "src/vst3/DrumatorView.cpp",
     "src/vst3/DrumatorView.h",
     "src/vst3/DrumatorController.cpp",
-    "src/core/VelocityLane.h",
-    "resource/Drumator.uidesc",
-    "src/core/UiRowGeometry.h",
-    "src/core/UiDetailGeometry.h",
-    "src/core/UiRowControls.h"
+    "tests/integration/WindowsIntegration.cpp"
   ],
-  "graphicFamilies": [
-    {
-      "id": "official_125a_logo",
-      "purpose": "Use original SVG from challanger2000/125A-Branding",
-      "status": "asset not created"
+  "geometry": {
+    "width": 1280,
+    "headerHeight": 108,
+    "baseRowHeight": 94,
+    "optionalVelocityPerRowHeight": 30,
+    "footerHeight": 54,
+    "rowCountPerPage": 4,
+    "maxTotalInstruments": 16,
+    "stepColumns": 32,
+    "stepGrid": {
+      "x": 622,
+      "width": 608,
+      "cellWidth": 19
     },
-    {
-      "id": "header",
-      "purpose": "fixed top region",
-      "status": "asset not created"
+    "firstRow": "pageIndex*4",
+    "rowY": "108+SUM(i=firstRow..row-1){94+(velocityExpanded[i]?30:0)}",
+    "windowHeight": "max(370,108+4-or-fewer visible rows each 94+(velocityExpanded[i]?30:0)+54)",
+    "velocityToggle": {
+      "rect": "[1233,rowY+45,1266,rowY+79]",
+      "label": "VELO / arrow (single row only)"
     },
-    {
-      "id": "row_backing",
-      "purpose": "29px tile, 4 to 16 rows",
-      "status": "asset not created"
-    },
-    {
-      "id": "footer",
-      "purpose": "dynamic row count",
-      "status": "asset not created"
-    },
-    {
-      "id": "buttons",
-      "purpose": "drawControl() normal/selected/disabled",
-      "status": "asset not created"
-    },
-    {
-      "id": "steps",
-      "purpose": "32 columns off/velocity-low/medium/high",
-      "status": "asset not created"
-    },
-    {
-      "id": "velocity_bars",
-      "purpose": "32 live bars 0-127",
-      "status": "asset not created"
-    },
-    {
-      "id": "fill_popup",
-      "purpose": "9 selections",
-      "status": "asset not created"
-    },
-    {
-      "id": "song_grid",
-      "purpose": "64 live entries",
-      "status": "asset not created"
-    },
-    {
-      "id": "song_overlay",
-      "purpose": "pattern and length selection",
-      "status": "asset not created"
-    },
-    {
-      "id": "precision_controls",
-      "purpose": "Five large user-operated parameter tracks, +/- buttons, numeric values",
-      "status": "functional VSTGUI pending native visual QA"
-    }
-  ],
-  "controls": {
-    "header": [
-      {
-        "id": "pattern_A-H",
-        "rect": [
-          "340+62*i",
-          38,
-          "394+62*i",
-          68
-        ],
-        "action": "Click selects; Shift+click toggles 1T/2T, i=0..7"
-      },
-      {
-        "id": "compact_left",
-        "rect": [
-          1005,
-          39,
-          1032,
-          69
-        ],
-        "action": "previous page"
-      },
-      {
-        "id": "compact_right",
-        "rect": [
-          1032,
-          39,
-          1060,
-          69
-        ],
-        "action": "next page"
-      },
-      {
-        "id": "zoom_100",
-        "rect": [
-          1070,
-          39,
-          1127,
-          69
-        ],
-        "action": "100%"
-      },
-      {
-        "id": "zoom_150",
-        "rect": [
-          1136,
-          39,
-          1217,
-          69
-        ],
-        "action": "150%"
-      },
-      {
-        "id": "swing_minus",
-        "rect": [
-          185,
-          74,
-          214,
-          98
-        ],
-        "action": "-5; Ctrl reset"
-      },
-      {
-        "id": "swing_plus",
-        "rect": [
-          214,
-          74,
-          244,
-          98
-        ],
-        "action": "+5; Ctrl reset"
-      },
-      {
-        "id": "human_minus",
-        "rect": [
-          448,
-          74,
-          477,
-          98
-        ],
-        "action": "-10; Ctrl reset"
-      },
-      {
-        "id": "human_plus",
-        "rect": [
-          477,
-          74,
-          505,
-          98
-        ],
-        "action": "+10; Ctrl reset"
-      },
-      {
-        "id": "song_toggle",
-        "rect": [
-          540,
-          74,
-          638,
-          98
-        ],
-        "action": "toggle Song",
-        "hitRect": [
-          540,
-          74,
-          638,
-          98
-        ],
-        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
-      },
-      {
-        "id": "song_edit",
-        "rect": [
-          652,
-          74,
-          850,
-          98
-        ],
-        "action": "show Song editor",
-        "hitRect": [
-          652,
-          74,
-          850,
-          98
-        ],
-        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
-      },
-      {
-        "id": "master_minus",
-        "rect": [
-          1140,
-          74,
-          1180,
-          98
-        ],
-        "action": "-5; Ctrl reset",
-        "hitRect": [
-          1140,
-          74,
-          1180,
-          98
-        ],
-        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
-      },
-      {
-        "id": "master_plus",
-        "rect": [
-          1184,
-          74,
-          1228,
-          98
-        ],
-        "action": "+5; Ctrl reset",
-        "hitRect": [
-          1184,
-          74,
-          1228,
-          98
-        ],
-        "clickBehavior": "Exact painted bounds, half-open; inter-button gaps intentionally inert"
-      },
-      {
-        "id": "zoom_120",
-        "rect": [
-          1070,
-          9,
-          1127,
-          34
-        ],
-        "action": "120% checked zoom; stored in DZM2"
-      },
-      {
-        "id": "zoom_130",
-        "rect": [
-          1136,
-          9,
-          1217,
-          34
-        ],
-        "action": "130% checked zoom; stored in DZM2"
-      }
+    "zoom": [
+      100,
+      120,
+      130,
+      150
     ],
-    "row": {
-      "formula": "y=108+(row-firstRow)*(velocityVisible?56:29)",
-      "rowCount": [
-        4,
-        16
-      ],
-      "slots": [
-        {
-          "id": "step",
-          "rect": [
-            "622+19*i",
-            0,
-            "641+19*i",
-            29
-          ],
-          "action": "Click toggle; Shift velocity cycle, i=0..31"
-        },
-        {
-          "id": "fill",
-          "rect": [
-            16,
-            2,
-            56,
-            26
-          ],
-          "action": "Fill actions"
-        },
-        {
-          "id": "preview",
-          "rect": [
-            61,
-            2,
-            95,
-            26
-          ],
-          "action": "Sample preview"
-        },
-        {
-          "id": "name",
-          "rect": [
-            102,
-            2,
-            266,
-            26
-          ],
-          "action": "Click file dialog, Shift rename, Alt clear"
-        },
-        {
-          "id": "previous_sample",
-          "rect": [
-            268,
-            2,
-            292,
-            26
-          ],
-          "action": "Previous sample in folder"
-        },
-        {
-          "id": "next_sample",
-          "rect": [
-            294,
-            2,
-            318,
-            26
-          ],
-          "action": "Next sample in folder"
-        },
-        {
-          "id": "stereo_output",
-          "rect": [
-            322,
-            2,
-            378,
-            26
-          ],
-          "action": "MAIN or stereo auxiliary output"
-        },
-        {
-          "id": "volume",
-          "rect": [
-            384,
-            2,
-            445,
-            26
-          ],
-          "action": "Volume from 0 to 200%, +/- and Ctrl default"
-        },
-        {
-          "id": "pan",
-          "rect": [
-            450,
-            2,
-            510,
-            26
-          ],
-          "action": "Pan 0=center, L/R100 at extremes; mini +/- and Ctrl default; full label PAN L100 / PAN C / PAN R100"
-        },
-        {
-          "id": "pitch",
-          "rect": [
-            515,
-            2,
-            565,
-            26
-          ],
-          "action": "Pitch -24..+24st, +/- and Ctrl default"
-        },
-        {
-          "id": "mute",
-          "rect": [
-            569,
-            2,
-            592,
-            26
-          ],
-          "action": "Mute toggle"
-        },
-        {
-          "id": "solo",
-          "rect": [
-            596,
-            2,
-            619,
-            26
-          ],
-          "action": "Solo toggle"
-        }
-      ],
-      "inlineVelocity": {
+    "zoomUnit": "percent",
+    "hostContentScaleFactor": "separate",
+    "minimumHitTargetNote": "Most visible small controls >=24x29 logical pixels. Row-knob drag hit approx 36x34 logical pixels."
+  },
+  "controlGroups": {
+    "header": {
+      "brandArea": "[16,5,304,35]",
+      "patternStrip": {
+        "x": 330,
+        "y": 52,
+        "width": 49,
+        "spacing": 55,
+        "items": "A-H; C++ kPatternX"
+      },
+      "patternActions": {
         "rect": [
-          "622+19*i",
-          29,
-          "641+19*i",
-          56
+          782,
+          52,
+          901,
+          82
         ],
-        "barVertical": [
-          "rowTop+31",
-          "rowTop+54"
+        "menu": [
+          "LAENGE 1T / 2T",
+          "KOPIEREN",
+          "EINFUEGEN",
+          "LOESCHEN",
+          "RUECKGAENGIG",
+          "VELO VARIIEREN",
+          "VELO 100"
+        ]
+      },
+      "songOnOff": {
+        "rect": [
+          910,
+          52,
+          991,
+          82
+        ]
+      },
+      "songEdit": {
+        "rect": [
+          998,
+          52,
+          1098,
+          82
+        ]
+      },
+      "zoomMenu": {
+        "rect": [
+          1120,
+          7,
+          1250,
+          35
         ],
-        "enabled": "velocityVisible && !songEditorOpen",
-        "action": "Click/drag vertical value 1..127; Ctrl+click/drag 0; one stroke undo",
-        "stepBinding": "same i as step button; active second bar dim but retained",
-        "visibility": "Global toggle; at most 8 displayed rows/page when enabled"
-      }
-    },
-    "footer": {
-      "formula": "footerTop=108+displayedRows*(velocityVisible?56:29)+5",
-      "relativeSlots": [
-        {
-          "id": "add_instrument",
-          "rect": [
-            16,
-            0,
-            213,
-            29
-          ],
-          "action": "add"
-        },
-        {
-          "id": "remove_instrument",
-          "rect": [
-            226,
-            0,
-            266,
-            29
-          ],
-          "action": "remove empty"
-        },
-        {
-          "id": "copy",
-          "rect": [
-            480,
-            0,
-            565,
-            29
-          ],
-          "action": "copy"
-        },
-        {
-          "id": "paste",
-          "rect": [
-            570,
-            0,
-            655,
-            29
-          ],
-          "action": "paste"
-        },
-        {
-          "id": "clear",
-          "rect": [
-            660,
-            0,
-            745,
-            29
-          ],
-          "action": "clear"
-        },
-        {
-          "id": "undo",
-          "rect": [
-            750,
-            0,
-            835,
-            29
-          ],
-          "action": "undo"
-        },
-        {
-          "id": "vary_velocity",
-          "rect": [
-            844,
-            0,
-            1014,
-            29
-          ],
-          "action": "variate"
-        },
-        {
-          "id": "reset_velocity",
-          "rect": [
-            1024,
-            0,
-            1220,
-            29
-          ],
-          "action": "reset 100"
-        },
-        {
-          "id": "toggle_velocity_lane",
-          "rect": [
-            16,
-            34,
-            266,
-            64
-          ],
-          "action": "expand/collapse"
-        },
-        {
-          "id": "velocity_row_left",
-          "rect": [
-            280,
-            34,
-            324,
-            64
-          ],
-          "action": "previous row"
-        },
-        {
-          "id": "velocity_row_right",
-          "rect": [
-            408,
-            34,
-            455,
-            64
-          ],
-          "action": "next row"
-        },
-        {
-          "id": "velocity_minus10",
-          "rect": [
-            916,
-            34,
-            986,
-            64
-          ],
-          "action": "-10"
-        },
-        {
-          "id": "velocity_minus1",
-          "rect": [
-            994,
-            34,
-            1064,
-            64
-          ],
-          "action": "-1"
-        },
-        {
-          "id": "velocity_plus1",
-          "rect": [
-            1072,
-            34,
-            1142,
-            64
-          ],
-          "action": "+1"
-        },
-        {
-          "id": "velocity_plus10",
-          "rect": [
-            1150,
-            34,
-            1220,
-            64
-          ],
-          "action": "+10"
+        "popup": {
+          "rect": "[1120,39+30*i,1250,68+30*i]",
+          "options": [
+            "100%",
+            "120%",
+            "130%",
+            "150%"
+          ]
         }
-      ],
-      "statusY": "gridBottom+144"
-    },
-    "velocityLane": {
-      "type": "inline-per-instrument",
-      "globalToggle": true,
-      "visible": "velocityLaneOpen_ && !songEditorOpen_",
-      "geometry": "src/core/UiRowGeometry.h",
-      "steps": 32,
-      "valueRange": [
-        0,
-        127
-      ],
-      "archivedDetachedFooterLane": false
-    },
-    "fillMenu": {
-      "x": [
-        650,
-        819
-      ],
-      "rowHeight": 25,
-      "entries": [
-        "Fill2",
-        "Fill4",
-        "Fill8",
-        "Snare24",
-        "All",
-        "Clear",
-        "Offbeat",
-        "Gallop",
-        "Ghost"
+      },
+      "rotary": [
+        {
+          "id": "swing",
+          "center": [
+            80,
+            76
+          ],
+          "range": [
+            0,
+            50
+          ],
+          "default": 0,
+          "unit": "%"
+        },
+        {
+          "id": "humanize",
+          "center": [
+            178,
+            76
+          ],
+          "range": [
+            0,
+            100
+          ],
+          "default": 0,
+          "unit": "%"
+        },
+        {
+          "id": "master",
+          "center": [
+            1178,
+            76
+          ],
+          "range": [
+            0,
+            200
+          ],
+          "default": 100,
+          "unit": "%"
+        }
       ]
     },
-    "songOverlay": {
-      "grid": "16 columns * 4 rows; [16+76*c,134+32*r,89+76*c,163+32*r]",
-      "pattern": "[115+56*i,277,165+56*i,303]",
-      "length": "[678+106*i,277,778+106*i,303]",
-      "add": [
-        1012,
-        277,
-        1110,
-        303
-      ],
-      "remove": [
-        1118,
-        277,
-        1239,
-        303
-      ]
-    },
-    "detailPanel": {
-      "bounds": [
-        16,
-        "gridBottom+70",
-        1240,
-        "gridBottom+134"
-      ],
-      "slots": [
+    "instrument": {
+      "row": {
+        "rect": "[9,rowY,1270,rowY+94+(expanded?30:0)-2]",
+        "selected": "highlight border"
+      },
+      "select": {
+        "rect": "[16,rowY+5,74,rowY+35]",
+        "meaning": "only select row; must not load sample/change notes"
+      },
+      "sample": {
+        "rect": "[78,rowY+5,272,rowY+35]",
+        "meaning": "click load WAV/FLAC; Shift rename; Alt clear (optional shortcuts)"
+      },
+      "sampleActions": {
+        "rect": "[275,rowY+5,301,rowY+35]",
+        "items": [
+          "SAMPLE LADEN",
+          "INSTRUMENT UMBENENNEN",
+          "SAMPLE ENTFERNEN"
+        ],
+        "popup": "[78,popupTop+30*i,304,popupTop+30*i+29]",
+        "popupTop": "clamp(rowY+36,108,max(108,windowHeight-100))"
+      },
+      "samplePrevious": {
+        "rect": "[303,rowY+5,329,rowY+35]"
+      },
+      "sampleNext": {
+        "rect": "[332,rowY+5,358,rowY+35]"
+      },
+      "samplePreview": {
+        "rect": "[362,rowY+5,398,rowY+35]",
+        "label": "PLAY"
+      },
+      "fill": {
+        "rect": "[403,rowY+5,452,rowY+35]",
+        "options": [
+          "FILL 2",
+          "FILL 4",
+          "FILL 8",
+          "SNARE 2+4",
+          "FILL ALL",
+          "CLEAR",
+          "OFFBEAT HAT",
+          "GALOPP",
+          "SNARE + GHOST"
+        ]
+      },
+      "mute": {
+        "rect": "[457,rowY+5,491,rowY+35]"
+      },
+      "solo": {
+        "rect": "[496,rowY+5,530,rowY+35]"
+      },
+      "output": {
+        "rect": "[535,rowY+5,615,rowY+35]",
+        "options": "MAIN, OUT 2..16",
+        "popup": "two columns 8 each, starting [413,popupTop]"
+      },
+      "choke": {
+        "labelRect": "[570,rowY+37,615,rowY+52]",
+        "rect": "[570,rowY+54,615,rowY+86]",
+        "options": "CHOKE 0..4"
+      },
+      "rotary": [
         {
           "id": "volume",
-          "bounds": [
-            235,
-            419
-          ],
+          "centerX": 133,
+          "centerY": "rowY+68",
           "range": [
             0,
             200
@@ -637,23 +220,19 @@
         },
         {
           "id": "pan",
-          "bounds": [
-            432,
-            616
-          ],
+          "centerX": 254,
+          "centerY": "rowY+68",
           "range": [
             -100,
             100
           ],
           "default": 0,
-          "unit": "L/C/R"
+          "unit": "L / C / R"
         },
         {
           "id": "pitch",
-          "bounds": [
-            629,
-            813
-          ],
+          "centerX": 375,
+          "centerY": "rowY+68",
           "range": [
             -24,
             24
@@ -662,67 +241,91 @@
           "unit": "st"
         },
         {
-          "id": "random_velocity",
-          "bounds": [
-            826,
-            1010
-          ],
+          "id": "randomVelocity",
+          "centerX": 496,
+          "centerY": "rowY+68",
           "range": [
             0,
             100
           ],
           "default": 0,
           "unit": "%"
-        },
-        {
-          "id": "choke",
-          "bounds": [
-            1023,
-            1227
-          ],
-          "range": [
-            0,
-            4
-          ],
-          "default": 0,
-          "unit": "group"
         }
       ],
-      "input": "- / +, click/drag middle for exact absolute target, Ctrl click resets to actual default",
-      "selectedRow": "Always follows visible page after paging; no hidden selected row",
-      "code": "src/core/UiDetailGeometry.h"
+      "velocity": {
+        "perInstrument": true,
+        "expandedHeight": 30,
+        "stepBars": "[622+19*i+2,rowY+97,622+19*i+17,rowY+120]",
+        "validValues": "0=off, 1..127 active",
+        "edit": "click/paint in own row only; Ctrl erases; one undoable stroke; current row's step number/value visible"
+      }
+    },
+    "footer": {
+      "y": "gridBottom()",
+      "add": {
+        "rect": "[16,y+5,65,y+34]"
+      },
+      "removeLastEmpty": {
+        "rect": "[73,y+5,122,y+34]"
+      },
+      "pageLeft": {
+        "rect": "[1068,y+5,1145,y+34]"
+      },
+      "pageRight": {
+        "rect": "[1152,y+5,1229,y+34]"
+      },
+      "status": {
+        "rect": "[338,y+5,1016,y+34]"
+      },
+      "removedFromV1": [
+        "global VELOCITY AUSBLENDEN",
+        "separate row selection buttons",
+        "master +/-",
+        "swing +/-",
+        "humanize +/-",
+        "row Volume/Pan/Pitch +/-",
+        "five-item full-width precision panel",
+        "four separate zoom buttons",
+        "standalone footer COPY/PASTE/CLEAR/UNDO/VELO VARIATE"
+      ]
+    },
+    "songEditor": {
+      "mode": "own overlay",
+      "slots": 64,
+      "pattern": "A-H",
+      "length": [
+        "1/2 TAKT",
+        "1 TAKT",
+        "2 TAKTE"
+      ],
+      "origin": [
+        8,
+        101
+      ],
+      "drawOrder": "draw song panel before contextual menu popups"
     }
   },
-  "rules": [
-    "No final rendering in this handoff",
-    "Do not embed changing text into images",
-    "Use original 125A master logo geometry",
-    "Preserve host zoom, audio, MIDI, project recall",
-    "Static pixel geometry and hit tests must originate in UiRowGeometry.h; never independently copy row pitch into new art or gestures",
-    "At 120/130 percent use DZM2; read older DZM1 states unchanged",
-    "No asset export before Windows-attached GUI screenshots and owner review of 4/8/16 rows, velocity, song and zoom",
-    "Instrument upper row ranges and row-name editor must match src/core/UiRowControls.h",
-    "Precision panel slider ranges, pointer mapping and Ctrl-defaults must match src/core/UiDetailGeometry.h",
-    "Disabled buttons need legible text contrast; e.g. MAX. 16 INSTRUMENTE cannot use a near-background text color"
-  ],
-  "sourceOfTruthForHeaderHitboxes": "src/core/UiHeaderHitZones.h",
-  "skinIntegrationReady": false,
-  "visualQAGate": {
-    "status": "Native Windows renderings generated and inspected (2026-10-20, #39417644156); expanded 16-row paging/contrast final QA pending",
-    "windowsBuild": "NOT YET VERIFIED",
-    "nativeStudioOne": "NOT YET VERIFIED",
-    "states": [
-      "4 rows velocity closed",
-      "4 rows velocity open",
-      "8 rows velocity open",
-      "16 rows closed",
-      "16 rows velocity enabled with paging",
-      "song board",
+  "gestures": {
+    "rotary": "vertical mouse drag 2.5 logical px per parameter step; Ctrl+left-click or double-click resets to real parameter default; mouse-up/cancel and kit recall clear capture",
+    "popup": "click opens visible menu, outside closes without acting on underlying controls; menu row hit bounds match rendered rectangles",
+    "zoom": "DZM1 100/150 state backward-compatible, DZM2 120/130; actual host resize may refuse",
+    "sampleDragAndDrop": "accept only file-path on sample field, not steps, Velocity rows, menus or song board"
+  },
+  "visualGates": {
+    "priorVerifiedWindowsRun": "39425815341 (22/22 CTests, Steinberg 47/47, VST3/editor/audio PASS)",
+    "currentVisualReview": "pending Windows CI after visual-review branch integration",
+    "requiredViews": [
+      "four rows at 100/120/130/150",
+      "one/two independent Velocity rows",
+      "sample/load/rename/remove menu",
+      "output menu",
+      "choke menu",
       "fill menu",
-      "name input",
-      "zoom 100/120/130/150",
-      "Windows DPI 100/150/200",
-      "16 instruments velocity mode: two pages with selected-row follow and programmatically varied bars"
-    ]
+      "pattern action menu",
+      "zoom menu",
+      "song board",
+      "16 instruments paged to last page"
+    ],
+    "ownerStudioOneQA": "NOT RUN; mandatory"
   }
 }

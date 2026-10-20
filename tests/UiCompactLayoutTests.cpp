@@ -29,5 +29,17 @@ int main(){
  EXPECT(UiCompactLayout::maxValue(0)==200);
  EXPECT(UiCompactLayout::maxValue(2)==24);
  EXPECT(UiCompactLayout::defaultValue(0)==100);
+ EXPECT(UiCompactLayout::hit(275.,UiCompactLayout::sampleMenu));
+ EXPECT(!UiCompactLayout::hit(274.9,UiCompactLayout::sampleMenu));
+ EXPECT(!UiCompactLayout::hit(301.,UiCompactLayout::sampleMenu));
+ EXPECT(UiCompactLayout::sample.right<UiCompactLayout::sampleMenu.left);
+ EXPECT(UiCompactLayout::sampleMenu.right<UiCompactLayout::previous.left);
+ EXPECT(UiCompactLayout::output.right-UiCompactLayout::output.left>=80.);
+ EXPECT(UiCompactLayout::output.left==535.);
+ EXPECT(UiCompactLayout::choke.left==570.);
+ EXPECT(UiCompactLayout::maxValue(4)==50);
+ EXPECT(UiCompactLayout::defaultValue(4)==0);
+ EXPECT(UiCompactLayout::minValue(2)==-24);
+
  return 0;
 }
