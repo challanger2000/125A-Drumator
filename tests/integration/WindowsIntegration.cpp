@@ -534,6 +534,23 @@ void testPrecisionPanel(){
  check(f.c->rowGain(0)==130,"V2 stale knob edited restored kit");
  evidence("V2 rotary drag, exact defaults, menus, selection and recall PASS");
 }
+void testPatternLengthControls(){
+ Fixture f;f.kit(namedKit('X'));f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ const auto initial=f.c->patternLength(0);
+ check(initial==32,"UX pattern length fixture initial value changed");
+ click(*v,481.,20.);
+ check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
+ click(*v,481.,20.);
+ check(f.c->patternLength(0)==16,"UX 1 TAKT should be idempotent");
+ click(*v,557.,20.);
+ check(f.c->patternLength(0)==32,"UX visible 2 TAKTE control failed");
+ // The pattern operations menu must no longer duplicate length.
+ click(*v,820.,65.);
+ click(*v,820.,98.);
+ check(f.c->patternLength(0)==32,"UX copy pattern menu item incorrectly changes length");
+ evidence("UX direct 1/2 bar pattern controls and unduplicated actions PASS");
+}
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
    Fixture f;f.kit(namedKit('X',16));f.open();f.open();
@@ -581,6 +598,7 @@ int main(int argc,char** argv){
  run("Z01 legacy Controller",testLegacyReject);
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
+ run("UX pattern length",testPatternLengthControls);
  run("VSTGUI native pixel render set",testVisualRender);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
