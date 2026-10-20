@@ -7,6 +7,8 @@
 #include "core/StepVelocity.h"
 #include "core/HostEditDirty.h"
 #include "core/PatternQuantization.h"
+#include "core/PreparedKitNames.h"
+#include "core/ZoomRecallPolicy.h"
 #include "core/Utf8Path.h"
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -47,7 +49,7 @@ void Controller::unregisterView(DrumatorView* view) {
 void Controller::notifyViews(bool relayout) {
  for(auto* view:views_)if(view)view->refreshFromHost(relayout);
 }
-void Controller::invalidateTransientEditsForRecall() {
+void Controller::invalidateTransientEditsForRecall() noexcept {
  strokePattern_=kPatterns;
  strokeGeneration_=0;
  editGeneration_.onSuccessfulRecall();
@@ -87,21 +89,13 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||magic!=kZoomControllerState||
     !stream.readInt8u(zoom)||zoom>1)return Steinberg::kResultFalse;
  const double requested=zoom?1.5:1.0;
- const auto oldZoom=preferredZoom_;
- // Check actual view factors even when stored preference is unchanged.
- std::vector<double> previous;
- try {previous.reserve(views_.size());}
- catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
- for(auto* view:views_)previous.push_back(view?view->currentZoom():oldZoom);
- for(std::size_t i=0;i<views_.size();++i) {
-   if(!views_[i]||views_[i]->zoomMatches(requested))continue;
-   if(!views_[i]->applyZoomFromState(requested)) {
-     for(std::size_t j=0;j<i;++j)
-       if(views_[j]&&!views_[j]->zoomMatches(previous[j]))
-         (void)views_[j]->applyZoomFromState(previous[j]);
-     return Steinberg::kResultFalse;
-   }
- }
+ // The host may reject both forward resize and rollback. Do not begin
+ // multiple independent native view zooms as a non-atomic state change.
+ std::size_t needed=0;
+ DrumatorView* target=nullptr;
+ for(auto* view:views_)if(view&&!view->zoomMatches(requested)){++needed;target=view;}
+ if(!zoomRecallIsAtomic(needed))return Steinberg::kResultFalse;
+ if(target&&!target->applyZoomFromState(requested))return Steinberg::kResultFalse;
  preferredZoom_=requested;
  return Steinberg::kResultOk;
 }
@@ -132,47 +126,68 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  if(magic==kKitMagic||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
+    KitState candidate;
+    PreparedKitNames<kRows> stagedNames;
     try {
        std::vector<std::uint8_t> encoded(8+static_cast<std::size_t>(next));
        for(int i=0;i<4;++i) {
            encoded[i]=static_cast<std::uint8_t>(magic>>(8*i));
            encoded[4+i]=static_cast<std::uint8_t>(next>>(8*i));
        }
-       KitState candidate;
        if(stream.readRaw(encoded.data()+8,next)!=static_cast<Steinberg::TSize>(next)||
           !KitCodec::decode(encoded.data(),encoded.size(),candidate))
           return Steinberg::kResultFalse;
-       invalidateTransientEditsForRecall();
-       grid_=candidate.grid;
-       patternLengths_=candidate.patternLengths;
-       customNames_=candidate.displayNames;
-       undo_.reset();
-       clipboardValid_=false;
-       samplePaths_.fill({});
-       visibleRows_=candidate.visible;
-       swingPercent_=candidate.swing;
-       humanizePercent_=candidate.humanize;
-       masterVolume_=candidate.masterVolume;
-       randomVelocity_=candidate.randomVelocity;
-       songEnabled_=candidate.songEnabled!=0;
-       songChain_=candidate.chain;
-       for(std::size_t row=0;row<kRows;++row) {
-          muted_[row]=(candidate.muted&(1u<<row))!=0;
-          solo_[row]=(RowVisibility::visibleSolo(candidate.solo,candidate.visible)&
-                      (1u<<row))!=0;
-          gain_[row]=candidate.gain[row];pan_[row]=candidate.pan[row];
-          pitch_[row]=candidate.pitch[row];choke_[row]=candidate.choke[row];output_[row]=candidate.output[row];
-       }
-       for(std::size_t row=0;row<kRows;++row)
-          labels_[row]=candidate.names[row].empty()
-                        ?"LEER - WAV LADEN":candidate.names[row];
-       const auto result=setParamNormalized(kPatternParam,
-                  static_cast<double>(candidate.selected)/7.0);
-       if(result==Steinberg::kResultOk)notifyViews(true);
-       return result;
+       // Every potentially allocating string copy happens BEFORE changing
+       // edit tokens, controller grid, undo history or active kit metadata.
+       stagedNames.prepare(candidate.displayNames,candidate.names);
     }catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
+
+    // Nothrow commit phase; a failed prepare leaves the entire old kit intact.
+    invalidateTransientEditsForRecall();
+    grid_=candidate.grid;
+    patternLengths_=candidate.patternLengths;
+    stagedNames.commit(customNames_,labels_);
+    undo_.reset();
+    clipboardValid_=false;
+    for(auto& path:samplePaths_)path.clear();
+    visibleRows_=candidate.visible;
+    swingPercent_=candidate.swing;
+    humanizePercent_=candidate.humanize;
+    masterVolume_=candidate.masterVolume;
+    randomVelocity_=candidate.randomVelocity;
+    songEnabled_=candidate.songEnabled!=0;
+    songChain_=candidate.chain;
+    for(std::size_t row=0;row<kRows;++row) {
+       muted_[row]=(candidate.muted&(1u<<row))!=0;
+       solo_[row]=(RowVisibility::visibleSolo(candidate.solo,candidate.visible)&
+                   (1u<<row))!=0;
+       gain_[row]=candidate.gain[row];pan_[row]=candidate.pan[row];
+       pitch_[row]=candidate.pitch[row];choke_[row]=candidate.choke[row];output_[row]=candidate.output[row];
+    }
+    // Native focus operations may allocate. State is already committed:
+    // failure to refresh an editor must not be reported as rejected kit state.
+    // Update the registered parameter independently from native editor focus.
+    // A failed HWND teardown must not leave the selected parameter stale.
+    const auto selectedResult=EditController::setParamNormalized(
+                  kPatternParam,static_cast<double>(candidate.selected)/7.0);
+    for(auto* view:views_)if(view) {
+       try {view->finishTransientEditsAfterRecall();}
+       catch(const std::bad_alloc&) { /* old edit token already invalid */ }
+    }
+    if(selectedResult==Steinberg::kResultOk) {
+      try {notifyViews(true);}
+      catch(const std::bad_alloc&) { /* state already committed */ }
+    }
+    return Steinberg::kResultOk;
  }
  if(next>=kPatterns)return Steinberg::kResultFalse;
+ // Stage the 16-byte default label (possibly beyond SSO) before any edit
+ // invalidation, even for the legacy project-state compatibility paths.
+ PreparedKitNames<kRows> legacyNames;
+ try {
+   const std::array<std::string,kRows> empty{};
+   legacyNames.prepare(empty,empty);
+ }catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
  std::uint8_t candidateRows=static_cast<std::uint8_t>(kRows);
  if(magic==kRowsState) {
    if(!stream.readInt8u(candidateRows)||!RowVisibility::valid(candidateRows))
@@ -195,20 +210,27 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  }else return Steinberg::kResultFalse;
  visibleRows_=candidateRows;
  patternLengths_.fill(32);
- customNames_.fill({});
+ legacyNames.commit(customNames_,labels_);
  undo_.reset();
  // Successful legacy state already invalidated all pending edits.
  clipboardValid_=false;
- samplePaths_.fill({});
+ for(auto& path:samplePaths_)path.clear();
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  randomVelocity_.fill(0);masterVolume_=100;
  songEnabled_=false;songChain_=SongChain{};
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
- for(auto& name:labels_)name="LEER - WAV LADEN";
- const auto result=setParamNormalized(kPatternParam,static_cast<double>(next)/7.0);
- if(result==Steinberg::kResultOk)notifyViews(true);
- return result;
+ const auto selectedResult=EditController::setParamNormalized(
+      kPatternParam,static_cast<double>(next)/7.0);
+ for(auto* view:views_)if(view) {
+   try {view->finishTransientEditsAfterRecall();}
+   catch(const std::bad_alloc&) { /* legacy model already committed */ }
+ }
+ if(selectedResult==Steinberg::kResultOk) {
+   try {notifyViews(true);}
+   catch(const std::bad_alloc&) { /* legacy model already committed */ }
+ }
+ return Steinberg::kResultOk;
 }
 Steinberg::IPlugView* PLUGIN_API Controller::createView(Steinberg::FIDString name) {
  if(name&&std::strcmp(name,Steinberg::Vst::ViewType::kEditor)==0) {

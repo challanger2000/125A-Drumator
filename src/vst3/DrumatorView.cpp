@@ -279,6 +279,12 @@ DrumatorView::~DrumatorView() {
 bool DrumatorView::removed(VSTGUI::CView* parent) {
  if(laneDragActive_){controller_.endVelocityStroke(false);laneDragActive_=false;}
  if(nameEdit_){
+   // No pending edit may commit while a native Win32 text HWND is closing.
+   editingNameRow_=kRows;
+   nameEditGeneration_=0;
+   if(auto* frame=getFrame();frame&&frame->getFocusView()==nameEdit_)
+     frame->setFocusView(nullptr);
+   if(nameEdit_->getPlatformTextEdit())nameEdit_->looseFocus();
    nameEdit_->unregisterTextEditListener(this);
    if(auto* frame=getFrame())frame->removeView(nameEdit_);
    nameEdit_=nullptr;
@@ -320,14 +326,25 @@ void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
  nameEditGeneration_=0;
  invalid();
 }
-void DrumatorView::discardTransientEditsForRecall() {
- // Invalidate both interactions before hiding the native edit control.
+void DrumatorView::discardTransientEditsForRecall() noexcept {
+ // Nothrow logical invalidation before the new kit commit. Do not call
+ // VSTGUI/Win32 here: closing an EDIT HWND may invoke allocating callbacks.
  laneDragActive_=false;
  laneDragGeneration_=0;
  editingNameRow_=kRows;
  nameEditGeneration_=0;
  fillMenuRow_=-1;
- if(nameEdit_)nameEdit_->setVisible(false);
+}
+void DrumatorView::finishTransientEditsAfterRecall() {
+ if(nameEdit_) {
+   // An invisible CTextEdit can still own a visible native EDIT HWND.
+   // Losing the frame focus closes the platform control via VSTGUI.
+   if(auto* frame=getFrame();frame&&frame->getFocusView()==nameEdit_)
+     frame->setFocusView(nullptr);
+   // The text edit may retain a platform HWND even without frame focus.
+   if(nameEdit_->getPlatformTextEdit())nameEdit_->looseFocus();
+   nameEdit_->setVisible(false);
+ }
  invalid();
 }
 double DrumatorView::currentZoom() const {
@@ -341,14 +358,15 @@ bool DrumatorView::zoomMatches(double factor) const {
 }
 bool DrumatorView::applyZoomFromState(double factor) {
  auto& editor=static_cast<DrumatorEditor&>(editor_);
- const double previous=editor.getZoomFactor();
+ if(zoomMatches(factor))return true;
+ // VSTGUI::setZoomFactor is a no-op on an equal cached zoom even when the
+ // native frame transform has diverged. Report the problem, never fake PASS.
+ if(std::abs(editor.getZoomFactor()-factor)<0.0001)return false;
+ // The checked SDK zoom already negotiates the host's frame resize. A
+ // second adjustEditorHeight() request caused an unrollbackable partial zoom.
  if(!editor.setZoomChecked(factor))return false;
- if(getParentView()&&!adjustEditorHeight()){
-   editor.setZoomChecked(previous);
-   adjustEditorHeight();
-   return false;
- }
- invalid();return true;
+ invalid();
+ return zoomMatches(factor);
 }
 void DrumatorView::refreshFromHost(bool relayout) {
  if(controller_.visibleRows()>0)

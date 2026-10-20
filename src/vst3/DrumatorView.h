@@ -14,7 +14,8 @@ class DrumatorView final : public VSTGUI::CView, public VSTGUI::IDropTarget,
 public:
  ~DrumatorView() override;
  void refreshFromHost(bool relayout);
- void discardTransientEditsForRecall();
+ void discardTransientEditsForRecall() noexcept;
+ void finishTransientEditsAfterRecall();
  double currentZoom() const;
  bool zoomMatches(double factor) const;
  DrumatorView(const VSTGUI::CRect& size,Controller& controller,

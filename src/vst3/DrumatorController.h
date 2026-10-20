@@ -107,7 +107,7 @@ public:
  }
 private:
  void notifyViews(bool relayout);
- void invalidateTransientEditsForRecall();
+ void invalidateTransientEditsForRecall() noexcept;
  std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
