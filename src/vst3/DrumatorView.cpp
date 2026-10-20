@@ -5,6 +5,7 @@
 #include "DrumatorController.h"
 #include "core/StepVelocity.h"
 #include "core/VelocityLane.h"
+#include "core/UiRowGeometry.h"
 #include "core/UiOverlayHitZones.h"
 #include "core/DropFeedback.h"
 #include "core/UiHeaderHitZones.h"
@@ -34,9 +35,7 @@ constexpr double kCellWidth=19.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
 constexpr double kMinHeight=326.0;
 double contentHeight(std::size_t rows,bool velocityOpen=false) {
- return std::max(kMinHeight,kGridY+rows*kRowHeight+
-                 (velocityOpen?VelocityLane::kFooterHeight:
-                               VelocityLane::kClosedFooterHeight));
+ return std::max(kMinHeight,UiRowGeometry::gridBottom(rows,velocityOpen)+105.0);
 }
 constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
 const VSTGUI::CColor background{26,35,45,255};
@@ -265,10 +264,14 @@ std::size_t DrumatorView::visibleRowsForHit() const noexcept {
 }
 bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
  const bool fill=fillMenuRow_>=0;
- const double top=fill?std::max(0.0,std::min(kGridY+
-    (fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,
+ const double top=fill?std::max(0.0,std::min(
+    UiRowGeometry::rowTop(static_cast<std::size_t>(std::max(0,fillMenuRow_-static_cast<int>(firstRow_))),velocityLaneOpen_),
     getViewSize().getHeight()-230.0)):0.0;
- return UiOverlayHitZones::canDrop(x,y,displayedRows(),songEditorOpen_,fill,top);
+ const auto count=displayedRows();
+ const auto index=UiRowGeometry::rowAt(y,count,velocityLaneOpen_);
+ return !songEditorOpen_&&x>=16.0&&x<=1230.0&&index<count&&
+    UiRowGeometry::mainHit(y,index,velocityLaneOpen_)&&
+    !(fill&&x>=650.0&&x<819.0&&y>=top&&y<top+225.0);
 }
 std::size_t DrumatorView::displayedRows() const noexcept {
  return compactViewport_?std::min(compactPageRows_,controller_.visibleRows()-firstRow_):controller_.visibleRows();
@@ -294,7 +297,7 @@ bool DrumatorView::removed(VSTGUI::CView* parent) {
 }
 void DrumatorView::editName(std::size_t row) {
  if(row>=controller_.visibleRows()||!getFrame())return;
- const double y=kGridY+(row-firstRow_)*kRowHeight;
+ const double y=UiRowGeometry::rowTop(row-firstRow_,velocityLaneOpen_);
  if(!nameEdit_){
    nameEdit_=new VSTGUI::CTextEdit({81,y+2,202,y+26},this,1001,controller_.label(row).c_str());
    nameEdit_->registerTextEditListener(this);
@@ -380,17 +383,18 @@ bool DrumatorView::attached(VSTGUI::CView* parent) {
  return result;
 }
 bool DrumatorView::adjustEditorHeight() {
- const double height=contentHeight(controller_.visibleRows(),velocityLaneOpen_);
+ const auto total=controller_.visibleRows();
+ const auto page=velocityLaneOpen_?std::min(std::size_t{8},total):total;
+ const double height=contentHeight(page,velocityLaneOpen_);
  // The host owns its window; reject an unsupported host resize explicitly.
  // The editor combines user zoom with host content scaling.
  const auto effectiveScale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
    compactViewport_=true;
    const auto clientHeight=getViewSize().getHeight();
-   if(velocityLaneOpen_&&clientHeight<kGridY+kRowHeight+VelocityLane::kFooterHeight)
-     velocityLaneOpen_=false;
-   auto fit=CompactRowViewport::fittingRows(clientHeight,kGridY,kRowHeight,
-      velocityLaneOpen_?VelocityLane::kFooterHeight:VelocityLane::kClosedFooterHeight);
+   auto fit=CompactRowViewport::fittingRows(clientHeight,kGridY,
+       UiRowGeometry::pitch(velocityLaneOpen_),105.0);
+   if(velocityLaneOpen_)fit=std::min(std::size_t{8},fit);
    // A host smaller than one complete row+footer is outside our minimum;
    // keep first row accessible instead of losing every control.
    compactPageRows_=std::max(std::size_t{1},fit);
@@ -399,7 +403,9 @@ bool DrumatorView::adjustEditorHeight() {
    status_="HOST-RESIZE ABGELEHNT: ZEILEN MIT < > WECHSELN";
    invalid();return false;
  }
- compactViewport_=false;firstRow_=0;
+ compactViewport_=page<total;compactPageRows_=page;
+ if(!compactViewport_)firstRow_=0;
+ else firstRow_=std::min(firstRow_,total-page);
  if(auto* container=getParentView()) {
    container->setViewSize({0,0,1280,height});
  }
@@ -479,7 +485,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString(songSummary,VSTGUI::CRect(866,74,1030,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
-   const double y=kGridY+(row-firstRow_)*kRowHeight;
+   const double y=UiRowGeometry::rowTop(row-firstRow_,velocityLaneOpen_);
    c->setFillColor(row%2==0?panel:background);
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
@@ -726,7 +732,7 @@ bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
    status_="D&D FEHLER: AUSSERHALB DER INSTRUMENTENZEILEN";
    invalid();return false;
  }
- const auto row=firstRow_+static_cast<std::size_t>((position.y-kGridY)/kRowHeight);
+ const auto row=firstRow_+UiRowGeometry::rowAt(position.y,displayedRows(),velocityLaneOpen_);
  if(row>=kRows) {
    status_="D&D FEHLER: ZEILE NICHT VORHANDEN";invalid();return false;
  }
