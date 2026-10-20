@@ -6,6 +6,7 @@
 #include "core/StepVelocity.h"
 #include "core/VelocityLane.h"
 #include "core/UiRowGeometry.h"
+#include "core/UiDetailGeometry.h"
 #include "core/UiOverlayHitZones.h"
 #include "core/DropFeedback.h"
 #include "core/UiHeaderHitZones.h"
@@ -35,7 +36,7 @@ constexpr double kCellWidth=19.0,kRowHeight=29.0;
 constexpr double kGridRight=kGridX+32*kCellWidth;
 constexpr double kMinHeight=326.0;
 double contentHeight(std::size_t rows,bool velocityOpen=false) {
- return std::max(kMinHeight,UiRowGeometry::gridBottom(rows,velocityOpen)+105.0);
+ return std::max(kMinHeight,UiRowGeometry::gridBottom(rows,velocityOpen)+UiDetailGeometry::footerHeight);
 }
 constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
 const VSTGUI::CColor background{26,35,45,255};
@@ -58,6 +59,50 @@ void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
  ctx->setFont(VSTGUI::kNormalFont,12);
  ctx->setFontColor(!enabled?border:(selected?background:letters));
  ctx->drawString(title,rect);
+}
+
+// A single selected-instrument panel gives large, precise controls without
+// shrinking the 32-step grid or growing all 16 instrument rows.
+void drawPrecisionPanel(VSTGUI::CDrawContext* c,const Controller& ctrl,
+                        std::size_t row,double gridBottom) {
+ const auto top=UiDetailGeometry::top(gridBottom);
+ c->setFillColor(panel);
+ c->drawRect({16,top,1240,top+UiDetailGeometry::panelHeight},VSTGUI::kDrawFilled);
+ c->setFrameColor(border);
+ c->drawRect({16,top,1240,top+UiDetailGeometry::panelHeight},VSTGUI::kDrawStroked);
+ char selected[50]{};
+ std::snprintf(selected,sizeof(selected),"ZEILE %02u | KLANG",static_cast<unsigned>(row+1));
+ c->setFont(VSTGUI::kNormalFont,13);
+ c->setFontColor(letters);
+ c->drawString(selected,VSTGUI::CRect(23,top+5,223,top+58),VSTGUI::kLeftText);
+ const char* const labels[]={"LAUTSTAERKEIT","PANORAMA","PITCH","RANDOM VEL.","CHOKE-GRUPPE"};
+ const int values[]={static_cast<int>(ctrl.rowGain(row)),ctrl.rowPan(row),ctrl.rowPitch(row),
+      static_cast<int>(ctrl.rowRandomVelocity(row)),static_cast<int>(ctrl.rowChoke(row))};
+ const int lows[]={0,-100,-24,0,0},highs[]={200,100,24,100,4};
+ for(std::size_t i=0;i<UiDetailGeometry::slots.size();++i){
+   const auto slot=UiDetailGeometry::slots[i];
+   c->setFont(VSTGUI::kNormalFont,11);
+   c->setFontColor(accent);
+   c->drawString(labels[i],VSTGUI::CRect(slot.left+3,top+3,slot.right-3,top+24));
+   drawControl(c,{slot.left+5,top+27,slot.left+42,top+60},"-");
+   drawControl(c,{slot.right-42,top+27,slot.right-5,top+60},"+");
+   const auto l=slot.left+47.,r=slot.right-47.;
+   const double fraction=static_cast<double>(values[i]-lows[i])/
+                         static_cast<double>(highs[i]-lows[i]);
+   c->setFillColor(off);
+   c->drawRect({l,top+51,r,top+57},VSTGUI::kDrawFilled);
+   c->setFillColor(accent);
+   c->drawRect({l,top+51,l+(r-l)*fraction,top+57},VSTGUI::kDrawFilled);
+   char value[24]{};
+   if(i==0||i==3)std::snprintf(value,sizeof(value),"%d%%",values[i]);
+   else if(i==1) {
+     if(values[i]==0)std::snprintf(value,sizeof(value),"MITTE");
+     else std::snprintf(value,sizeof(value),"%c %d",values[i]<0?'L':'R',std::abs(values[i]));
+   }else if(i==2)std::snprintf(value,sizeof(value),"%+d st",values[i]);
+   else std::snprintf(value,sizeof(value),"GRUPPE %d",values[i]);
+   c->setFontColor(letters);
+   c->drawString(value,VSTGUI::CRect(l,top+27,r,top+49));
+ }
 }
 }
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
@@ -395,7 +440,7 @@ bool DrumatorView::adjustEditorHeight() {
    compactViewport_=true;
    const auto clientHeight=getViewSize().getHeight();
    auto fit=CompactRowViewport::fittingRows(clientHeight,kGridY,
-       UiRowGeometry::pitch(velocityLaneOpen_),105.0);
+       UiRowGeometry::pitch(velocityLaneOpen_),UiDetailGeometry::footerHeight);
    if(velocityLaneOpen_)fit=std::min(std::size_t{8},fit);
    // A host smaller than one complete row+footer is outside our minimum;
    // keep first row accessible instead of losing every control.
@@ -434,7 +479,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString("P: VORHOEREN  |  SHIFT: EDIT",VSTGUI::CRect(16,47,320,67),
                VSTGUI::kLeftText);
  const double gridBottom=UiRowGeometry::gridBottom(displayedRows(),velocityLaneOpen_);
- const double statusY=gridBottom+78.0;
+ const double statusY=gridBottom+144.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,statusY,1240,statusY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
@@ -492,6 +537,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double y=UiRowGeometry::rowTop(row-firstRow_,velocityLaneOpen_);
    c->setFillColor(row%2==0?panel:background);
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
+   if(row==velocityRow_){c->setFrameColor(accent);c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawStroked);}
    c->setFontColor(letters);
    // Visible per-row FILL button, not a hidden action behind a row number.
    drawControl(c,{16,y+2,48,y+26},"FILL");
@@ -648,6 +694,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{328,buttonsY+34,404,buttonsY+64},laneRowLabel,
              velocityLaneOpen_);
  drawControl(c,{408,buttonsY+34,455,buttonsY+64},">");
+ drawPrecisionPanel(c,controller_,selectedRow,gridBottom);
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
     const double top=std::max(0.0,std::min(UiRowGeometry::rowTop(static_cast<std::size_t>(std::max(0,fillMenuRow_-static_cast<int>(firstRow_))),velocityLaneOpen_),getViewSize().getHeight()-230.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HIHAT","GALOPP","SNARE + GHOST"};
