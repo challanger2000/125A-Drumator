@@ -872,6 +872,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x<1032)firstRow_=firstRow_>=compactPageRows_?firstRow_-compactPageRows_:0;
    else if(firstRow_+compactPageRows_<controller_.visibleRows())
      firstRow_+=compactPageRows_;
+   if(velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
+     velocityRow_=firstRow_;
    fillMenuRow_=-1;invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
