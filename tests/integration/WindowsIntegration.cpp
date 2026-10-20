@@ -420,6 +420,16 @@ void captureVstgui(DrumatorView& v,const std::string& title,double scale){
  check(access!=nullptr,"VSTGUI native bitmap pixel read failed");
  const auto width=access->getBitmapWidth(),height=access->getBitmapHeight();
  check(width>0&&height>0&&width<=4096&&height<=4096,"invalid VSTGUI screenshot pixel dimensions");
+ if(title=="v2-song-board"){
+   // Regression: the Song overlay must erase the entire row UI, INCLUDING
+   // the 28-pixel strip to the right of the former 1252px background.
+   check(width==1280&&height>200&&access->setPosition(1260,140),
+         "Song overlay offscreen oracle pixel missing");
+   VSTGUI::CColor pixel{};access->getColor(pixel);
+   check(pixel.red==26&&pixel.green==35&&pixel.blue==45,
+         "Song board leaked the underlying VELO button on its right edge");
+ }
+
  const std::size_t stride=(static_cast<std::size_t>(width)*3u+3u)&~std::size_t{3u};
  std::array<unsigned char,54> hdr{};
  auto le16=[&](std::size_t at,std::uint16_t v){
