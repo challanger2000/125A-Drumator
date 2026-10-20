@@ -38,7 +38,9 @@ public:
  bool previewSample(std::size_t row);
  bool toggleRowGate(std::size_t row,bool solo);
  bool cycleRowChoke(std::size_t row,int direction=1);
+ bool setRowChoke(std::size_t row,unsigned group);
  bool cycleRowOutput(std::size_t row);
+ bool setRowOutput(std::size_t row,unsigned bus);
  unsigned rowOutput(std::size_t row) const noexcept {return row<kRows?output_[row]:0;}
  unsigned rowChoke(std::size_t row) const noexcept {return row<kRows?choke_[row]:0;}
  bool adjustRowMix(std::size_t row,bool adjustPan,int delta);
