@@ -122,6 +122,34 @@ int main(int argc,char** argv) {
  HostApplication host;
  require(component->initialize(&host)==kResultOk,"Processor initialize");
  require(ctrl->initialize(&host)==kResultOk,"Controller initialize");
+ // SO01: Studio One may display but refuse to activate kAux VST3
+ // output buses. Verify advertised metadata, not only audio routing.
+ require(component->getBusCount(kAudio,kOutput)==16,
+         "SO01 expected 16 stereo output buses");
+ for(Steinberg::int32 i=0;i<16;++i) {
+   BusInfo info{};
+   require(component->getBusInfo(kAudio,kOutput,i,info)==kResultOk,
+           "SO01 getBusInfo failed");
+   require(info.busType==BusTypes::kMain,
+           "SO01 Studio One cannot activate kAux drum output");
+   require(info.channelCount==2,"SO01 bus must be stereo");
+   const bool defaultActive=(info.flags&BusInfo::kDefaultActive)!=0;
+   require(defaultActive==(i==0),
+           "SO01 only MAIN should be initially active");
+   if(i==0) {
+     require(info.name[0]==static_cast<TChar>('M')&&
+             info.name[1]==static_cast<TChar>('A'),
+             "SO01 MAIN name mismatch");
+   }else{
+     const int number=i+1;
+     require(info.name[0]==static_cast<TChar>('D')&&
+             info.name[4]==static_cast<TChar>(' ')&&
+             info.name[5]==static_cast<TChar>('0'+number/10)&&
+             info.name[6]==static_cast<TChar>('0'+number%10),
+             "SO01 DRUM XX bus label mismatch");
+   }
+ }
+ std::cout<<"SO01 16 kMain stereo outputs, optional buses inactive PASS\\n";
  // F16: the host must see semantic A-H pattern names, not normalized decimals.
  for(int i=0;i<8;++i) {
    String128 label{};
