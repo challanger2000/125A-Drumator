@@ -534,9 +534,19 @@ void testPrecisionPanel(){
  };
  const double top=UiCompactLayout::header;
  drag(133.,top+68.,-25.);
- check(f.c->rowGain(0)==110,"V2 rotary gain drag failed");
+ check(f.c->rowGain(0)==117,"UX rotary gain 25px must increase 17%");
  click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
  check(f.c->rowGain(0)==100,"V2 rotary Ctrl default not 100");
+ {
+   VSTGUI::CPoint pt(133.,top+68.);
+   v->onMouseDown(pt,VSTGUI::CButtonState(VSTGUI::kLButton|VSTGUI::kShift));
+   pt.y-=15.;
+   v->onMouseMoved(pt,VSTGUI::CButtonState(VSTGUI::kLButton));
+   v->onMouseUp(pt,{});
+   check(f.c->rowGain(0)==103,"UX fine knob sensitivity not latched");
+   click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+   check(f.c->rowGain(0)==100,"UX fine knob Ctrl reset failed");
+ }
  drag(375.,top+68.,-60.);
  check(f.c->rowPitch(0)==24,"V2 pitch rotary maximum failed");
  drag(496.,top+68.,-250.);
@@ -551,7 +561,7 @@ void testPrecisionPanel(){
  check(IntegrationAccess::selectedRow(*v)==1,
        "V2 instrument header selection failed");
  drag(133.,top+UiCompactLayout::baseRow+68.,-25.);
- check(f.c->rowGain(0)==100&&f.c->rowGain(1)==110,
+ check(f.c->rowGain(0)==100&&f.c->rowGain(1)==117,
        "V2 rotary changed wrong instrument");
  click(*v,133.,top+UiCompactLayout::baseRow+68.);
  check(IntegrationAccess::activeKnob(*v)==0,"V2 knob capture not active");
@@ -568,6 +578,13 @@ void testPatternLengthControls(){
  check(f.c->patternLength(0)==32,"UX pattern length initial state");
  click(*v,481.,20.);
  check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
+ const double blockedX=UiCompactLayout::stepX+20.*UiCompactLayout::stepWidth+8.;
+ const auto oldHidden=f.c->velocity(0,0,20);
+ click(*v,blockedX,UiCompactLayout::header+60.);
+ check(f.c->velocity(0,0,20)==oldHidden,"UX clicked inactive step 21 in 1T");
+ click(*v,1248.,UiCompactLayout::header+60.);
+ click(*v,blockedX,UiCompactLayout::header+UiCompactLayout::baseRow+12.);
+ check(f.c->velocity(0,0,20)==oldHidden,"UX edited inactive velocity in 1T");
  click(*v,481.,20.);
  check(f.c->patternLength(0)==16,"UX selected length not idempotent");
  click(*v,557.,20.);
@@ -575,6 +592,11 @@ void testPatternLengthControls(){
  click(*v,820.,65.);
  click(*v,820.,98.);
  check(f.c->patternLength(0)==32,"UX copy changed length via duplicate menu");
+ const double bottom=UiCompactLayout::header+UiCompactLayout::baseRow*4.+UiCompactLayout::velocityRow;
+ click(*v,76.,bottom+17.);
+ check(f.c->visibleRows()==5,"UX + ZEILE not clickable");
+ click(*v,160.,bottom+17.);
+ check(f.c->visibleRows()==4,"UX - ZEILE not clickable");
  evidence("UX direct length and no duplicate pattern menu control PASS");
 }
 void testNativeName(){
