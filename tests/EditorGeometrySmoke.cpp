@@ -23,9 +23,9 @@ namespace {
 }
 struct NativeFrame final:Steinberg::IPlugFrame {
  bool accept=true;unsigned calls=0;
- Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid,void** out) override {
-   if(Steinberg::FUnknownPrivate::iidEqual(iid,Steinberg::IPlugFrame::iid)||
-      Steinberg::FUnknownPrivate::iidEqual(iid,Steinberg::FUnknown::iid)){
+ Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID requestedIid,void** out) override {
+   if(Steinberg::FUnknownPrivate::iidEqual(requestedIid,Steinberg::IPlugFrame::iid)||
+      Steinberg::FUnknownPrivate::iidEqual(requestedIid,Steinberg::FUnknown::iid)){
      *out=static_cast<Steinberg::IPlugFrame*>(this);return Steinberg::kResultOk;
    }*out=nullptr;return Steinberg::kNoInterface;
  }

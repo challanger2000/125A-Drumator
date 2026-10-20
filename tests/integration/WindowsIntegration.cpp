@@ -13,6 +13,7 @@
 #include "vst3/DrumatorProcessor.h"
 #include "vst3/DrumatorEditor.h"
 #include "vst3/PluginIDs.h"
+#include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/parameterchanges.h"
 #include "public.sdk/source/vst/utility/memoryibstream.h"
@@ -111,8 +112,8 @@ namespace {
 using namespace drumator;
 struct ResizeHost final:IPlugFrame {
  bool accept=true;unsigned calls=0;HWND hwnd=nullptr;
- tresult PLUGIN_API queryInterface(const TUID iid,void** obj) override {
-   if(FUnknownPrivate::iidEqual(iid,IPlugFrame::iid)||FUnknownPrivate::iidEqual(iid,FUnknown::iid)){
+ tresult PLUGIN_API queryInterface(const TUID requestedIid,void** obj) override {
+   if(FUnknownPrivate::iidEqual(requestedIid,IPlugFrame::iid)||FUnknownPrivate::iidEqual(requestedIid,FUnknown::iid)){
      *obj=static_cast<IPlugFrame*>(this);addRef();return kResultOk;
    }*obj=nullptr;return kNoInterface;
  }
