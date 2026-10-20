@@ -40,3 +40,4 @@ struct UiSongLayout final {
    return page+1<pages&&count>=first(page+1);
  }
 };
+} // namespace drumator
