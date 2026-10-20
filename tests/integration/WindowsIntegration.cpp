@@ -107,8 +107,8 @@ struct IntegrationAccess {
    return std::tuple{v.laneDragActive_,v.laneDragGeneration_,v.editingNameRow_,v.nameEditGeneration_,
      v.fillMenuRow_,v.getViewSize(),static_cast<const void*>(platform),v.laneDragPattern_,v.laneErase_,
       v.detailDragControl_,v.detailDragRow_,
-     v.velocityRow_,v.velocityStep_,v.firstRow_,v.songSlot_,v.songEditorOpen_,v.velocityLaneOpen_,
-     v.compactViewport_,v.compactPageRows_,v.status_};
+     v.velocityRow_,v.velocityStep_,v.firstRow_,v.songSlot_,v.songEditorOpen_,
+     v.compactViewport_,v.compactPageRows_,v.velocityExpanded_,v.popup_,v.popupRow_,v.activeKnob_,v.knobRow_,v.knobStartY_,v.knobStartValue_,v.knobGeneration_,v.status_};
  }
  static DrumatorView* view(Controller& c,std::size_t n){check(n<c.views_.size(),"real custom view absent");return c.views_[n];}
  static VSTGUI::CTextEdit* edit(DrumatorView& v){return v.nameEdit_;}
