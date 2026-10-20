@@ -457,102 +457,82 @@ void captureVstgui(DrumatorView& v,const std::string& title,double scale){
 }
 void testVisualRender(){
  for(const auto zoom: {1.0,1.2,1.3,1.5}){
-  Fixture f;auto kit=namedKit('X',4);
-  kit.displayNames[0]="KICK_LONG_AUDIO_SAMPLE_NAME_IN_2026.wav";
-  f.kit(kit);f.open();
-  auto* v=IntegrationAccess::view(*f.c,0);
-  captureVstgui(*v,zoom==1.?"four-rows-100":zoom==1.2?"four-rows-120":
-       zoom==1.3?"four-rows-130":"four-rows-150",zoom);
+   Fixture f;auto kit=namedKit('X',4);
+   kit.displayNames[0]="KICK_LONG_AUDIO_SAMPLE_NAME_IN_2026.wav";
+   f.kit(kit);f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   captureVstgui(*v,zoom==1.?"v2-four-rows-100":zoom==1.2?"v2-four-rows-120":
+        zoom==1.3?"v2-four-rows-130":"v2-four-rows-150",zoom);
  }
  {
-  Fixture f;f.kit(namedKit('X',8));f.open();
-  auto* v=IntegrationAccess::view(*f.c,0);
-  click(*v,100,108+8*29+5+45); // global inline Velocity button
-  captureVstgui(*v,"eight-rows-inline-velocity",1.0);
+   Fixture f;f.kit(namedKit('X',16));f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   captureVstgui(*v,"v2-16-rows-page-1",1.0);
+   click(*v,1248,108.+60.);
+   check(IntegrationAccess::velocityExpanded(*v,0),"V2 row 1 expansion failed");
+   const auto row2=IntegrationAccess::rowTop(*v,1);
+   click(*v,1248,row2+60.);
+   check(IntegrationAccess::velocityExpanded(*v,0)&&
+         IntegrationAccess::velocityExpanded(*v,1),"V2 expansion changed another row");
+   captureVstgui(*v,"v2-two-velocity-rows",1.0);
+   for(int i=0;i<2;++i){
+     const auto bottom=v->getViewSize().getHeight()-UiCompactLayout::footer;
+     click(*v,1190,bottom+17.);
+   }
+   check(IntegrationAccess::firstRow(*v)==8&&IntegrationAccess::selectedRow(*v)==8,
+         "V2 third page selection/paging failed");
+   captureVstgui(*v,"v2-16-rows-page-3",1.0);
  }
  {
-  Fixture f;f.kit(namedKit('X',16));f.open();
-  captureVstgui(*IntegrationAccess::view(*f.c,0),"sixteen-rows",1.0);
+   Fixture f;f.kit(namedKit('X',4));f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   click(*v,1026,65.);
+   captureVstgui(*v,"v2-song-board",1.0);
  }
- {
-  Fixture f;f.kit(namedKit('X',16));f.open();
-  auto* v=IntegrationAccess::view(*f.c,0);
-  for(std::size_t row : {std::size_t{0},std::size_t{8}})
-    for(std::size_t i=0;i<32;++i) {
-      const auto value=static_cast<std::uint8_t>((i%4u+1u)*24u+7u);
-      check(f.c->setStepVelocity(0,row,i,value),
-            "visual fixture could not program varied velocity");
-    }
-  click(*v,100,108+16*29+5+45); // open global inline Velocity, page size 8
-  check(IntegrationAccess::firstRow(*v)==0&&
-        IntegrationAccess::selectedRow(*v)==0,
-        "expanded 16-row page initial state mismatch");
-  captureVstgui(*v,"sixteen-expanded-page-1",1.0);
-  click(*v,1045,54); // compact next-page arrow
-  check(IntegrationAccess::firstRow(*v)==8&&
-        IntegrationAccess::selectedRow(*v)==8,
-        "expanded page change failed to select visible instrument");
-  click(*v,UiRowControls::mute.left+10.,108.+12.);
-  check(f.c->isRowMuted(8)&&!f.c->isRowMuted(0),
-        "page two row hit targeted a different instrument");
-  captureVstgui(*v,"sixteen-expanded-page-2",1.0);
- }
- {
-  Fixture f;f.kit(namedKit('X',4));f.open();
-  auto* v=IntegrationAccess::view(*f.c,0);
-  click(*v,720,80); // Song board
-  captureVstgui(*v,"song-board",1.0);
- }
- evidence("Native Windows VSTGUI render set PASS; visual human review remains separate");
+ evidence("V2 native VSTGUI vector controls and per-row Velocity windows captured");
 }
 void testPrecisionPanel(){
  Fixture f;f.kit(namedKit('X'));
- // Pitch recomputes the row's prepared sample; unlike gain/pan it needs a
- // valid negotiated VST3 output sample rate before the host can accept it.
  ProcessSetup setup{};
  setup.sampleRate=48000.;setup.maxSamplesPerBlock=256;
  setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
- check(f.p->setupProcessing(setup)==kResultOk,"precision pitch fixture not host-configured");
- f.open();
- auto* v=IntegrationAccess::view(*f.c,0);
- const auto y=UiDetailGeometry::top(108.+4.*29.)+40.;
- const auto& z=UiDetailGeometry::slots;
- auto clickAbsolute=[&](std::size_t index,bool upper){
-   const auto x=upper?z[index].right-46.:z[index].left+46.;
+ check(f.p->setupProcessing(setup)==kResultOk,"V2 pitch rate not initialized");
+ f.open();auto* v=IntegrationAccess::view(*f.c,0);
+ auto drag=[&](double x,double y,double dy){
    click(*v,x,y);
-   VSTGUI::CPoint pt(x,y);v->onMouseUp(pt,{});
+   VSTGUI::CPoint at(x,y+dy);
+   v->onMouseMoved(at,VSTGUI::CButtonState(VSTGUI::kLButton));
+   v->onMouseUp(at,{});
  };
- click(*v,z[0].right-20.,y);
- check(f.c->rowGain(0)==110,"GUI volume increment failed");
- click(*v,z[0].left+20.,y,VSTGUI::kLButton|VSTGUI::kControl);
- check(f.c->rowGain(0)==100,"GUI volume Ctrl-reset failed");
- clickAbsolute(0,true);
- check(f.c->rowGain(0)==200,"GUI volume end stop failed");
- clickAbsolute(1,false);
- check(f.c->rowPan(0)==-100,"GUI panorama end stop failed");
- click(*v,z[1].left+20.,y,VSTGUI::kLButton|VSTGUI::kControl);
- check(f.c->rowPan(0)==0,"GUI panorama Ctrl-centre failed");
- clickAbsolute(2,true);
- check(f.c->rowPitch(0)==24,"GUI pitch end stop failed");
- clickAbsolute(3,true);
- check(f.c->rowRandomVelocity(0)==100,"GUI random velocity end stop failed");
- clickAbsolute(4,true);
- check(f.c->rowChoke(0)==4,"GUI choke group end stop failed");
- click(*v,z[4].left+20.,y,VSTGUI::kLButton|VSTGUI::kControl);
- check(f.c->rowChoke(0)==0,"GUI choke Ctrl-reset failed");
- click(*v,UiRowControls::mute.left+10.,108.+29.+12.);
- click(*v,z[0].right-20.,y);
- check(f.c->rowGain(1)==110&&f.c->rowGain(0)==200,
-       "GUI precision controls updated wrong instrument");
- // A stale precision drag must never rewrite a newly restored kit.
- click(*v,UiRowControls::mute.left+10.,108.+12.);
- click(*v,(z[0].left+z[0].right)/2.,y);
- check(f.recall(Fixture::encode(namedKit('Y')))==kResultOk,"precision recall failed");
- VSTGUI::CPoint stale(z[0].right-46.,y);
+ const double top=UiCompactLayout::header;
+ drag(133.,top+68.,-25.);
+ check(f.c->rowGain(0)==110,"V2 rotary gain drag failed");
+ click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ check(f.c->rowGain(0)==100,"V2 rotary Ctrl default not 100");
+ drag(375.,top+68.,-60.);
+ check(f.c->rowPitch(0)==24,"V2 pitch rotary maximum failed");
+ drag(496.,top+68.,-250.);
+ check(f.c->rowRandomVelocity(0)==100,"V2 Random Velocity rotary failed");
+ click(*v,597.,top+20.);
+ click(*v,560.,top+36.+13.);
+ check(f.c->rowOutput(0)==8,"V2 direct output selection OUT 9 failed");
+ click(*v,553.,top+20.);
+ click(*v,554.,top+36.+4.*27.+12.);
+ check(f.c->rowChoke(0)==4,"V2 Choke 4 direct selection failed");
+ click(*v,45.,top+UiCompactLayout::baseRow+12.);
+ check(IntegrationAccess::selectedRow(*v)==1,
+       "V2 instrument header selection failed");
+ drag(133.,top+UiCompactLayout::baseRow+68.,-25.);
+ check(f.c->rowGain(0)==100&&f.c->rowGain(1)==110,
+       "V2 rotary changed wrong instrument");
+ click(*v,133.,top+UiCompactLayout::baseRow+68.);
+ check(IntegrationAccess::activeKnob(*v)==0,"V2 knob capture not active");
+ check(f.recall(Fixture::encode(namedKit('Y')))==kResultOk,"V2 recall failed");
+ VSTGUI::CPoint stale(133.,0.);
  v->onMouseMoved(stale,VSTGUI::CButtonState(VSTGUI::kLButton));
  v->onMouseUp(stale,{});
- check(f.c->rowGain(0)==130,"stale precision slider edited restored kit");
- evidence("VSTGUI precision panel endpoints, Ctrl resets, selected-row controller routing PASS");
+ check(f.c->rowGain(0)==130,"V2 stale knob edited restored kit");
+ evidence("V2 rotary drag, exact defaults, menus, selection and recall PASS");
 }
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
