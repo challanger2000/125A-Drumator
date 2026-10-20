@@ -1,5 +1,11 @@
 # 125A Drumator — development instructions
 
+## Aktuell – Z01–Z03-Reparatur am 20.10.2026
+
+**Windows-geprüfter Quellcode `62f10a4edade31217c90a32eba3d4e39eefc54ee`**: [Actions #39347442164](https://github.com/challanger2000/125A-Drumator/actions/runs/39347442164) **SUCCESS**, 17/17 CTests, Steinberg Validator 47/47, paketierter Audio-/Editor-Smoke PASS. Codex-Z01 (transaktionaler Recall), Z02 (einfacher geprüfter Zoom ohne partiellen Rollback) und Z03 (nativer Textedit-Fokusabschluss) sind im Code bearbeitet. [Details und ehrliche Testgrenzen](docs/CODEX-Z01-Z03-REPAIR-2026-10-20.md). Mehrfach-Editor-Zoom-Recall mit mehreren nötigen Fensteränderungen wird bewusst und vollständig **vor** Änderungen abgelehnt. Studio One, O01/T01–T04, finale Grafik und Owner-Freigabe offen. **Keine V1-Freigabe.**
+
+Ältere Standmeldungen unten sind historische Prüfstände.
+
 ## RC01–RC04 — aktueller Stand 20.10.2026
 
 **Geprüfter Programmcommit `d984188457882a4463b9263593d88f7bf1fffb71`**, [Windows #39341195970](https://github.com/challanger2000/125A-Drumator/actions/runs/39341195970) **SUCCESS**: 16/16 CTests, Steinberg Validator 47/47, paketierter Editor-/Audio-Host-Smoke PASS. Codex-Recheck RC01–RC04 im Code bearbeitet; [exakter Reparatur-/QA-Nachweis](docs/CODEX-RC01-RC04-REPAIR-2026-10-20.md). SDK-Rechtsklick-„UI Zoom“ bewusst deaktiviert, 100/150-Headerbuttons bleiben. **Studio One/nativer Attach/Recall, O01 und finale GUI weiterhin offen. KEINE V1-FREIGABE.**
