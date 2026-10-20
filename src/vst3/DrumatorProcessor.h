@@ -10,6 +10,7 @@
 #include "core/AtomicPatternSelection.h"
 #include "core/PatternEventTimeline.h"
 #include "core/MasterGainRamp.h"
+#include "core/AtomicRowMix.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include <array>
 #include <atomic>
@@ -112,8 +113,7 @@ private:
  std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
  std::atomic<std::uint32_t> muteMask_{0};
  std::atomic<std::uint32_t> soloMask_{0};
- std::array<std::atomic<float>,kRows> rowGain_{};
- std::array<std::atomic<float>,kRows> rowPan_{};
+ std::array<AtomicRowMix,kRows> rowMix_{};
  std::array<std::atomic<std::uint8_t>,kRows> rowChoke_{};
  std::array<std::atomic<std::uint8_t>,kRows> rowOutput_{};
  std::atomic<std::uint8_t> swingPercent_{0};

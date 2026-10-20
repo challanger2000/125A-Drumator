@@ -29,8 +29,6 @@ constexpr auto kStateMagicV3Local=kStateMagicV3; // plus visible row count
 }
 Processor::Processor() {
  setControllerClass(kControllerCID);
- for(auto& gain:rowGain_)gain.store(1.f,std::memory_order_relaxed);
- for(auto& pan:rowPan_)pan.store(0.f,std::memory_order_relaxed);
  for(auto& length:patternLengths_)length.store(32,std::memory_order_relaxed);
  for(std::size_t row=0;row<kRows;++row)rowOutput_[row].store(static_cast<std::uint8_t>(row));
  // The initial test pattern is supplied by AtomicPatternBank.
@@ -307,10 +305,9 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    // the new gain with the previous pan. The audio callback never locks.
    {
      std::lock_guard<std::mutex> guard(kitMutex_);
-     rowGain_[static_cast<std::size_t>(rowIndex)].store(
-         static_cast<float>(gainValue)/100.f,std::memory_order_relaxed);
-     rowPan_[static_cast<std::size_t>(rowIndex)].store(
-         static_cast<float>(panValue)/100.f,std::memory_order_relaxed);
+     rowMix_[static_cast<std::size_t>(rowIndex)].store(
+         static_cast<std::uint8_t>(gainValue),
+         static_cast<std::uint8_t>(panValue+100));
    }
    return Steinberg::kResultOk;
  }
@@ -730,12 +727,13 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    if((pending&(std::uint32_t{1}<<row))!=0)
      (void)triggers_.appendNoteOn(static_cast<std::int32_t>(36+row),1.f,0,
                                    static_cast<std::uint32_t>(data.numSamples));
- for(std::size_t row=0;row<kRows;++row)
-   if(!voices_.setRowMix(row,rowGain_[row].load(std::memory_order_relaxed),
-                           rowPan_[row].load(std::memory_order_relaxed))||
+ for(std::size_t row=0;row<kRows;++row) {
+   const auto pair=rowMix_[row].snapshot(); // one coherent UI generation
+   if(!voices_.setRowMix(row,AtomicRowMix::gain(pair),AtomicRowMix::pan(pair))||
       !voices_.setRowChoke(row,rowChoke_[row].load(std::memory_order_relaxed))||
        !voices_.setRowOutput(row,rowOutput_[row].load(std::memory_order_relaxed)))
      return Steinberg::kResultFalse;
+ }
  triggers_.applyMuteSolo(muteMask_.load(std::memory_order_relaxed),
                          soloMask_.load(std::memory_order_relaxed));
  // Apply realtime-safe per-row random velocity without touching saved steps.
@@ -838,8 +836,9 @@ Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
       kit_.patternLengths[i]=patternLengths_[i].load(std::memory_order_relaxed);
    for(std::size_t row=0;row<kRows;++row){kit_.choke[row]=rowChoke_[row].load();kit_.output[row]=rowOutput_[row].load();}
    for(std::size_t row=0;row<kRows;++row) {
-     kit_.gain[row]=static_cast<std::uint8_t>(std::lround(rowGain_[row].load()*100.f));
-     kit_.pan[row]=static_cast<std::uint8_t>(std::lround(rowPan_[row].load()*100.f+100.f));
+     const auto pair=rowMix_[row].snapshot();
+     kit_.gain[row]=AtomicRowMix::gainPercent(pair);
+     kit_.pan[row]=AtomicRowMix::panEncoded(pair);
    }
    // The regular per-cell getter is safe but not a transaction: a
    // simultaneous PatternReplace could otherwise serialize a torn kit.
@@ -924,10 +923,8 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     for(std::size_t row=0;row<kRows;++row)
        randomVelocity_[row].store(kit_.randomVelocity[row],std::memory_order_relaxed);
     for(std::size_t row=0;row<kRows;++row){rowChoke_[row].store(kit_.choke[row]);rowOutput_[row].store(kit_.output[row]);}
-    for(std::size_t row=0;row<kRows;++row) {
-      rowGain_[row].store(kit_.gain[row]/100.f,std::memory_order_relaxed);
-      rowPan_[row].store((static_cast<int>(kit_.pan[row])-100)/100.f,std::memory_order_relaxed);
-    }
+    for(std::size_t row=0;row<kRows;++row)
+      rowMix_[row].store(kit_.gain[row],kit_.pan[row]);
     // Kit selection CAS above cannot overwrite newer host automation.
     kitRevision_.fetch_add(1,std::memory_order_release);
  }

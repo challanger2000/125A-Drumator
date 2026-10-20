@@ -1,5 +1,6 @@
 #include "core/SequencerCore.h"
 #include "core/MasterGainRamp.h"
+#include "core/AtomicRowMix.h"
 #include "core/RowFill.h"
 #include "core/PatternOperations.h"
 #include "core/SongChain.h"
@@ -12,6 +13,8 @@
 #include <stdexcept>
 #include <cmath>
 #include <limits>
+#include <thread>
+#include <atomic>
 #include <vector>
 using namespace drumator;
 static void check(bool ok,const char* msg){if(!ok)throw std::runtime_error(msg);}
@@ -68,6 +71,41 @@ int main(){
     check(!invalid.prepare(0.)&&
           !invalid.prepare(std::numeric_limits<double>::quiet_NaN()),
           "G01 invalid sample rate accepted");
+  }
+  // T07: UI edits must never produce a torn gain/pan combination in audio.
+  {
+    AtomicRowMix mix;
+    const auto defaults=mix.snapshot();
+    check(AtomicRowMix::gainPercent(defaults)==100&&
+          AtomicRowMix::panEncoded(defaults)==100,"T07 row default");
+    mix.store(42,35);
+    std::atomic<bool> finished{false},torn{false};
+    std::thread control([&]{
+      for(int i=0;i<40000;++i) {
+        if(i&1)mix.store(42,35);
+        else mix.store(180,175);
+      }
+      finished.store(true,std::memory_order_release);
+    });
+    std::size_t reads=0;
+    do {
+      const auto snapshot=mix.snapshot();
+      const bool a=AtomicRowMix::gainPercent(snapshot)==42&&
+                   AtomicRowMix::panEncoded(snapshot)==35;
+      const bool b=AtomicRowMix::gainPercent(snapshot)==180&&
+                   AtomicRowMix::panEncoded(snapshot)==175;
+      if(!a&&!b)torn.store(true,std::memory_order_relaxed);
+      ++reads;
+    }while(!finished.load(std::memory_order_acquire));
+    control.join();
+    check(reads>0&&!torn.load(std::memory_order_relaxed),
+          "T07 mixed audio gain/pan generations");
+    mix.store(200,0);
+    check(AtomicRowMix::gain(mix.snapshot())==2.f&&
+          AtomicRowMix::pan(mix.snapshot())==-1.f,"T07 full gain/left");
+    mix.store(0,200);
+    check(AtomicRowMix::gain(mix.snapshot())==0.f&&
+          AtomicRowMix::pan(mix.snapshot())==1.f,"T07 silence/right");
   }
   // B04: every instrument remains reachable when the host rejects resize.
   for(std::size_t total=1;total<=16;++total) {
