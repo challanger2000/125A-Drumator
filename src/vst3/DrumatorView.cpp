@@ -627,7 +627,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    std::snprintf(value,sizeof(value),"VOL %u%%",controller_.rowGain(row));
    renderMix(UiRowControls::volume,value);
    if(panValue==0)std::snprintf(value,sizeof(value),"PAN C");
-   else std::snprintf(value,sizeof(value),"%c %d",panValue<0?'L':'R',std::abs(panValue));
+   else std::snprintf(value,sizeof(value),"PAN %c%d",panValue<0?'L':'R',std::abs(panValue));
    renderMix(UiRowControls::pan,value);
    std::snprintf(value,sizeof(value),"P %+dst",controller_.rowPitch(row));
    renderMix(UiRowControls::pitch,value);
@@ -689,7 +689,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  const double buttonsY=gridBottom+5.0;
  c->setFillColor(controller_.visibleRows()<kRows?accent:panel);
  c->drawRect({16,buttonsY,213,buttonsY+29},VSTGUI::kDrawFilled);
- c->setFontColor(background);
+ c->setFontColor(controller_.visibleRows()<kRows?background:VSTGUI::CColor{175,190,201,255});
  c->drawString(controller_.visibleRows()<kRows?"+ INSTRUMENT HINZUFUEGEN":"MAX. 16 INSTRUMENTE",
                VSTGUI::CRect(16,buttonsY,213,buttonsY+29));
  c->setFillColor(controller_.canHideLast()?panel:background);
