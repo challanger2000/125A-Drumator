@@ -74,6 +74,7 @@ void drawRotary(VSTGUI::CDrawContext* c,double cx,double cy,double fraction,
  c->setLineWidth(1.);c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
  c->drawString(value,{cx+21.,cy-11.,cx+72.,cy+14.},VSTGUI::kLeftText);
 }
+} // anonymous namespace: shared rotary painter and palette
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
 // Internal Studio One browser objects not exposed as file paths are
 // intentionally not treated as successfully loaded samples.
@@ -521,7 +522,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawRotary(c,1178,76,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
  // Four full-fledged rows per page: the selection has its own independent hit box.
  for(std::size_t i=0;i<displayedRows();++i) {
-   const auto row=firstRow_+i,y=rowTopOnPage(i);
+   const auto row=firstRow_+i;
+   const double y=rowTopOnPage(i);
    const bool chosen=row==velocityRow_;
    const auto rowH=UiCompactLayout::baseRow+(velocityExpanded_[row]?UiCompactLayout::velocityRow:0.);
    c->setFillColor(chosen?VSTGUI::CColor{42,69,88,255}:(i%2?background:panel));
