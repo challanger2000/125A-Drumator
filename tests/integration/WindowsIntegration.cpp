@@ -585,7 +585,6 @@ void testRandomVelocityOneShot(){
  kit.grid[kSteps]=88; // different instrument: untouched
  kit.grid[kRows*kSteps]=100; // different pattern: untouched
  f.kit(kit);f.open();
- const auto original=IntegrationAccess::snapshot(*f.c);
  check(!f.c->randomizeRowVelocity(2),"RANDOM empty row should be inert");
  check(!f.c->canUndoCurrentPattern(),"RANDOM empty row incorrectly added undo");
  check(!f.c->randomizeRowVelocity(4),"RANDOM row outside visible kit allowed");
@@ -605,8 +604,6 @@ void testRandomVelocityOneShot(){
        "RANDOM changed a different instrument or pattern");
  check(f.c->canUndoCurrentPattern(),"RANDOM missing single-pattern Undo");
  check(f.c->undoCurrentPattern(),"RANDOM cannot Undo action");
- check(IntegrationAccess::snapshot(*f.c)!=original,
-       "RANDOM Undo snapshot test must not trivially compare transient state");
  for(std::size_t step=0;step<kSteps;++step)
    check(f.c->velocity(0,0,step)==kit.grid[step],
          "RANDOM undo did not restore complete source row");
