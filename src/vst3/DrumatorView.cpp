@@ -9,6 +9,7 @@
 #include "core/UiDetailGeometry.h"
 #include "core/UiRowControls.h"
 #include "core/UiCompactLayout.h"
+#include "core/UiSongLayout.h"
 #include "core/UiOverlayHitZones.h"
 #include "core/DropFeedback.h"
 #include "core/UiHeaderHitZones.h"
@@ -445,6 +446,10 @@ void DrumatorView::refreshFromHost(bool relayout) {
  if(controller_.visibleRows()>0)
    velocityRow_=std::min(velocityRow_,controller_.visibleRows()-1);
  if(controller_.visibleRows()>0&&firstRow_>=controller_.visibleRows())firstRow_=0;
+ if(songSlot_>=controller_.songCount()){
+   songSlot_=controller_.songCount()-1;
+   songPage_=UiSongLayout::pageOf(songSlot_);
+ }
  if(relayout&&getParentView())adjustEditorHeight();
  else invalid();
 }
@@ -651,31 +656,41 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{1152,bottom+5,1229,bottom+34},">");
  }
  if(songEditorOpen_) {
+   // Dedicated, paged Song surface. Only valid entries and the next add-slot
+   // are interactive; no 64-button wall or invisible selection hotspots.
    c->setFillColor(background);
    c->drawRect({0,101,1280,getViewSize().getHeight()},VSTGUI::kDrawFilled);
-   c->setFont(VSTGUI::kNormalFont,13);
-   c->setFontColor(letters);
-   c->drawString("SONG-ABLAUF  |  POSITION ANKLICKEN  |  PATTERN UND LAENGE UNTEN DIREKT WAEHLEN",
-                 VSTGUI::CRect(16,105,1240,126),VSTGUI::kLeftText);
    const auto count=controller_.songCount();
-   for(std::size_t index=0;index<SongChain::kCapacity;++index) {
-     const double sx=16+static_cast<double>(index%16)*76.0;
-     const double sy=134+static_cast<double>(index/16)*32.0;
-     const bool available=index<count,selected=index==songSlot_;
-     c->setFillColor(selected?accent:(available?panel:background));
-     c->drawRect({sx,sy,sx+73,sy+29},VSTGUI::kDrawFilled);
-     c->setFontColor(selected?background:(available?letters:border));
-     char cell[32]{};
-     if(available) {
-       const auto e=controller_.songEntry(index);
-       std::snprintf(cell,sizeof(cell),"%02u %c %s",
-           static_cast<unsigned>(index+1),static_cast<char>('A'+e.pattern),
-           e.steps==8?"1/2":(e.steps==16?"1":"2"));
-     }else std::snprintf(cell,sizeof(cell),"%02u +",static_cast<unsigned>(index+1));
-     drawControl(c,{sx,sy,sx+73,sy+29},cell,selected,available||index==count);
+   const auto first=UiSongLayout::first(songPage_);
+   char header[128]{};
+   std::snprintf(header,sizeof(header),
+       "SONG-ABLAUF   %02u-%02u / 64   |   POSITION WAEHLEN, DANACH PATTERN UND LAENGE",
+       static_cast<unsigned>(first+1),static_cast<unsigned>(first+UiSongLayout::perPage));
+   c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
+   c->drawString(header,{16,105,975,133},VSTGUI::kLeftText);
+   drawControl(c,{UiSongLayout::previousLeft,UiSongLayout::navTop,
+                  UiSongLayout::previousRight,UiSongLayout::navBottom},
+               "< ZURUECK",false,songPage_>0);
+   drawControl(c,{UiSongLayout::nextLeft,UiSongLayout::navTop,
+                  UiSongLayout::nextRight,UiSongLayout::navBottom},
+               "WEITER >",false,UiSongLayout::canNext(songPage_,count));
+   for(std::size_t offset=0;offset<UiSongLayout::perPage;++offset) {
+     const auto index=first+offset;
+     if(index>count)continue;
+     const double sx=UiSongLayout::cellX(offset%UiSongLayout::columns);
+     const double sy=UiSongLayout::cellY(offset/UiSongLayout::columns);
+     char cell[40]{};
+     if(index<count){
+       const auto entry=controller_.songEntry(index);
+       std::snprintf(cell,sizeof(cell),"%02u   %c   %s",
+           static_cast<unsigned>(index+1),static_cast<char>('A'+entry.pattern),
+           entry.steps==8?"1/2 TAKT":entry.steps==16?"1 TAKT":"2 TAKTE");
+     }else std::snprintf(cell,sizeof(cell),"%02u   + EINTRAG",
+             static_cast<unsigned>(index+1));
+     drawControl(c,{sx,sy,sx+UiSongLayout::cellWidth,sy+UiSongLayout::cellHeight},
+                 cell,index==songSlot_&&index<count);
    }
-   c->setFont(VSTGUI::kNormalFont,12);
-   c->setFontColor(accent);
+   c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
    c->drawString("PATTERN:",VSTGUI::CRect(16,277,120,301),VSTGUI::kLeftText);
    for(std::size_t idx=0;idx<8;++idx) {
      const auto chosen=controller_.songEntry(std::min(songSlot_,count-1)).pattern==idx;
@@ -938,24 +953,28 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(songEditorOpen_&&y>=101) {
    bool ok=true;
    const auto count=controller_.songCount();
-   if(y>=134&&y<262&&x>=16&&x<1232) {
-     const auto col=static_cast<std::size_t>((x-16)/76.);
-     const auto row=static_cast<std::size_t>((y-134)/32.);
-     const auto slot=row*16+col;
-     if(slot<SongChain::kCapacity) {
-       if(slot>=count) {
-         // Clicking the next free slot extends the chain in one action.
-         if(slot==count)ok=controller_.adjustSongCount(1);
-         else status_="BITTE ZUERST DEN NAECHSTEN FREIEN EINTRAG WAEHLEN";
+   if(UiSongLayout::previousHit(x,y)){
+     if(songPage_>0)--songPage_;
+   }else if(UiSongLayout::nextHit(x,y)){
+     if(UiSongLayout::canNext(songPage_,count))++songPage_;
+   }else if(const auto slot=UiSongLayout::slotAt(x,y,songPage_);
+             slot<SongChain::kCapacity) {
+     if(slot<count){
+       songSlot_=slot;
+     }else if(slot==count){
+       ok=controller_.adjustSongCount(1);
+       if(ok){
+         songSlot_=slot;
+         songPage_=UiSongLayout::pageOf(slot);
        }
-       if(slot<controller_.songCount())songSlot_=slot;
      }
    }else if(y>=277&&y<303) {
      const auto slot=std::min(songSlot_,count-1);
      const auto current=controller_.songEntry(slot);
      if(x>=115&&x<563) {
        const auto index=static_cast<std::size_t>((x-115)/56.);
-       if(index<8&&x<115+index*56.+50.)ok=controller_.setSongEntry(slot,static_cast<std::uint8_t>(index),current.steps);
+       if(index<8&&x<115+index*56.+50.)
+         ok=controller_.setSongEntry(slot,static_cast<std::uint8_t>(index),current.steps);
      }else if(x>=678&&x<996) {
        const auto index=static_cast<std::size_t>((x-678)/106.);
        if(index<3&&x<678+index*106.+100.) {
@@ -963,11 +982,21 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          ok=controller_.setSongEntry(slot,current.pattern,lengths[index]);
        }
      }else if(x>=1012&&x<1110) {
-       ok=controller_.adjustSongCount(1);
-       if(ok)songSlot_=controller_.songCount()-1;
+       if(count<SongChain::kCapacity){
+         ok=controller_.adjustSongCount(1);
+         if(ok){
+           songSlot_=controller_.songCount()-1;
+           songPage_=UiSongLayout::pageOf(songSlot_);
+         }
+       }
      }else if(x>=1118&&x<1239) {
-       if(count>1)ok=controller_.adjustSongCount(-1);
-       if(songSlot_>=controller_.songCount())songSlot_=controller_.songCount()-1;
+       if(count>1){
+         ok=controller_.adjustSongCount(-1);
+         if(ok){
+           if(songSlot_>=controller_.songCount())songSlot_=controller_.songCount()-1;
+           songPage_=UiSongLayout::pageOf(songSlot_);
+         }
+       }
      }
    }
    if(!ok)status_="SONG-EINTRAG NICHT UEBERNOMMEN";
