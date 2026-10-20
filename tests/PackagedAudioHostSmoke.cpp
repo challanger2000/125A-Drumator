@@ -149,6 +149,20 @@ int main(int argc,char** argv) {
              "SO01 DRUM XX bus label mismatch");
    }
  }
+ // Exercise the complete bus arrangement negotiation used by multi-output hosts.
+ // This is distinct from activating an individual bus after a one-output setup.
+ auto* arrangementProcessor=FCast<IAudioProcessor>(component);
+ require(arrangementProcessor!=nullptr,"SO01 missing audio processor interface");
+ std::array<SpeakerArrangement,16> sixteenStereo{};
+ sixteenStereo.fill(SpeakerArr::kStereo);
+ require(arrangementProcessor->setBusArrangements(nullptr,0,sixteenStereo.data(),16)==kResultOk,
+         "SO01 host negotiation for all 16 stereo outputs failed");
+ auto invalidStereo=sixteenStereo;
+ invalidStereo[15]=SpeakerArr::kMono;
+ require(arrangementProcessor->setBusArrangements(nullptr,0,invalidStereo.data(),16)!=kResultOk,
+         "SO01 accepted mono arrangement for DRUM 16");
+ require(arrangementProcessor->setBusArrangements(nullptr,0,sixteenStereo.data(),16)==kResultOk,
+         "SO01 failed to recover from rejected output arrangement");
  std::cout<<"SO01 16 kMain stereo outputs, optional buses inactive PASS\\n";
  // F16: the host must see semantic A-H pattern names, not normalized decimals.
  for(int i=0;i<8;++i) {
