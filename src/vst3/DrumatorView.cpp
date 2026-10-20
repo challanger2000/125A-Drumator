@@ -422,17 +422,17 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
- c->drawRect({0,0,1280,contentHeight(controller_.visibleRows(),velocityLaneOpen_)},VSTGUI::kDrawFilled);
+ c->drawRect({0,0,1280,contentHeight(displayedRows(),velocityLaneOpen_)},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,18);
  c->setFontColor(letters);
- c->drawString("125A  /  DRUMATOR",VSTGUI::CRect(16,8,1000,32),
+ c->drawString("125A  /  DRUMATOR",VSTGUI::CRect(16,8,323,32),
                VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(accent);
- c->drawString("P: SAMPLE VORHOEREN | SHIFT+A-H: 1/2 TAKTE | SHIFT+NAME: UMBENENNEN | SHIFT+STEP: VELOCITY",VSTGUI::CRect(16,47,990,67),
+ c->drawString("P: VORHOEREN  |  SHIFT: EDIT",VSTGUI::CRect(16,47,320,67),
                VSTGUI::kLeftText);
- const double gridBottom=kGridY+displayedRows()*kRowHeight;
- const double statusY=gridBottom+(velocityLaneOpen_?188.0:78.0);
+ const double gridBottom=UiRowGeometry::gridBottom(displayedRows(),velocityLaneOpen_);
+ const double statusY=gridBottom+78.0;
  c->drawString(status_.c_str(),VSTGUI::CRect(16,statusY,1240,statusY+21),
                VSTGUI::kLeftText);
  c->setFontColor(letters);
@@ -453,9 +453,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString("<",VSTGUI::CRect(1005,39,1030,69));
    c->drawString(">",VSTGUI::CRect(1033,39,1060,69));
  }
- const bool zoom150=editor_.getZoomFactor()>1.25;
- drawControl(c,{1070,39,1127,69},"100%",!zoom150);
- drawControl(c,{1136,39,1217,69},"150%",zoom150);
+ const double zoom=editor_.getZoomFactor();
+ drawControl(c,{1070,9,1127,34},"120%",std::abs(zoom-1.2)<0.001);
+ drawControl(c,{1136,9,1217,34},"130%",std::abs(zoom-1.3)<0.001);
+ drawControl(c,{1070,39,1127,69},"100%",std::abs(zoom-1.0)<0.001);
+ drawControl(c,{1136,39,1217,69},"150%",std::abs(zoom-1.5)<0.001);
  char swingLabel[28]{};
  std::snprintf(swingLabel,sizeof(swingLabel),"SWING %u%%",controller_.swingPercent());
  c->setFontColor(accent);
@@ -479,7 +481,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{1140,74,1180,98},"-");
  drawControl(c,{1184,74,1228,98},"+");
  char songSummary[64]{};
- std::snprintf(songSummary,sizeof(songSummary),"CHAIN: %u EINTRAEGE  |  1/2 / 1 / 2 TAKTE",
+ std::snprintf(songSummary,sizeof(songSummary),"KETTE: %u / 64",
                static_cast<unsigned>(controller_.songCount()));
  c->setFontColor(accent);
  c->drawString(songSummary,VSTGUI::CRect(866,74,1030,98),VSTGUI::kLeftText);
@@ -520,11 +522,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{230,y+2,275,y+26},busLabel);
    char value[32]{};
    c->setFontColor(accent);
-   std::snprintf(value,sizeof(value),"VOL %u",controller_.rowGain(row));
+   c->setFont(VSTGUI::kNormalFont,11);
+   std::snprintf(value,sizeof(value),"VOL %u%%",controller_.rowGain(row));
    c->drawString(value,VSTGUI::CRect(280,y,345,y+26),VSTGUI::kLeftText);
-   std::snprintf(value,sizeof(value),"PAN %+d",controller_.rowPan(row));
+   const auto p=controller_.rowPan(row);
+   if(p==0)std::snprintf(value,sizeof(value),"PAN C");
+   else std::snprintf(value,sizeof(value),"%c %d",p<0?'L':'R',std::abs(p));
    c->drawString(value,VSTGUI::CRect(350,y,415,y+26),VSTGUI::kLeftText);
-   std::snprintf(value,sizeof(value),"P %+d",controller_.rowPitch(row));
+   std::snprintf(value,sizeof(value),"P %+dst",controller_.rowPitch(row));
    c->drawString(value,VSTGUI::CRect(420,y,475,y+26),VSTGUI::kLeftText);
    // Visible decrement/increment zones: left/right half of each control.
    c->setFontColor(letters);
@@ -556,9 +561,42 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        c->drawRect({x+13,y+21-barHeight,x+15,y+21},
                    VSTGUI::kDrawFilled);
      }
-     if(step%4==0) {
+     if(step%4==0||step==16) {
        c->setFrameColor(border);
        c->drawRect({x+1,y+3,x+18,y+23},VSTGUI::kDrawStroked);
+     }
+   }
+   if(velocityLaneOpen_) {
+     const auto length=controller_.patternLength(controller_.currentPattern());
+     c->setFillColor(background);
+     c->drawRect({10,y+29,1246,y+55},VSTGUI::kDrawFilled);
+     c->setFontColor(accent);
+     c->setFont(VSTGUI::kNormalFont,11);
+     char rowInfo[48]{};
+     std::snprintf(rowInfo,sizeof(rowInfo),"VELOCITY  |  ZEILE %u",
+         static_cast<unsigned>(row+1));
+     c->drawString(rowInfo,VSTGUI::CRect(17,y+30,267,y+55),VSTGUI::kLeftText);
+     if(row==velocityRow_) {
+       char info[48]{};
+       std::snprintf(info,sizeof(info),"STEP %u: %u / 127",
+         static_cast<unsigned>(velocityStep_+1),
+         static_cast<unsigned>(controller_.velocity(controller_.currentPattern(),row,velocityStep_)));
+       c->drawString(info,VSTGUI::CRect(290,y+30,608,y+55),VSTGUI::kLeftText);
+     }
+     for(std::size_t step=0;step<kSteps;++step) {
+       const double x=kGridX+step*kCellWidth;
+       const auto velocity=controller_.velocity(controller_.currentPattern(),row,step);
+       const bool inactive=step>=length;
+       c->setFillColor(inactive?off:panel);
+       c->drawRect({x+2,y+31,x+17,y+54},VSTGUI::kDrawFilled);
+       if(velocity>0) {
+         const double height=21.0*static_cast<double>(velocity)/127.0;
+         c->setFillColor(inactive?border:accent);
+         c->drawRect({x+3,y+53-height,x+16,y+53},VSTGUI::kDrawFilled);
+       }
+       c->setFrameColor(row==velocityRow_&&step==velocityStep_?letters:border);
+       if(step%4==0||step==16||(row==velocityRow_&&step==velocityStep_))
+         c->drawRect({x+1,y+30,x+18,y+55},VSTGUI::kDrawStroked);
      }
    }
  }
@@ -598,7 +636,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{1150,buttonsY+34,1220,buttonsY+64},"+10");
  // Row selection and explicit show/hide; no extra overlay on the steps.
  drawControl(c,{16,buttonsY+34,266,buttonsY+64},
-             velocityLaneOpen_?"VELOCITY-BALKEN SCHLIESSEN":"VELOCITY-BALKEN OEFFNEN",
+             velocityLaneOpen_?"VELOCITY AUSBLENDEN":"VELOCITY EINBLENDEN",
              velocityLaneOpen_);
  drawControl(c,{280,buttonsY+34,324,buttonsY+64},"<");
  char laneRowLabel[32]{};
@@ -608,43 +646,6 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{328,buttonsY+34,404,buttonsY+64},laneRowLabel,
              velocityLaneOpen_);
  drawControl(c,{408,buttonsY+34,455,buttonsY+64},">");
- if(velocityLaneOpen_&&!songEditorOpen_) {
-   const double panelY=VelocityLane::panelTop(gridBottom);
-   const auto top=VelocityLane::barTop(gridBottom);
-   const auto bottom=VelocityLane::barBottom(gridBottom);
-   c->setFillColor(panel);
-   c->drawRect({16,panelY-5,1240,panelY+100},VSTGUI::kDrawFilled);
-   c->setFrameColor(border);
-   c->drawRect({16,panelY-5,1240,panelY+100},VSTGUI::kDrawStroked);
-   char laneTitle[192]{};
-   std::snprintf(laneTitle,sizeof(laneTitle),
-      "VELOCITY | ZEILE %02u  | PATTERN %c (%u TAKT) | KLICK/ZIEHEN: 1-127 | STRG+KLICK: AUS",
-      static_cast<unsigned>(selectedRow+1),
-      static_cast<char>('A'+controller_.currentPattern()),
-      controller_.patternLength(controller_.currentPattern())==16?1u:2u);
-   c->setFontColor(letters);
-   c->drawString(laneTitle,VSTGUI::CRect(28,panelY+15,614,panelY+73),
-                 VSTGUI::kLeftText);
-   const auto currentLength=controller_.patternLength(controller_.currentPattern());
-   for(std::size_t step=0;step<kSteps;++step) {
-     const auto x=VelocityLane::kLeft+static_cast<double>(step)*VelocityLane::kCellWidth;
-     const auto velocity=controller_.velocity(controller_.currentPattern(),selectedRow,step);
-     const auto inactive=step>=currentLength;
-     c->setFillColor(inactive?VSTGUI::CColor{39,45,53,255}:background);
-     c->drawRect({x+1,top,x+18,bottom},VSTGUI::kDrawFilled);
-     if(velocity>0) {
-       c->setFillColor(inactive?border:on);
-       c->drawRect({x+3,bottom-VelocityLane::heightFor(velocity),
-                    x+16,bottom},VSTGUI::kDrawFilled);
-     }
-     c->setFrameColor(step==velocityStep_?accent:
-                      (step%4==0?border:off));
-     c->drawRect({x+1,top,x+18,bottom},VSTGUI::kDrawStroked);
-   }
-   c->setFontColor(accent);
-   c->drawString("0",VSTGUI::CRect(1231,bottom-10,1240,bottom+1));
-   c->drawString("127",VSTGUI::CRect(1231,top,1255,top+16));
- }
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
     const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-230.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HIHAT","GALOPP","SNARE + GHOST"};
