@@ -575,6 +575,49 @@ void testPrecisionPanel(){
  check(f.c->rowGain(0)==130,"V2 stale knob edited restored kit");
  evidence("V2 rotary drag, exact defaults, menus, selection and recall PASS");
 }
+void testRandomVelocityOneShot(){
+ Fixture f;
+ auto kit=namedKit('X',4);
+ kit.grid.fill(0);
+ kit.patternLengths[0]=16;
+ kit.grid[0]=127;kit.grid[4]=90;kit.grid[12]=1;
+ kit.grid[20]=64; // inactive second bar: must NOT change in 1T
+ kit.grid[kSteps]=88; // different instrument: untouched
+ kit.grid[kRows*kSteps]=100; // different pattern: untouched
+ f.kit(kit);f.open();
+ const auto original=IntegrationAccess::snapshot(*f.c);
+ check(!f.c->randomizeRowVelocity(2),"RANDOM empty row should be inert");
+ check(!f.c->canUndoCurrentPattern(),"RANDOM empty row incorrectly added undo");
+ check(!f.c->randomizeRowVelocity(4),"RANDOM row outside visible kit allowed");
+ check(f.c->randomizeRowVelocity(0),"RANDOM occupied row was rejected");
+ for(const std::size_t step:{0u,4u,12u}){
+   const auto before=kit.grid[step];
+   const auto after=f.c->velocity(0,0,step);
+   check(after>0&&after<=127&&after!=before,
+         "RANDOM occupied velocity did not change visibly");
+ }
+ for(std::size_t step=0;step<kSteps;++step) {
+   if(step!=0&&step!=4&&step!=12)
+     check(f.c->velocity(0,0,step)==kit.grid[step],
+           "RANDOM changed empty or hidden step");
+ }
+ check(f.c->velocity(0,1,0)==88&&f.c->velocity(1,0,0)==100,
+       "RANDOM changed a different instrument or pattern");
+ check(f.c->canUndoCurrentPattern(),"RANDOM missing single-pattern Undo");
+ check(f.c->undoCurrentPattern(),"RANDOM cannot Undo action");
+ check(IntegrationAccess::snapshot(*f.c)!=original,
+       "RANDOM Undo snapshot test must not trivially compare transient state");
+ for(std::size_t step=0;step<kSteps;++step)
+   check(f.c->velocity(0,0,step)==kit.grid[step],
+         "RANDOM undo did not restore complete source row");
+ check(!f.c->canUndoCurrentPattern(),"RANDOM should consume exactly one undo");
+ check(f.c->togglePatternLength(0),"RANDOM setup 2T");
+ check(f.c->randomizeRowVelocity(0)&&f.c->velocity(0,0,20)!=64,
+       "RANDOM 2T failed to edit second bar");
+ check(f.c->undoCurrentPattern()&&f.c->velocity(0,0,20)==64,
+       "RANDOM second-bar undo failed");
+ evidence("RANDOM one-shot occupied-only, 1T/2T, isolated row/pattern and Undo PASS");
+}
 void testPatternLengthControls(){
  Fixture f;
  auto kit=namedKit('X');
@@ -743,6 +786,7 @@ int main(int argc,char** argv){
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
  run("UX direct pattern length",testPatternLengthControls);
+ run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
  run("UX paged Song board",testPagedSongEditor);
  run("UX compact Song viewport",testSongCompactViewport);
  run("Z03 Win32 name editor",testNativeName);
