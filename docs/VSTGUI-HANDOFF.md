@@ -1,28 +1,31 @@
-# 125A Drumator – technische VSTGUI-Übergabe
+# 125A Drumator – VSTGUI-Handoff (neue technische Vorlage)
 
-**Abgrenzung:** Hier wird ausschließlich die vollständig funktionale VSTGUI-Grundlage für den **anderen Chat** vorbereitet. Alle endgültigen GUI-Grafiken, Taster, Knöpfe, LED-Grafiken, Hintergründe und die finale ästhetische Umsetzung erstellt bzw. integriert **der andere Chat**. Nichts davon ist hier freigegeben.
+**Aktualisiert: 20.10.2026. Status: VSTGUI-Entwicklungsstand, kein Skin- oder Release-PASS.**
 
-## Technische Quelle
+Die gültige GUI-Grundlage wird aktiv im Branch `design/vstgui-foundation-2026-10-20` entwickelt. Für visuelle Arbeit sind **erst nach Windows- und Studio-One-Gate** die genauen Layoutdaten zu verwenden.
 
-Der Entwicklungsbranch enthält wieder die funktionale VSTGUI aus Commit `6a8384b241b865adc3d4e6266ca5c1c3f581fb34`; die von mir irrtümlich vorgenommene optische Überarbeitung `deae6a69` wurde rückgängig gemacht. Dies ist **kein** neuer GUI-Entwurf, sondern der vorherige funktionierende Platzhalter-Renderer.
+## Autoritative Dokumente
+- [Layout/UX und Prüfplan](VSTGUI-FOUNDATION-2026-10-20.md).
+- [Grafik-/Widget-Koordinaten](../resource/VSTGUI_ASSET_SLOTS.json).
+- `src/core/UiRowGeometry.h`: Position von Instrumentzeile, Step- und Velocity-Zeile, Y-Hitbereichen.
+- `src/vst3/DrumatorView.cpp/.h`: dynamischer VSTGUI-Renderer, OnMouseDown/Move/Up, Sample-Files, Song/Fill, DrawOrder, DPI.
+- `src/vst3/DrumatorController.cpp/.h`: tatsächliche Aktionen, Projekt-Recall und Zoombindung.
 
-- `src/vst3/DrumatorView.cpp/.h`: komplette bedienbare Custom View, bestehende Klickbereiche und dynamische Zustandsanzeige.
-- `src/vst3/DrumatorController.cpp/.h`: echte Funktionen, keine Attrappen.
-- `resource/Drumator.uidesc`: bestehendes Custom-View-Template, mit absichtlich noch leeren Bildressourcen.
-- **`resource/VSTGUI_ASSET_SLOTS.json`**: dokumentierte Koordinaten, Zustände, Austauschpunkte und spätere Grafikfamilien. **Keine zur Laufzeit registrierten CBitmap- oder Filmstrip-Slots; der andere Chat muss die Bildanbindung tatsächlich implementieren.**
+## Erwarteter Arbeitsablauf
+1. Instrument/Datei links laden oder per Drag-and-drop in die Zeile ziehen.
+2. A–H-Pattern und 1-/2-Takt wählen; 32 Steps rechts anklicken.
+3. Bei Bedarf VELOCITY global einschalten. Je **angezeigter Zeile** erscheinen 32 individuell bedienbare Velocity-Balken exakt unter den 32 Step-Tasten. Die vorherige isolierte Velocity-Leiste im Footer wird nicht weiterverwendet.
+4. Bis 16 Instrumente, mit eingeblendeter Velocity höchstens acht gleichzeitig; Rest über Seitenwechsel.
+5. Song-Board per Song-Ketten-Taste öffnen und Pattern/Längen direkt wählen.
+6. 100/120/130/150 Prozent Zoom; die gespeicherten 100/150-States (DZM1) bleiben lesbar, Zwischenwerte verwenden DZM2.
 
-## Übergabe zum Austausch gegen fertig generierte Bilder
+## Für spätere Bildintegration
+- Grafik nie von einem alten Screenshot pixelweise abpausen; tatsächliche C++-/Manifestkoordinaten und die vom Eigentümer abgenommene Mockup-Stimmung sind die Referenz.
+- Alle Sample-Namen, Controllerwerte, Chain-Zustände, Steps und Velocity-Balken bleiben **dynamisch**, niemals als Bildtext.
+- Designerfamilien: Kopfleiste, Instrumentfläche, Sample-Navigation, Vol/Pan/Pitch-Regler, Step-Taste, Velocity-Balken, Song-Slots, Fill-Menü, Status-/Footerflächen. Zunächst technische VSTGUI, erst dann freigegebene Knob-Designer-Filmstrips und 125A Branding Master.
+- GitHub-Logoquelle `challanger2000/125A-Branding/125A_Logo_Master_FINAL.svg` unverändert proportioniert.
 
-1. Der zentrale Renderer `drawControl(...)` in `DrumatorView.cpp` besitzt bereits Rectangle, Text, `selected` und `enabled`. Ein anderer Chat ersetzt **nur seine Grafikdarstellung**, nicht die tatsächlichen Controller-Aufrufe.
-2. Die Step-Schleife im Instrumenten-Renderer hat **32 getrennte Positionen** pro Zeile. Raster x=622+19*Step, y=108+29*(Instrument-firstRow). Die später generierten Step-Bilder werden exakt auf diese Fläche gelegt, nicht umgekehrt.
-3. 4–16 Instrumentenzeilen, Footer, Song-Overlay und die ausklappbare 32-Step-Velocity-Leiste haben **variable Fensterhöhe**; keine einzige starre Hintergrundgrafik verwenden.
-4. Der Song-Editor hat 64 Plätze (16×4), darunter Pattern A–H und Längen. Der Velocity-Editor zeigt dynamisch 32 Balken (0–127); Strg+Klick und Mausziehen sind bereits angebunden.
-5. Alle Beschriftungen – Instrumentennamen, Sample-Dateinamen, Panorama, Pitch, Master, MIDI-Pattern, Ausgangsbus, Velocity – bleiben **echter dynamischer VSTGUI-Text**.
-6. Zoom 100 % und 150 %, Host-Resize und Kompaktansicht müssen erhalten bleiben. Grafiken in passender nativer Auflösung vorbereiten.
-7. Offizielles 125A-Logo: ausschließlich `challanger2000/125A-Branding/125A_Logo_Master_FINAL.svg` und geometrisch unverändert. **Hier wird noch kein Design oder Logo-Rendering implementiert.**
+## Sperren
+Die Placeholder-Oberfläche enthält noch sehr kompakte Vol/Pan/Pitch-Felder und wird **nicht als finaler Look** freigegeben. Ohne echte native Visual-QA ist auch ein 18/18-CTest-PASS keine Bestätigung von Textbreite, Windows-DPI, Font-Collision oder Studio-One-Usability. Vor Artwork-Lock zuerst 4/8/16 Zeilen, Zoom, Song, Fill, Sampleinput, Velocity, Projekt-Recall und tatsächliche Klickflächen unter Windows messen.
 
-Die logischen Bild-/Kontrollgruppen stehen im **JSON-Manifest**. Die Master-/Song-Klickzonen sind in `src/core/UiHeaderHitZones.h` zentralisiert und gegen Randfälle geprüft. Andere wiederholte Gruppen brauchen noch pixelweise UI-Hosttests. Beim späteren Austausch gelten die tatsächlichen C++-Hitbereiche als technische Quelle. Keine Änderung an Audio/DSP, MIDI, Automation, Samples oder Projektzustand.
-
-**QA des Ausgangscodes:** Commit `3944ed2`, GitHub Actions [#39314206625](https://github.com/challanger2000/125A-Drumator/actions/runs/39314206625): 11/11 CTests PASS, Steinberg Validator 47/47 PASS, paketierte GUI-/Audio-Hosttests PASS. Danach bis `6a8384b` nur Dokumentation. Keine praktische Studio-One-Freigabe der endgültigen Optik.
-
-**Fazit:** Technische VSTGUI und definierte Grafik-Austauschplätze sind übergeben. Der andere Chat muss die echte visuelle Oberfläche bauen. Keine FINAL-V1-Freigabe.
+Stand dieses Dokuments ist die neue Arbeitsgrundlage; der historische Handoff-Commit `6a8384b` ist nicht mehr als gültige GUI-Pixelvorlage zu verwenden.
