@@ -111,6 +111,8 @@ struct IntegrationAccess {
  }
  static DrumatorView* view(Controller& c,std::size_t n){check(n<c.views_.size(),"real custom view absent");return c.views_[n];}
  static VSTGUI::CTextEdit* edit(DrumatorView& v){return v.nameEdit_;}
+  static std::size_t firstRow(DrumatorView& v){return v.firstRow_;}
+  static std::size_t selectedRow(DrumatorView& v){return v.velocityRow_;}
  static const auto& paths(Controller& c){return c.samplePaths_;}
 };
 }
@@ -442,7 +444,9 @@ void captureVstgui(DrumatorView& v,const std::string& title,double scale){
 }
 void testVisualRender(){
  for(const auto zoom: {1.0,1.2,1.3,1.5}){
-  Fixture f;f.kit(namedKit('X',4));f.open();
+  Fixture f;auto kit=namedKit('X',4);
+  kit.displayNames[0]="KICK_LONG_AUDIO_SAMPLE_NAME_IN_2026.wav";
+  f.kit(kit);f.open();
   auto* v=IntegrationAccess::view(*f.c,0);
   captureVstgui(*v,zoom==1.?"four-rows-100":zoom==1.2?"four-rows-120":
        zoom==1.3?"four-rows-130":"four-rows-150",zoom);
@@ -456,6 +460,29 @@ void testVisualRender(){
  {
   Fixture f;f.kit(namedKit('X',16));f.open();
   captureVstgui(*IntegrationAccess::view(*f.c,0),"sixteen-rows",1.0);
+ }
+ {
+  Fixture f;f.kit(namedKit('X',16));f.open();
+  auto* v=IntegrationAccess::view(*f.c,0);
+  for(std::size_t row : {std::size_t{0},std::size_t{8}})
+    for(std::size_t i=0;i<32;++i) {
+      const auto value=static_cast<std::uint8_t>((i%4u+1u)*24u+7u);
+      check(f.c->setStepVelocity(0,row,i,value),
+            "visual fixture could not program varied velocity");
+    }
+  click(*v,100,108+16*29+5+45); // open global inline Velocity, page size 8
+  check(IntegrationAccess::firstRow(*v)==0&&
+        IntegrationAccess::selectedRow(*v)==0,
+        "expanded 16-row page initial state mismatch");
+  captureVstgui(*v,"sixteen-expanded-page-1",1.0);
+  click(*v,1045,54); // compact next-page arrow
+  check(IntegrationAccess::firstRow(*v)==8&&
+        IntegrationAccess::selectedRow(*v)==8,
+        "expanded page change failed to select visible instrument");
+  click(*v,UiRowControls::mute.left+10.,108.+12.);
+  check(f.c->isRowMuted(8)&&!f.c->isRowMuted(0),
+        "page two row hit targeted a different instrument");
+  captureVstgui(*v,"sixteen-expanded-page-2",1.0);
  }
  {
   Fixture f;f.kit(namedKit('X',4));f.open();
