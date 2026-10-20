@@ -297,10 +297,16 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       rowIndex<0||rowIndex>=static_cast<Steinberg::int64>(kRows)||
       gainValue<0||gainValue>200||panValue< -100||panValue>100)
       return Steinberg::kInvalidArgument;
-   rowGain_[static_cast<std::size_t>(rowIndex)].store(
-       static_cast<float>(gainValue)/100.f,std::memory_order_relaxed);
-   rowPan_[static_cast<std::size_t>(rowIndex)].store(
-       static_cast<float>(panValue)/100.f,std::memory_order_relaxed);
+   // Gain+Pan arrive in ONE RowMix message. Protect the pair against
+   // getState()/setState() snapshots; otherwise one project save can retain
+   // the new gain with the previous pan. The audio callback never locks.
+   {
+     std::lock_guard<std::mutex> guard(kitMutex_);
+     rowGain_[static_cast<std::size_t>(rowIndex)].store(
+         static_cast<float>(gainValue)/100.f,std::memory_order_relaxed);
+     rowPan_[static_cast<std::size_t>(rowIndex)].store(
+         static_cast<float>(panValue)/100.f,std::memory_order_relaxed);
+   }
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.RowGate")==0) {

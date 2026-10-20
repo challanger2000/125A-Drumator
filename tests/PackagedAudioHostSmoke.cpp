@@ -1810,6 +1810,48 @@ int main(int argc,char** argv) {
    ", Y="+std::to_string(yBlocks.load())+", gate silent="+std::to_string(gateSilent.load()));
  std::cout<<"T04 actual packaged audio: X="<<xBlocks<<" Y="<<yBlocks<<" gate-silent="<<gateSilent
           <<" total="<<audioBlocks<<"; 24 acknowledged restores PASS\n";
+ // T06: each RowMix message is one logical Gain+Pan transaction.
+ // Concurrent control-side project exports must never save hybrid pairs.
+ {
+   auto setPair=[&](int gain,int pan) {
+     HostMessage message;message.setMessageID("Drumator.RowMix");
+     auto* attr=message.getAttributes();
+     if(!attr||attr->setInt("Row",0)!=kResultOk||
+        attr->setInt("Gain",gain)!=kResultOk||
+        attr->setInt("Pan",pan)!=kResultOk)return false;
+     return processorPoint->notify(&message)==kResultOk;
+   };
+   require(setPair(42,-65),"T06 setup first gain/pan pair");
+   std::atomic<bool> completed{false},failed{false};
+   std::thread writer([&] {
+     for(int i=0;i<400;++i){
+       if(!setPair(i&1?42:180,i&1?-65:75)){
+         failed.store(true,std::memory_order_release);
+         break;
+       }
+     }
+     completed.store(true,std::memory_order_release);
+   });
+   unsigned exported=0;
+   do {
+     Steinberg::ResizableMemoryIBStream stream;
+     drumator::KitState state;
+     if(component->getState(&stream)!=kResultOk||
+        !drumator::KitCodec::decode(
+             static_cast<const std::uint8_t*>(stream.getData()),
+             static_cast<std::size_t>(stream.getCursor()),state)){
+       failed.store(true,std::memory_order_release);
+       break;
+     }
+     const bool A=state.gain[0]==42&&state.pan[0]==35;
+     const bool B=state.gain[0]==180&&state.pan[0]==175;
+     if(!A&&!B)failed.store(true,std::memory_order_release);
+     ++exported;
+   }while(!completed.load(std::memory_order_acquire)&&!failed.load(std::memory_order_acquire));
+   writer.join();
+   require(!failed.load()&&exported>0,"T06 torn RowMix gain/pan project snapshot");
+   std::cout<<"T06 concurrent RowMix paired-state export PASS\\n";
+ }
  runningKitState.rewind();
  require(component->setState(&runningKitState)==kResultOk,"T04 restore original fixture");
  // F07: reproduce a valid portable kit containing a hidden solo row.
