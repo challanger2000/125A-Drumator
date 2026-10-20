@@ -584,12 +584,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
-   const char* labels[]={"VOL","PAN","PITCH","RANDOM VEL."};
-   for(int k=0;k<4;++k){
+   const char* labels[]={"VOL","PAN","PITCH"};
+   for(int k=0;k<3;++k){
      const int lo=UiCompactLayout::minValue(k),hi=UiCompactLayout::maxValue(k);
      const int v=values[k];
      char desc[24]{};
-     if(k==0||k==3)std::snprintf(desc,sizeof(desc),"%d%%",v);
+     if(k==0)std::snprintf(desc,sizeof(desc),"%d%%",v);
      else if(k==1){
        if(v==0)std::snprintf(desc,sizeof(desc),"C");
        else std::snprintf(desc,sizeof(desc),"%c%d",v<0?'L':'R',std::abs(v));
@@ -597,6 +597,16 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      drawRotary(c,centers[k],y+68,
                 static_cast<double>(v-lo)/static_cast<double>(hi-lo),
                 labels[k],desc,chosen&&activeKnob_==k);
+   }
+   // Nonzero legacy realtime modulation remains visible and controllable.
+   if(controller_.rowRandomVelocity(row)>0){
+     char legacy[32]{};
+     std::snprintf(legacy,sizeof(legacy),"ALT RT %u%%",
+                   static_cast<unsigned>(controller_.rowRandomVelocity(row)));
+     drawRotary(c,centers[3],y+68,controller_.rowRandomVelocity(row)/100.,
+                "RANDOM RT",legacy,chosen&&activeKnob_==3);
+   }else{
+     drawControl(c,{448,y+52,544,y+84},"RANDOM VEL");
    }
    const auto steps=controller_.patternLength(controller_.currentPattern());
    for(std::size_t step=0;step<32;++step) {
@@ -1167,7 +1177,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        invalid();return done;
      }
    }
+   if(controller_.rowRandomVelocity(row)==0&&x>=448&&x<544&&
+      y>=top+52&&y<top+84){
+     if(!controller_.randomizeRowVelocity(row))
+       status_="RANDOM VEL: KEINE NOTEN ODER EDIT ABGELEHNT";
+     invalid();return done;
+   }
    for(int i=0;i<4;++i){
+     if(i==3&&controller_.rowRandomVelocity(row)==0)continue;
      const auto center=UiCompactLayout::rowKnobCenters[static_cast<std::size_t>(i)];
      if(x>=center-18.&&x<center+18.&&y>=top+51&&y<top+85){
        const int previous=i==0?static_cast<int>(controller_.rowGain(row)):
