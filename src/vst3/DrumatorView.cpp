@@ -647,7 +647,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
              velocityLaneOpen_);
  drawControl(c,{408,buttonsY+34,455,buttonsY+64},">");
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-    const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-230.0));
+    const double top=std::max(0.0,std::min(UiRowGeometry::rowTop(static_cast<std::size_t>(std::max(0,fillMenuRow_-static_cast<int>(firstRow_))),velocityLaneOpen_),getViewSize().getHeight()-230.0));
     const char* names[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HIHAT","GALOPP","SNARE + GHOST"};
     for(int i=0;i<9;++i){const double y=top+i*25.;drawControl(c,{650,y,819,y+24},names[i]);}
  }
@@ -767,7 +767,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
  if(fillMenuRow_>=0) {
-   const double top=std::max(0.0,std::min(kGridY+(fillMenuRow_-static_cast<int>(firstRow_))*kRowHeight,getViewSize().getHeight()-230.0));
+   const double top=std::max(0.0,std::min(UiRowGeometry::rowTop(static_cast<std::size_t>(std::max(0,fillMenuRow_-static_cast<int>(firstRow_))),velocityLaneOpen_),getViewSize().getHeight()-230.0));
    const int row=fillMenuRow_;
    fillMenuRow_=-1;
    if(x>=650&&x<819&&y>=top&&y<top+225) {
@@ -865,10 +865,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
  }
- if(y>=39&&y<69) {
+ if((y>=39&&y<69)||(y>=9&&y<34)) {
    double requested=0.;
-   if(x>=1070&&x<1127)requested=1.0;
-   else if(x>=1136&&x<1217)requested=1.5;
+   if(x>=1070&&x<1127)requested=y<34?1.2:1.0;
+   else if(x>=1136&&x<1217)requested=y<34?1.3:1.5;
    if(requested>0.) {
      if(static_cast<DrumatorEditor&>(editor_).setZoomChecked(requested))
        controller_.rememberZoom(requested);
@@ -877,7 +877,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
  }
- const double gridBottom=kGridY+displayedRows()*kRowHeight;
+ const double gridBottom=UiRowGeometry::gridBottom(displayedRows(),velocityLaneOpen_);
  const double actionsY=gridBottom+5.0;
  if(y>=actionsY+34&&y<actionsY+64&&x>=16&&x<266) {
    const bool previous=velocityLaneOpen_;
@@ -888,8 +888,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      velocityLaneOpen_=previous;
      compactViewport_=wasCompact;
      firstRow_=wasFirstRow;
+     (void)adjustEditorHeight();
      status_="HOST HAT FENSTERHOEHE FUER VELOCITY ABGELEHNT";
-   }else status_=velocityLaneOpen_?"VELOCITY-BALKEN SICHTBAR":"VELOCITY-BALKEN AUS";
+   }else status_=velocityLaneOpen_?"VELOCITY PRO ZEILE SICHTBAR":"VELOCITY AUS";
    invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
@@ -903,20 +904,23 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    invalid();
    return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
- if(velocityLaneOpen_&&!songEditorOpen_&&
-    VelocityLane::hit(x,y,gridBottom)) {
-    laneDragPattern_=controller_.currentPattern();
-    controller_.beginVelocityStroke(laneDragPattern_);
-    laneDragGeneration_=controller_.editGeneration();
-    laneDragActive_=true;
-    laneErase_=(buttons&VSTGUI::kControl)!=0;
-    const auto step=static_cast<std::size_t>(VelocityLane::stepAt(x));
-    velocityStep_=step;
-    const auto vel=VelocityLane::valueAt(y,gridBottom,laneErase_);
-    if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,step,vel))
-      status_="VELOCITY-BALKEN NICHT UEBERNOMMEN";
-    invalid();
-    return VSTGUI::kMouseEventHandled;
+ if(velocityLaneOpen_&&!songEditorOpen_) {
+   const auto index=UiRowGeometry::rowAt(y,displayedRows(),true);
+   if(index<displayedRows()&&UiRowGeometry::velocityHit(x,y,index)) {
+     velocityRow_=firstRow_+index;
+     laneDragPattern_=controller_.currentPattern();
+     controller_.beginVelocityStroke(laneDragPattern_);
+     laneDragGeneration_=controller_.editGeneration();
+     laneDragActive_=true;
+     laneErase_=(buttons&VSTGUI::kControl)!=0;
+     const auto step=static_cast<std::size_t>(UiRowGeometry::stepAt(x));
+     velocityStep_=step;
+     if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,step,
+          UiRowGeometry::velocityAt(y,index,laneErase_)))
+       status_="VELOCITY-BALKEN NICHT UEBERNOMMEN";
+     invalid();
+     return VSTGUI::kMouseEventHandled;
+   }
  }
  if(y>=actionsY+34&&y<actionsY+64&&x>=916&&x<1220){
    int delta=0;
@@ -985,8 +989,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    }
  }
- if(y>=kGridY&&y<kGridY+displayedRows()*kRowHeight) {
-   const auto row=firstRow_+static_cast<std::size_t>((y-kGridY)/kRowHeight);
+ if(y>=kGridY&&y<gridBottom) {
+   const auto index=UiRowGeometry::rowAt(y,displayedRows(),velocityLaneOpen_);
+   if(index>=displayedRows()||!UiRowGeometry::mainHit(y,index,velocityLaneOpen_))
+     return VSTGUI::kMouseEventNotHandled;
+   const auto row=firstRow_+index;
    if(x>=16&&x<48) {
      fillMenuRow_=static_cast<int>(row);
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
@@ -1082,11 +1089,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
    controller_.endVelocityStroke(true);
    return VSTGUI::kMouseEventHandled;
  }
- const double bottom=kGridY+displayedRows()*kRowHeight;
- const auto step=VelocityLane::stepAt(pos.x);
- if(step<0||!velocityLaneOpen_||songEditorOpen_)
+ const auto step=UiRowGeometry::stepAt(pos.x);
+ if(step<0||!velocityLaneOpen_||songEditorOpen_||
+    velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
    return VSTGUI::kMouseEventHandled;
- const auto mapped=VelocityLane::valueAt(pos.y,bottom,laneErase_);
+ const auto mapped=UiRowGeometry::velocityAt(pos.y,velocityRow_-firstRow_,laneErase_);
  velocityStep_=static_cast<std::size_t>(step);
  if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,
                                  velocityStep_,mapped))
