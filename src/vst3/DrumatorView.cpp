@@ -575,7 +575,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
-   const char* labels[]={"VOL","PAN","PITCH","RANDOM"};
+   const char* labels[]={"VOL","PAN","PITCH","RANDOM VEL."};
    for(int k=0;k<4;++k){
      const int lo=UiCompactLayout::minValue(k),hi=UiCompactLayout::maxValue(k);
      const int v=values[k];
@@ -1022,7 +1022,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       const auto step=UiCompactLayout::stepAt(x);
       if(step>=0) {
         if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
-          status_="STEP AUSSERHALB DER PATTERN-LAENGE: 2 TAKTE WAEHLEN";
+          status_="STEPS 17-32: 2 TAKTE WAEHLEN";
           invalid();return done;
         }
         velocityRow_=row;velocityStep_=static_cast<std::size_t>(step);
@@ -1093,7 +1093,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      const auto step=UiCompactLayout::stepAt(x);
      if(step>=0){
        if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
-         status_="STEP AUSSERHALB DER PATTERN-LAENGE: 2 TAKTE WAEHLEN";
+         status_="STEPS 17-32: 2 TAKTE WAEHLEN";
          invalid();return done;
        }
        velocityStep_=static_cast<std::size_t>(step);
