@@ -1,4 +1,5 @@
 #include "core/AtomicPatternBank.h"
+#include "core/AtomicPatternSelection.h"
 #include "core/StepVelocity.h"
 #include "core/RowFill.h"
 #include "core/RowMixControl.h"
@@ -94,6 +95,27 @@ int main(){
   auto invalid=stored;invalid.back()=255;
   check(!restored.restore(invalid.data(),invalid.size()),"invalid grid accepted");
   check(restored.snapshot()==stored,"invalid restore changed live grid");
+  // Host automation must outrank kit restore even for ABA/same-value events.
+  {
+    AtomicPatternSelection selection;
+    selection.store(2);
+    const auto before=selection.snapshot();
+    selection.hostSubmit(2); // same visible selection, new event generation
+    selection.restoreIfUnchanged(before,6);
+    check(selection.load()==2,"same-value host event overwritten by kit restore");
+    const auto aba=selection.snapshot();
+    selection.hostSubmit(5);
+    selection.hostSubmit(2);
+    selection.restoreIfUnchanged(aba,7);
+    check(selection.load()==2,"A-B-A host events overwritten by kit restore");
+    const auto clean=selection.snapshot();
+    selection.restoreIfUnchanged(clean,4);
+    check(selection.load()==4,"uncontested kit restore did not select kit pattern");
+    const auto contested=selection.snapshot();
+    selection.hostSubmit(1);
+    selection.restoreIfUnchanged(contested,3);
+    check(selection.load()==1,"new host automation lost to kit restore");
+  }
   // Simulate control and realtime readers with guaranteed atomic access.
   std::atomic<bool> stop{false};
   std::thread writer([&]{
