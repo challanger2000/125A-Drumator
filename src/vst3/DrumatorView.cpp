@@ -386,9 +386,9 @@ bool DrumatorView::changeDetailValue(std::size_t row,int slot,int requested) {
                                static_cast<int>(controller_.rowRandomVelocity(row)));
    case 4: {
      for(int i=0;i<4;++i) {
-       const int current=static_cast<int>(controller_.rowChoke(row));
-       if(current==requested)return true;
-       if(!controller_.cycleRowChoke(row,requested>current?1:-1))return false;
+       const int currentChoke=static_cast<int>(controller_.rowChoke(row));
+       if(currentChoke==requested)return true;
+       if(!controller_.cycleRowChoke(row,requested>currentChoke?1:-1))return false;
      }
      return controller_.rowChoke(row)==static_cast<unsigned>(requested);
    }
