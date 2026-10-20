@@ -436,7 +436,9 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  for(std::size_t row=0;row<kRows;++row)voices_.setRow(row,RowSound{});
  // Deliberately silent until a real user sample was actually accepted.
  // No hidden synthesized kick to confuse failed import with working audio.
- if(!voices_.setOutputRate(setup.sampleRate))return Steinberg::kResultFalse;
+ if(!voices_.setOutputRate(setup.sampleRate)||
+    !masterRamp_.prepare(setup.sampleRate))return Steinberg::kResultFalse;
+ masterRamp_.reset(masterVolume_.load(std::memory_order_relaxed)/100.f);
  if(!patternTimeline_.configure(static_cast<std::size_t>(setup.maxSamplesPerBlock)))
    return Steinberg::kOutOfMemory;
  prepared_=true;
@@ -757,15 +759,20 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
  const float master=static_cast<float>(masterVolume_.load(std::memory_order_relaxed))/100.f;
- if(master!=1.f){
-   for(Steinberg::int32 bus=0;bus<data.numOutputs;++bus){
-     auto& outputBus=data.outputs[bus];
-     if(!outputBus.channelBuffers32)continue;
-     for(Steinberg::int32 channel=0;channel<outputBus.numChannels;++channel){
-       auto* buffer=outputBus.channelBuffers32[channel];
-       if(!buffer)continue;
-       for(Steinberg::int32 frame=0;frame<data.numSamples;++frame)
-         buffer[frame]*=master;
+ masterRamp_.request(master);
+ // MAIN and every active stem share one sample envelope, regardless of bus
+ // count. At the usual 100% setting this path avoids all extra channel loops.
+ if(!masterRamp_.settledAtUnity()){
+   for(Steinberg::int32 frame=0;frame<data.numSamples;++frame){
+     const float gain=masterRamp_.next();
+     if(gain==1.f)continue;
+     for(Steinberg::int32 bus=0;bus<data.numOutputs;++bus){
+       const auto& outputBus=data.outputs[bus];
+       if(!outputBus.channelBuffers32)continue;
+       for(Steinberg::int32 channel=0;channel<outputBus.numChannels;++channel){
+         auto* buffer=outputBus.channelBuffers32[channel];
+         if(buffer)buffer[frame]*=gain;
+       }
      }
    }
  }
@@ -900,6 +907,8 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     swingPercent_.store(kit_.swing,std::memory_order_relaxed);
     humanizePercent_.store(kit_.humanize,std::memory_order_relaxed);
     masterVolume_.store(kit_.masterVolume,std::memory_order_relaxed);
+    // Host project recall is immediate; the restore gate has quiesced audio.
+    masterRamp_.reset(static_cast<float>(kit_.masterVolume)/100.f);
     for(std::size_t row=0;row<kRows;++row)
        randomVelocity_[row].store(kit_.randomVelocity[row],std::memory_order_relaxed);
     for(std::size_t row=0;row<kRows;++row){rowChoke_[row].store(kit_.choke[row]);rowOutput_[row].store(kit_.output[row]);}

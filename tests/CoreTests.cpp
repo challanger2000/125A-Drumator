@@ -1,4 +1,5 @@
 #include "core/SequencerCore.h"
+#include "core/MasterGainRamp.h"
 #include "core/RowFill.h"
 #include "core/PatternOperations.h"
 #include "core/SongChain.h"
@@ -9,6 +10,8 @@
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
+#include <cmath>
+#include <limits>
 #include <vector>
 using namespace drumator;
 static void check(bool ok,const char* msg){if(!ok)throw std::runtime_error(msg);}
@@ -27,6 +30,45 @@ static std::vector<Trigger> get(const PatternBank& b,Clock t,
 }
 int main(){
  try {
+  // G01: 5ms master fade is monotonic, bounded and block-invariant.
+  for(const double rate:{44100.,48000.,96000.}) {
+    MasterGainRamp whole,split;
+    check(whole.prepare(rate)&&split.prepare(rate),"G01 valid rate");
+    whole.reset(1.f);split.reset(1.f);
+    whole.request(2.f);split.request(2.f);
+    const int length=static_cast<int>(std::ceil(rate*MasterGainRamp::kTransitionSeconds));
+    std::vector<float> reference,partitioned;
+    for(int i=0;i<length+256;++i)reference.push_back(whole.next());
+    for(int i=0;i<length+256;) {
+      const int frames=std::min(127,length+256-i);
+      for(int j=0;j<frames;++j)partitioned.push_back(split.next());
+      i+=frames;
+    }
+    check(reference.size()==partitioned.size(),"G01 frame count");
+    for(std::size_t i=0;i<reference.size();++i) {
+      check(std::abs(reference[i]-partitioned[i])<1.e-7f,
+            "G01 master depends on host block partition");
+      if(i>0)check(reference[i]>=reference[i-1]&&
+                   reference[i]-reference[i-1]<=1.1f/length,
+                   "G01 discontinuous/overshooting gain");
+    }
+    check(reference.back()==2.f,"G01 maximum");
+    whole.request(0.f);
+    check(whole.next()>1.9f,"G01 hard jump after parameter change");
+    for(int i=1;i<length;++i)whole.next();
+    check(whole.next()==0.f,"G01 zero endpoint");
+    whole.request(2.f);
+    for(int i=0;i<length/2;++i)whole.next();
+    const float midpoint=whole.next();
+    whole.request(1.f);
+    check(std::abs(whole.next()-midpoint)<2.f/length,
+          "G01 mid-ramp automation created click");
+  }
+  { MasterGainRamp invalid;
+    check(!invalid.prepare(0.)&&
+          !invalid.prepare(std::numeric_limits<double>::quiet_NaN()),
+          "G01 invalid sample rate accepted");
+  }
   // B04: every instrument remains reachable when the host rejects resize.
   for(std::size_t total=1;total<=16;++total) {
     std::array<bool,16> visited{};

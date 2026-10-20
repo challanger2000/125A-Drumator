@@ -329,6 +329,24 @@ int main(int argc,char** argv) {
  require(setMaster(201)!=kResultOk&&setMaster(-1)!=kResultOk,
          "Master volume accepted invalid percent");
  verifyMaster(100,-.5);
+ // G02: live global gain edits do not hard-jump an active long sample.
+ for(int i=0;i<5;++i)run(-1); // drain the previous amplitude fixture
+ run(36); // original 1,024-frame constant PCM WAV, 256 frames played
+ require(setMaster(200)==kResultOk,"G02 master up");
+ run(-1);
+ require(left[0]<-.49f&&left[0]>-.53f&&left[250]<-.97f&&left[250]>-1.03f,
+         "G02 jumped immediately instead of de-clicking up");
+ for(int i=1;i<240;++i)
+   require(std::abs(left[i]-left[i-1])<.015f,"G02 upward gain discontinuity");
+ require(setMaster(0)==kResultOk,"G02 master down");
+ run(-1);
+ require(left[0]<-.97f&&left[0]>-1.03f&&std::abs(left[250])<.001f,
+         "G02 missing master down fade");
+ for(int i=1;i<240;++i)
+   require(std::abs(left[i]-left[i-1])<.015f,"G02 downward gain discontinuity");
+ require(setMaster(100)==kResultOk,"G02 return to unity");
+ for(int i=0;i<12;++i)run(-1);
+ std::cout<<"G02 packaged VST3 master de-click up/down PASS\\n";
  // M18 packaged host: verify actual per-row mix, not only core math.
  auto rowMix=[&](int gain,int pan)->tresult {
    HostMessage msg;msg.setMessageID("Drumator.RowMix");
