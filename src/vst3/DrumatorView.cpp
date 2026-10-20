@@ -791,45 +791,114 @@ void DrumatorView::load(std::size_t row) {
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
- if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const double x=pos.x,y=pos.y;
- if(fillMenuRow_>=0) {
-   const double top=std::max(0.0,std::min(UiRowGeometry::rowTop(static_cast<std::size_t>(std::max(0,fillMenuRow_-static_cast<int>(firstRow_))),velocityLaneOpen_),getViewSize().getHeight()-230.0));
-   const int row=fillMenuRow_;
-   fillMenuRow_=-1;
-   if(x>=650&&x<819&&y>=top&&y<top+225) {
-     const int option=static_cast<int>((y-top)/25.);
-     const RowFill items[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,RowFill::Snare24,RowFill::All,RowFill::Clear,RowFill::Offbeat8,RowFill::Gallop,RowFill::SnareGhost};
-     if(option>=0&&option<9&&!controller_.fillRow(static_cast<std::size_t>(row),items[option]))
-       status_="FILL NICHT UEBERNOMMEN";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
+ const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ // Popups are modal: clicking outside dismisses them without changing a step.
+ if(popup_!=0){
+   const int kind=popup_;
+   const auto target=popupRow_;
+   popup_=0;popupRow_=kRows;
+   bool acted=false,ok=true;
+   if(kind==1&&x>=1120&&x<1250&&y>=39&&y<159) {
+      const auto option=static_cast<std::size_t>((y-39)/30.);
+      if(option<UiCompactLayout::userZooms.size()) {
+        const auto factor=UiCompactLayout::userZooms[option];
+        if(static_cast<DrumatorEditor&>(editor_).setZoomChecked(factor))
+          controller_.rememberZoom(factor);
+        else {status_="HOST HAT ZOOM ABGELEHNT";ok=false;}
+        acted=true;
+      }
+   }else if(kind==2&&x>=782&&x<968&&y>=86&&y<268) {
+      const int idx=static_cast<int>((y-86)/26.);
+      if(idx>=0&&idx<7){
+        const auto pattern=controller_.currentPattern();
+        ok=idx==0?controller_.togglePatternLength(pattern):
+            idx==1?controller_.copyCurrentPattern():
+            idx==2?controller_.pasteCurrentPattern():
+            idx==3?controller_.clearCurrentPattern():
+            idx==4?controller_.undoCurrentPattern():
+            idx==5?controller_.varyPatternVelocity():
+                   controller_.resetPatternVelocity();
+        acted=true;
+      }
+   }else if(kind==3&&target<controller_.visibleRows()){
+      const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
+                                getViewSize().getHeight()-210.);
+      if(x>=413&&x<613&&y>=top&&y<top+200.){
+        const int col=x>=515?1:0;
+        const int cell=static_cast<int>((y-top)/25.);
+        if(cell>=0&&cell<8) {
+          const auto selected=static_cast<unsigned>(col*8+cell);
+          ok=controller_.setRowOutput(target,selected);acted=true;
+        }
+      }
+   }else if(kind==4&&target<controller_.visibleRows()){
+      const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
+                                getViewSize().getHeight()-145.);
+      if(x>=515&&x<615&&y>=top&&y<top+135.){
+        const int cell=static_cast<int>((y-top)/27.);
+        if(cell>=0&&cell<5) {
+          ok=controller_.setRowChoke(target,static_cast<unsigned>(cell));acted=true;
+        }
+      }
    }
-   invalid();
-   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(acted&&!ok)status_="AUSWAHL VOM PROZESSOR / HOST ABGELEHNT";
+   invalid();return done;
  }
-
- if(compactViewport_&&y>=39&&y<69&&x>=1005&&x<1060) {
-   if(x<1032)firstRow_=firstRow_>=compactPageRows_?firstRow_-compactPageRows_:0;
-   else if(firstRow_+compactPageRows_<controller_.visibleRows())
-     firstRow_+=compactPageRows_;
-   if(velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
-     velocityRow_=firstRow_;
-   fillMenuRow_=-1;invalid();
-   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ if(fillMenuRow_>=0) {
+   const auto target=static_cast<std::size_t>(fillMenuRow_);
+   fillMenuRow_=-1;
+   if(target>=firstRow_&&target<firstRow_+displayedRows()){
+     const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
+                               getViewSize().getHeight()-230.);
+     if(x>=405&&x<614&&y>=top&&y<top+225.){
+       const auto selected=static_cast<std::size_t>((y-top)/25.);
+       constexpr RowFill fills[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,
+           RowFill::Snare24,RowFill::All,RowFill::Clear,RowFill::Offbeat8,
+           RowFill::Gallop,RowFill::SnareGhost};
+       if(selected<9&&!controller_.fillRow(target,fills[selected]))
+          status_="FILL NICHT UEBERNOMMEN";
+     }
+   }
+   invalid();return done;
  }
- if(UiHeaderHitZones::masterMinus(x,y)||UiHeaderHitZones::masterPlus(x,y)){
-   const int amount=(buttons&VSTGUI::kControl)?
-     100-static_cast<int>(controller_.masterVolume()):
-     (UiHeaderHitZones::masterMinus(x,y)?-5:5);
-   if(!controller_.adjustMasterVolume(amount))status_="MASTER LEVEL NICHT UEBERNOMMEN";
-   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ // Global controls: Rotary, direct pattern buttons, Song and two menus.
+ if(x>=1120&&x<1250&&y>=7&&y<35){popup_=1;invalid();return done;}
+ if(x>=782&&x<901&&y>=52&&y<82){popup_=2;invalid();return done;}
+ if(x>=910&&x<991&&y>=52&&y<82) {
+   if(!controller_.toggleSongMode())status_="SONG-MODUS NICHT UEBERNOMMEN";
+   invalid();return done;
  }
- if(UiHeaderHitZones::songToggle(x,y)||UiHeaderHitZones::songEditor(x,y)) {
-   bool ok=true;
-   if(UiHeaderHitZones::songToggle(x,y))ok=controller_.toggleSongMode();
-   else {songEditorOpen_=!songEditorOpen_;if(songEditorOpen_)adjustEditorHeight();}
-   if(!ok)status_="SONG-MODUS NICHT UEBERNOMMEN";
-   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ if(x>=998&&x<1098&&y>=52&&y<82) {
+   songEditorOpen_=!songEditorOpen_;
+   if(songEditorOpen_)adjustEditorHeight();
+   invalid();return done;
+ }
+ if(y>=kPatternY&&y<kPatternY+30&&x>=kPatternX&&x<kPatternX+8*kPatternWidth){
+   const auto idx=static_cast<std::size_t>((x-kPatternX)/kPatternWidth);
+   if(x>=kPatternX+idx*kPatternWidth+49.)return VSTGUI::kMouseEventNotHandled;
+   const bool ok=(buttons&VSTGUI::kShift)?
+      controller_.togglePatternLength(idx):controller_.changePattern(idx);
+   if(!ok)status_="PATTERN NICHT UEBERNOMMEN";
+   invalid();return done;
+ }
+ for(int i=4;i<=6;++i){
+   const auto center=UiCompactLayout::globalKnobCenters[static_cast<std::size_t>(i-4)];
+   if(x>=center-18.&&x<center+18.&&y>=59&&y<94) {
+      const int previous=i==4?static_cast<int>(controller_.swingPercent()):
+                         i==5?static_cast<int>(controller_.humanizePercent()):
+                              static_cast<int>(controller_.masterVolume());
+      if((buttons&VSTGUI::kControl)||(buttons&VSTGUI::kDoubleClick)) {
+        if(previous!=UiCompactLayout::defaultValue(i)&&
+           !changeKnobValue(i,0,UiCompactLayout::defaultValue(i)))
+           status_="REGLER RESET NICHT UEBERNOMMEN";
+        invalid();return done;
+      }
+      activeKnob_=i;knobRow_=kRows;knobStartY_=y;knobStartValue_=previous;
+      knobGeneration_=controller_.editGeneration();
+      invalid();return VSTGUI::kMouseEventHandled;
+   }
  }
  if(songEditorOpen_&&y>=101) {
    bool ok=true;
@@ -869,255 +938,142 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(!ok)status_="SONG-EINTRAG NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
- if(y>=74&&y<98&&x>=448&&x<505) {
-   if(!controller_.adjustHumanize((buttons&VSTGUI::kControl)?
-                                   -static_cast<int>(controller_.humanizePercent()):
-                                   (x<477?-10:10)))
-      status_="HUMANIZE NICHT UEBERNOMMEN";
-   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
- }
- if(y>=74&&y<98&&x>=185&&x<244) {
-   if(!controller_.adjustSwing((buttons&VSTGUI::kControl)?
-                                 -static_cast<int>(controller_.swingPercent()):
-                                 (x<214?-5:5)))status_="SWING NICHT UEBERNOMMEN";
-   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
- }
- if(y>=kHeaderY&&y<kHeaderY+30) {
-   if(x>=kPatternX&&x<kPatternX+8*kPatternWidth) {
-     const auto index=static_cast<std::size_t>((x-kPatternX)/kPatternWidth);
-     if(x>=kPatternX+index*kPatternWidth+54.0)
-       return VSTGUI::kMouseEventNotHandled;
-     const bool ok=(buttons&VSTGUI::kShift)?
-       controller_.togglePatternLength(index):controller_.changePattern(index);
-     if(!ok)status_="PATTERNLAENGE NICHT UEBERNOMMEN";
-     invalid();
-     return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
- }
- if((y>=39&&y<69)||(y>=9&&y<34)) {
-   double requested=0.;
-   if(x>=1070&&x<1127)requested=y<34?1.2:1.0;
-   else if(x>=1136&&x<1217)requested=y<34?1.3:1.5;
-   if(requested>0.) {
-     if(static_cast<DrumatorEditor&>(editor_).setZoomChecked(requested))
-       controller_.rememberZoom(requested);
-     else status_="HOST HAT ZOOM ABGELEHNT";
-     invalid();
-     return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
- }
- const double gridBottom=UiRowGeometry::gridBottom(displayedRows(),velocityLaneOpen_);
- const double actionsY=gridBottom+5.0;
- if(y>=actionsY+34&&y<actionsY+64&&x>=16&&x<266) {
-   const bool previous=velocityLaneOpen_;
-   const bool wasCompact=compactViewport_;
-   const auto wasFirstRow=firstRow_;
-   velocityLaneOpen_=!previous;
-   if(!adjustEditorHeight()){
-     velocityLaneOpen_=previous;
-     compactViewport_=wasCompact;
-     firstRow_=wasFirstRow;
-     (void)adjustEditorHeight();
-     status_="HOST HAT FENSTERHOEHE FUER VELOCITY ABGELEHNT";
-   }else status_=velocityLaneOpen_?"VELOCITY PRO ZEILE SICHTBAR":"VELOCITY AUS";
-   invalid();
-   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
- }
- if(y>=actionsY+34&&y<actionsY+64&&x>=280&&x<455) {
-   velocityRow_=std::min(velocityRow_,controller_.visibleRows()-1);
-   if(x<324) {
-     if(velocityRow_>0)--velocityRow_;
-   }else if(x>=408) {
-     if(velocityRow_+1<controller_.visibleRows())++velocityRow_;
-   }
-   invalid();
-   return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
- }
- if(velocityLaneOpen_&&!songEditorOpen_) {
-   const auto index=UiRowGeometry::rowAt(y,displayedRows(),true);
-   if(index<displayedRows()&&UiRowGeometry::velocityHit(x,y,index)) {
-     velocityRow_=firstRow_+index;
-     laneDragPattern_=controller_.currentPattern();
-     controller_.beginVelocityStroke(laneDragPattern_);
-     laneDragGeneration_=controller_.editGeneration();
-     laneDragActive_=true;
-     laneErase_=(buttons&VSTGUI::kControl)!=0;
-     const auto step=static_cast<std::size_t>(UiRowGeometry::stepAt(x));
-     velocityStep_=step;
-     if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,step,
-          UiRowGeometry::velocityAt(y,index,laneErase_)))
-       status_="VELOCITY-BALKEN NICHT UEBERNOMMEN";
-     invalid();
-     return VSTGUI::kMouseEventHandled;
-   }
- }
- const auto detailSlot=UiDetailGeometry::controlAt(x,y,gridBottom);
- if(detailSlot>=0&&!songEditorOpen_) {
-   const auto index=static_cast<std::size_t>(detailSlot);
-   const auto row=std::min(velocityRow_,controller_.visibleRows()-1);
-   const int lows[]={0,-100,-24,0,0},highs[]={200,100,24,100,4};
-   const int defaults[]={100,0,0,0,0},steps[]={10,10,1,10,1};
-   const int existing=detailSlot==0?static_cast<int>(controller_.rowGain(row)):
-       detailSlot==1?controller_.rowPan(row):
-       detailSlot==2?controller_.rowPitch(row):
-       detailSlot==3?static_cast<int>(controller_.rowRandomVelocity(row)):
-           static_cast<int>(controller_.rowChoke(row));
-   const auto action=UiDetailGeometry::actionAt(x,detailSlot);
-   const bool reset=(buttons&VSTGUI::kControl)!=0;
-   int next=reset?defaults[index]:existing;
-   if(!reset&&action==UiDetailGeometry::Action::Absolute)
-     next=UiDetailGeometry::absoluteAt(x,detailSlot,lows[index],highs[index]);
-   else if(!reset&&action==UiDetailGeometry::Action::Increment)
-     next=std::min(highs[index],existing+steps[index]);
-   else if(!reset&&action==UiDetailGeometry::Action::Decrement)
-     next=std::max(lows[index],existing-steps[index]);
-   if(next!=existing&&!changeDetailValue(row,detailSlot,next))
-     status_="KLANGREGLER: AENDERUNG VOM PROZESSOR ABGELEHNT";
-   if(!reset&&action==UiDetailGeometry::Action::Absolute) {
-     detailDragControl_=detailSlot;
-     detailDragRow_=row;
-     invalid();return VSTGUI::kMouseEventHandled;
-   }
-   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
- }
- if(y>=actionsY+34&&y<actionsY+64&&x>=916&&x<1220){
-   int delta=0;
-   if(x<986)delta=-10;
-   else if(x>=994&&x<1064)delta=-1;
-   else if(x>=1072&&x<1142)delta=1;
-   else if(x>=1150)delta=10;
-   if(delta!=0){
-     const auto original=static_cast<int>(controller_.velocity(
-         controller_.currentPattern(),velocityRow_,velocityStep_));
-     const auto next=static_cast<std::uint8_t>(std::clamp(original+delta,1,127));
-     if(!controller_.setStepVelocity(controller_.currentPattern(),velocityRow_,velocityStep_,next))
-       status_="STEP-VELOCITY NICHT UEBERNOMMEN";
-   }
-   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
- }
- if(y>=actionsY&&y<actionsY+29) {
-   if(x>=844&&x<1220){
-     const bool ok=x<1014?controller_.varyPatternVelocity():
-                            (x>=1024?controller_.resetPatternVelocity():false);
-     if(!ok&&x>=1014&&x<1024)return VSTGUI::kMouseEventNotHandled;
-      if(!ok)status_="VELOCITY-AKTION NICHT UEBERNOMMEN";
-     else status_=x<1014?"AKTIVE STEPS: VELOCITY VARIIERT":"AKTIVE STEPS: VELOCITY 100";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(x>=480&&x<835) {
-     const int action=static_cast<int>((x-480)/90.);
-     if(action>=0&&action<4&&x<480+action*90.+85) {
-       const bool ok=action==0?controller_.copyCurrentPattern():
-          action==1?controller_.pasteCurrentPattern():
-          action==2?controller_.clearCurrentPattern():
-                    controller_.undoCurrentPattern();
-       status_=ok?(action==3?"LETZTE PATTERN-AKTION RUECKGAENGIG":
-                     "PATTERN-AKTION ERFOLGREICH"):"PATTERN-AKTION NICHT MOEGLICH";
-       invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-     }
-   }
-   if(x>=16&&x<=213) {
-     if(controller_.visibleRows()>=kRows)
-       status_="MAXIMAL 16 ZEILEN";
+
+ const double bottom=gridBottom();
+ if(y>=bottom+5&&y<bottom+34){
+   if(x>=16&&x<65){
+     if(controller_.visibleRows()>=kRows)status_="MAXIMAL 16 INSTRUMENTE";
      else {
-       const auto previous=controller_.visibleRows();
+       const auto count=controller_.visibleRows();
        const auto result=tryRowResizeTransaction(
-           [&](){return controller_.addRow();},
-           [&](){return adjustEditorHeight();},
-           [&](){return controller_.restoreVisibleRows(previous);});
-       if(result==RowResizeResult::EditRejected)
-         status_="INSTRUMENT KONNTE NICHT HINZUGEFUEGT WERDEN";
-       else if(result==RowResizeResult::RollbackFailed)
-         status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
+          [&](){return controller_.addRow();},
+          [&](){return adjustEditorHeight();},
+          [&](){return controller_.restoreVisibleRows(count);});
+       if(result!=RowResizeResult::Accepted)status_="ZEILE KONNTE NICHT HINZUGEFUEGT WERDEN";
      }
-     invalid();
-     return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+     invalid();return done;
    }
-   if(x>=226&&x<=266) {
-     const auto previous=controller_.visibleRows();
+   if(x>=73&&x<122){
+     const auto count=controller_.visibleRows();
      const auto result=tryRowResizeTransaction(
-         [&](){return controller_.hideLastEmptyRow();},
-         [&](){return adjustEditorHeight();},
-         [&](){return controller_.restoreVisibleRows(previous);});
-     if(result==RowResizeResult::EditRejected)
-       status_="ZEILE ENTHAELT STEPS/SAMPLE - NICHT ENTFERNBAR";
-     else if(result==RowResizeResult::RollbackFailed)
-       status_="ZEILEN-ROLLBACK FEHLGESCHLAGEN";
-     invalid();
-     return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+        [&](){return controller_.hideLastEmptyRow();},
+        [&](){return adjustEditorHeight();},
+        [&](){return controller_.restoreVisibleRows(count);});
+     if(result!=RowResizeResult::Accepted)
+       status_="NUR LEERE LETZTE ZEILE ENTFERNBAR";
+     invalid();return done;
+   }
+   if(controller_.visibleRows()>UiCompactLayout::perPage&&x>=1068&&x<1229){
+     const auto previous=firstRow_;
+     if(x<1145)firstRow_=firstRow_>=UiCompactLayout::perPage?
+        firstRow_-UiCompactLayout::perPage:0;
+     else if(x>=1152&&firstRow_+UiCompactLayout::perPage<controller_.visibleRows())
+        firstRow_+=UiCompactLayout::perPage;
+     if(firstRow_!=previous) {
+       if(velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
+         velocityRow_=firstRow_;
+       closeTransientMenus();
+       if(!adjustEditorHeight()){firstRow_=previous;(void)adjustEditorHeight();}
+     }
+     invalid();return done;
    }
  }
- if(y>=kGridY&&y<gridBottom) {
-   const auto index=UiRowGeometry::rowAt(y,displayedRows(),velocityLaneOpen_);
-   if(index>=displayedRows()||!UiRowGeometry::mainHit(y,index,velocityLaneOpen_))
-     return VSTGUI::kMouseEventNotHandled;
-   const auto row=firstRow_+index;
-   if(velocityRow_!=row){velocityRow_=row;invalid();}
-   if(UiRowControls::hit(UiRowControls::fill,x)) {
-     fillMenuRow_=static_cast<int>(row);
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ if(y>=kGridY&&y<bottom&&!songEditorOpen_){
+   const auto idx=UiCompactLayout::rowAt(y,firstRow_,displayedRows(),velocityExpanded_);
+   if(idx>=displayedRows())return VSTGUI::kMouseEventNotHandled;
+   const auto row=firstRow_+idx;
+   const auto top=rowTopOnPage(idx);
+   if(velocityExpanded_[row]&&UiCompactLayout::velocityHit(y,top)) {
+      const auto step=UiCompactLayout::stepAt(x);
+      if(step>=0) {
+        velocityRow_=row;velocityStep_=static_cast<std::size_t>(step);
+        laneDragPattern_=controller_.currentPattern();
+        laneDragGeneration_=controller_.editGeneration();
+        controller_.beginVelocityStroke(laneDragPattern_);
+        laneDragActive_=true;laneErase_=(buttons&VSTGUI::kControl)!=0;
+        if(!controller_.setStepVelocity(laneDragPattern_,row,velocityStep_,
+               UiCompactLayout::velocityAt(y,top,laneErase_)))
+          status_="VELOCITY NICHT UEBERNOMMEN";
+        invalid();return VSTGUI::kMouseEventHandled;
+      }
+      return done;
    }
-   if(UiRowControls::hit(UiRowControls::volume,x)||
-      UiRowControls::hit(UiRowControls::pan,x)||
-      UiRowControls::hit(UiRowControls::pitch,x)) {
-     const int slot=UiRowControls::hit(UiRowControls::pitch,x)?2:
-         UiRowControls::hit(UiRowControls::pan,x)?1:0;
-     const auto zone=slot==2?UiRowControls::pitch:
-         slot==1?UiRowControls::pan:UiRowControls::volume;
-     const auto control=slot==2?RowControl::Pitch:
-         slot==1?RowControl::Pan:RowControl::Volume;
-     const int current=slot==2?controller_.rowPitch(row):
-         slot==1?controller_.rowPan(row):static_cast<int>(controller_.rowGain(row));
-     const int target=rowControlNext(control,current,x<UiRowControls::mid(zone)?-1:1,
-                                   (buttons&VSTGUI::kControl)!=0);
-     if(current!=target&&!changeDetailValue(row,slot,target))
-       status_="KLANGREGLER NICHT UEBERNOMMEN";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(!UiCompactLayout::mainHit(y,top))return done;
+   if(x>=16&&x<74) {
+     velocityRow_=row;status_="INSTRUMENT AUSGEWAEHLT";
+     invalid();return done;
    }
-   if(UiRowControls::hit(UiRowControls::mute,x)) {
-     if(!controller_.toggleRowGate(row,false))status_="MUTE NICHT UEBERNOMMEN";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiCompactLayout::hit(x,UiCompactLayout::velocityToggle)&&
+      y>=top+45&&y<top+79){
+     velocityRow_=row;
+     (void)toggleRowVelocity(row);invalid();return done;
    }
-   if(UiRowControls::hit(UiRowControls::solo,x)) {
-     if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(UiRowControls::hit(UiRowControls::previous,x)||
-      UiRowControls::hit(UiRowControls::next,x)) {
-     const auto direction=UiRowControls::hit(UiRowControls::previous,x)?-1:1;
-     const auto result=controller_.stepSample(row,direction);
-     status_=result==Controller::LoadStatus::Accepted?"SAMPLE GEWECHSELT":
-                                                   "SAMPLEWECHSEL NICHT MOEGLICH";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(UiRowControls::hit(UiRowControls::output,x)) {
-     if(!controller_.cycleRowOutput(row))status_="AUSGANG NICHT UEBERNOMMEN";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(UiRowControls::hit(UiRowControls::preview,x)) {
-     status_=controller_.previewSample(row)?"SAMPLE-VORSCHAU ANGEFORDERT":
-                                "VORSCHAU NICHT MOEGLICH: SAMPLE LADEN / HOST-AUDIO PRUEFEN";
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-   }
-   if(UiRowControls::hit(UiRowControls::sample,x)) {
+   if(UiCompactLayout::hit(x,UiCompactLayout::sample)&&y>=top+5&&y<top+35){
      if(buttons&VSTGUI::kShift)editName(row);
-     else if(buttons&VSTGUI::kAlt) {
-       status_=controller_.clearSample(row)?"SAMPLE ENTFERNT - STEPS BLEIBEN":
-                                               "SAMPLE KONNTE NICHT ENTFERNT WERDEN";
-     } else load(row);
-     invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+     else if(buttons&VSTGUI::kAlt){
+       if(!controller_.clearSample(row))status_="SAMPLE NICHT ENTFERNT";
+     }else load(row);
+     invalid();return done;
    }
-   if(x>=kGridX&&x<kGridRight) {
-      const auto step=static_cast<std::size_t>((x-kGridX)/kCellWidth);
-      velocityRow_=row;
-      velocityStep_=step;
-      const bool updated=(buttons&VSTGUI::kShift)!=0
-          ?controller_.cycleStepVelocity(controller_.currentPattern(),row,step)
-          :controller_.toggleStep(controller_.currentPattern(),row,step);
-      if(!updated)
-          status_="STEP KONNTE NICHT AN PROZESSOR GESENDET WERDEN";
-      invalid();
-      return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(UiCompactLayout::hit(x,UiCompactLayout::previous)&&y>=top+5&&y<top+35){
+     if(controller_.stepSample(row,-1)!=Controller::LoadStatus::Accepted)
+       status_="KEIN VORHERIGES SAMPLE";
+     invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::next)&&y>=top+5&&y<top+35){
+     if(controller_.stepSample(row,1)!=Controller::LoadStatus::Accepted)
+       status_="KEIN NAECHSTES SAMPLE";
+     invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::preview)&&y>=top+5&&y<top+35){
+     if(!controller_.previewSample(row))status_="SAMPLE NICHT VORHOERBAR";
+     invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::fill)&&y>=top+5&&y<top+35){
+     fillMenuRow_=static_cast<int>(row);invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::mute)&&y>=top+5&&y<top+35){
+     if(!controller_.toggleRowGate(row,false))status_="MUTE NICHT UEBERNOMMEN";
+     invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::solo)&&y>=top+5&&y<top+35){
+     if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
+     invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::choke)&&y>=top+5&&y<top+35){
+     popup_=4;popupRow_=row;invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::output)&&y>=top+5&&y<top+35){
+     popup_=3;popupRow_=row;invalid();return done;
+   }
+   if(y>=top+45&&y<top+79){
+     const auto step=UiCompactLayout::stepAt(x);
+     if(step>=0){
+       velocityStep_=static_cast<std::size_t>(step);
+       const bool ok=(buttons&VSTGUI::kShift)?
+         controller_.cycleStepVelocity(controller_.currentPattern(),row,velocityStep_):
+         controller_.toggleStep(controller_.currentPattern(),row,velocityStep_);
+       if(!ok)status_="STEP NICHT UEBERNOMMEN";
+       invalid();return done;
+     }
+   }
+   for(int i=0;i<4;++i){
+     const auto center=UiCompactLayout::rowKnobCenters[static_cast<std::size_t>(i)];
+     if(x>=center-18.&&x<center+18.&&y>=top+51&&y<top+85){
+       const int previous=i==0?static_cast<int>(controller_.rowGain(row)):
+          i==1?controller_.rowPan(row):
+          i==2?controller_.rowPitch(row):
+               static_cast<int>(controller_.rowRandomVelocity(row));
+       if((buttons&VSTGUI::kControl)||(buttons&VSTGUI::kDoubleClick)){
+         const auto def=UiCompactLayout::defaultValue(i);
+         if(previous!=def&&!changeKnobValue(i,row,def))
+           status_="KLANGREGLER RESET NICHT UEBERNOMMEN";
+         invalid();return done;
+       }
+       activeKnob_=i;knobRow_=row;knobStartY_=y;knobStartValue_=previous;
+       knobGeneration_=controller_.editGeneration();
+       invalid();return VSTGUI::kMouseEventHandled;
+     }
    }
  }
  return VSTGUI::kMouseEventNotHandled;
