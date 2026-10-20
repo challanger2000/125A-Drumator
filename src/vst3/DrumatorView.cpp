@@ -402,7 +402,7 @@ void DrumatorView::discardTransientEditsForRecall() noexcept {
  laneDragGeneration_=0;
  detailDragControl_=-1;
  detailDragRow_=kRows;
- activeKnob_=-1;knobRow_=kRows;knobGeneration_=0;
+ activeKnob_=-1;knobRow_=kRows;knobGeneration_=0;knobFine_=false;
  closeTransientMenus();
  editingNameRow_=kRows;
  nameEditGeneration_=0;
@@ -575,7 +575,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
-   const char* labels[]={"VOL","PAN","PITCH","RANDOM"};
+   const char* labels[]={"VOL","PAN","PITCH","RANDOM VEL."};
    for(int k=0;k<4;++k){
      const int lo=UiCompactLayout::minValue(k),hi=UiCompactLayout::maxValue(k);
      const int v=values[k];
@@ -637,15 +637,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    }
  }
  // Only row management and one status line remain at the bottom.
- drawControl(c,{16,bottom+5,65,bottom+34},"+");
- drawControl(c,{73,bottom+5,122,bottom+34},"-",false,controller_.canHideLast());
+ drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"+ ZEILE");
+ drawControl(c,{UiCompactLayout::rowRemove.left,bottom+5,UiCompactLayout::rowRemove.right,bottom+34},"- ZEILE",false,controller_.canHideLast());
  char range[64]{};
  std::snprintf(range,sizeof(range),"%u-%u / %u INSTRUMENTE",
    static_cast<unsigned>(firstRow_+1),static_cast<unsigned>(firstRow_+displayedRows()),
    static_cast<unsigned>(controller_.visibleRows()));
  c->setFontColor(accent);c->setFont(VSTGUI::kNormalFont,12);
- c->drawString(range,{132,bottom+5,325,bottom+34},VSTGUI::kLeftText);
- c->drawString(status_.c_str(),{338,bottom+5,1016,bottom+34},VSTGUI::kLeftText);
+ c->drawString(range,{222,bottom+5,410,bottom+34},VSTGUI::kLeftText);
+ c->drawString(status_.c_str(),{414,bottom+5,1016,bottom+34},VSTGUI::kLeftText);
  if(controller_.visibleRows()>UiCompactLayout::perPage) {
    drawControl(c,{1068,bottom+5,1145,bottom+34},"<");
    drawControl(c,{1152,bottom+5,1229,bottom+34},">");
@@ -930,6 +930,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         invalid();return done;
       }
       activeKnob_=i;knobRow_=kRows;knobStartY_=y;knobStartValue_=previous;
+       knobFine_=(buttons&VSTGUI::kShift)!=0;
       knobGeneration_=controller_.editGeneration();
       invalid();return VSTGUI::kMouseEventHandled;
    }
@@ -975,7 +976,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 
  const double bottom=gridBottom();
  if(y>=bottom+5&&y<bottom+34){
-   if(x>=16&&x<65){
+   if(UiCompactLayout::hit(x,UiCompactLayout::rowAdd)){
      if(controller_.visibleRows()>=kRows)status_="MAXIMAL 16 INSTRUMENTE";
      else {
        const auto count=controller_.visibleRows();
@@ -987,7 +988,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      }
      invalid();return done;
    }
-   if(x>=73&&x<122){
+   if(UiCompactLayout::hit(x,UiCompactLayout::rowRemove)){
      const auto count=controller_.visibleRows();
      const auto result=tryRowResizeTransaction(
         [&](){return controller_.hideLastEmptyRow();},
@@ -1020,6 +1021,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(velocityExpanded_[row]&&UiCompactLayout::velocityHit(y,top)) {
       const auto step=UiCompactLayout::stepAt(x);
       if(step>=0) {
+        if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
+          status_="STEPS 17-32: 2 TAKTE WAEHLEN";
+          invalid();return done;
+        }
         velocityRow_=row;velocityStep_=static_cast<std::size_t>(step);
         laneDragPattern_=controller_.currentPattern();
         laneDragGeneration_=controller_.editGeneration();
@@ -1087,6 +1092,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(y>=top+45&&y<top+79){
      const auto step=UiCompactLayout::stepAt(x);
      if(step>=0){
+       if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
+         status_="STEPS 17-32: 2 TAKTE WAEHLEN";
+         invalid();return done;
+       }
        velocityStep_=static_cast<std::size_t>(step);
        const bool ok=(buttons&VSTGUI::kShift)?
          controller_.cycleStepVelocity(controller_.currentPattern(),row,velocityStep_):
@@ -1109,6 +1118,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          invalid();return done;
        }
        activeKnob_=i;knobRow_=row;knobStartY_=y;knobStartValue_=previous;
+        knobFine_=(buttons&VSTGUI::kShift)!=0;
        knobGeneration_=controller_.editGeneration();
        invalid();return VSTGUI::kMouseEventHandled;
      }
@@ -1123,15 +1133,17 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
      activeKnob_=-1;knobRow_=kRows;invalid();
      return VSTGUI::kMouseEventHandled;
    }
-   const auto requested=UiCompactLayout::knobValue(
-        knobStartY_,pos.y,knobStartValue_,
-        UiCompactLayout::minValue(activeKnob_),UiCompactLayout::maxValue(activeKnob_));
+   const auto requested=UiCompactLayout::knobValueForSlot(
+        activeKnob_,knobStartY_,pos.y,knobStartValue_,knobFine_);
    if(!changeKnobValue(activeKnob_,knobRow_,requested))
       status_="REGLERWERT NICHT UEBERNOMMEN";
    invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
- if(laneDragGeneration_!=controller_.editGeneration()){
+ if(laneDragGeneration_!=controller_.editGeneration()||
+    laneDragPattern_!=controller_.currentPattern()){
+   if(laneDragGeneration_==controller_.editGeneration())
+     controller_.endVelocityStroke(false);
    laneDragActive_=false;laneDragGeneration_=0;
    return VSTGUI::kMouseEventHandled;
  }
@@ -1141,7 +1153,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
    return VSTGUI::kMouseEventHandled;
  }
  const auto step=UiCompactLayout::stepAt(pos.x);
- if(step<0||songEditorOpen_||velocityRow_<firstRow_||
+ if(step<0||static_cast<std::size_t>(step)>=controller_.patternLength(laneDragPattern_)||
+    songEditorOpen_||velocityRow_<firstRow_||
     velocityRow_>=firstRow_+displayedRows()||!velocityExpanded_[velocityRow_])
    return VSTGUI::kMouseEventHandled;
  const auto idx=velocityRow_-firstRow_;
@@ -1158,9 +1171,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
    invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
- const bool fresh=laneDragGeneration_==controller_.editGeneration();
+ const bool generationValid=laneDragGeneration_==controller_.editGeneration();
+ const bool fresh=generationValid&&laneDragPattern_==controller_.currentPattern();
  laneDragActive_=false;laneDragGeneration_=0;
  if(fresh)controller_.endVelocityStroke(true);
+ else if(generationValid)controller_.endVelocityStroke(false);
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
