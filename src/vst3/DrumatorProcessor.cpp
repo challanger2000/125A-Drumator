@@ -159,10 +159,15 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       index>=static_cast<Steinberg::int64>(kRows)||
       attrs->getBinary("DisplayName",bytes,len)!=Steinberg::kResultOk||
       len>kMaxRowLabel||(len!=0&&bytes==nullptr))return Steinberg::kInvalidArgument;
-   const auto name=std::string(len?static_cast<const char*>(bytes):"",len);
-   if(!validRowLabel(name))return Steinberg::kInvalidArgument;
-   std::lock_guard<std::mutex> guard(kitMutex_);
-   kit_.displayNames[static_cast<std::size_t>(index)]=name;
+   // Name allocation is entirely in the preparation phase. A host may
+   // deliver a 64-byte UTF-8 name while under memory pressure; no exception
+   // must escape the VST3 ABI or leave the previous kit label damaged.
+   try {
+     std::string name(len?static_cast<const char*>(bytes):"",len);
+     if(!validRowLabel(name))return Steinberg::kInvalidArgument;
+     std::lock_guard<std::mutex> guard(kitMutex_);
+     kit_.displayNames[static_cast<std::size_t>(index)].swap(name);
+   }catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.ClearSample")==0) {
@@ -377,7 +382,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    if(attrs->getBinary("SampleName",nameBytes,nameLen)==Steinberg::kResultOk) {
        if(!nameBytes||nameLen==0||nameLen>kMaxKitName)
            return Steinberg::kInvalidArgument;
-       fileName.assign(static_cast<const char*>(nameBytes),nameLen);
+       try {fileName.assign(static_cast<const char*>(nameBytes),nameLen);}
+       catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
    }
    if(fileName.empty()||fileName.find('/')!=std::string::npos||
       fileName.find('\\')!=std::string::npos||

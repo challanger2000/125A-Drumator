@@ -836,6 +836,38 @@ void testSongCompactViewport(){
        "UX compact fallback cannot recover after host accepts again");
  evidence("UX 370px Song viewport, return to Steps and refused-resize row navigation PASS");
 }
+void testHostNameAllocationRollback(){
+ Fixture f;auto baseline=namedKit('X');f.kit(baseline);
+ // Construct the host message before fault injection: only the processor's
+ // string allocation may fail. Names > SSO require dynamic storage.
+ HostMessage rename;rename.setMessageID("Drumator.RenameRow");
+ auto* attrs=rename.getAttributes();
+ std::string longName(64,'N');
+ check(attrs&&attrs->setInt("Row",0)==kResultOk&&
+       attrs->setBinary("DisplayName",longName.data(),
+         static_cast<uint32>(longName.size()))==kResultOk,
+       "N10 rename host fixture");
+ allocationFail=0;
+ bool escaped=false;tresult result=kResultFalse;
+ try {result=f.p->notify(&rename);}
+ catch(const std::bad_alloc&) {escaped=true;}
+ allocationFail=-1;
+ check(!escaped&&result==kOutOfMemory,
+       "N10 failed name allocation escaped VST3 notify or returned wrong result");
+ auto readName=[&](){
+   ResizableMemoryIBStream buffer;KitState state;
+   check(f.p->getState(&buffer)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(buffer.getData()),
+                          static_cast<std::size_t>(buffer.getCursor()),state),
+         "N10 save real processor name");
+   return state.displayNames[0];
+ };
+ check(readName()==baseline.displayNames[0],
+       "N10 rejected RenameRow damaged previous project label");
+ check(f.p->notify(&rename)==kResultOk&&readName()==longName,
+       "N10 valid RenameRow failed after allocation recovery");
+ evidence("N10 processor rename fault injection and unchanged-state rollback PASS");
+}
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
    Fixture f;f.kit(namedKit('X',16));f.open();f.open();
@@ -890,6 +922,7 @@ int main(int argc,char** argv){
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
  run("UX paged Song board",testPagedSongEditor);
  run("UX compact Song viewport",testSongCompactViewport);
+ run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
