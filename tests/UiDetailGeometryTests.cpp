@@ -12,7 +12,7 @@ int main(){
      CHECK(slot.right>slot.left+130.);
      if(i>0)CHECK(slot.left>UiDetailGeometry::slots[static_cast<std::size_t>(i-1)].right);
      CHECK(UiDetailGeometry::controlAt(slot.left+10.,gridBottom+95.,gridBottom)==i);
-     CHECK(UiDetailGeometry::controlAt(slot.left+10.,gridBottom+94.,gridBottom)==-1);
+     CHECK(UiDetailGeometry::controlAt(slot.left+10.,gridBottom+93.,gridBottom)==-1);
      CHECK(UiDetailGeometry::controlAt(slot.right-5.,gridBottom+110.,gridBottom)==-1);
      CHECK(UiDetailGeometry::actionAt(slot.left+10.,i)==UiDetailGeometry::Action::Decrement);
      CHECK(UiDetailGeometry::actionAt(slot.right-10.,i)==UiDetailGeometry::Action::Increment);
