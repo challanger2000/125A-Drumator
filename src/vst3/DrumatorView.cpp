@@ -327,6 +327,7 @@ DrumatorView::~DrumatorView() {
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
  if(laneDragActive_){controller_.endVelocityStroke(false);laneDragActive_=false;}
+ detailDragControl_=-1;detailDragRow_=kRows;
  if(nameEdit_){
    // No pending edit may commit while a native Win32 text HWND is closing.
    editingNameRow_=kRows;
@@ -368,6 +369,26 @@ void DrumatorView::valueChanged(VSTGUI::CControl* control) {
  nameEditGeneration_=0;
  invalid();
 }
+bool DrumatorView::changeDetailValue(std::size_t row,int slot,int requested) {
+ if(row>=controller_.visibleRows())return false;
+ switch(slot) {
+   case 0:return controller_.adjustRowMix(row,false,requested-
+                               static_cast<int>(controller_.rowGain(row)));
+   case 1:return controller_.adjustRowMix(row,true,requested-controller_.rowPan(row));
+   case 2:return controller_.adjustRowPitch(row,requested-controller_.rowPitch(row));
+   case 3:return controller_.adjustRandomVelocity(row,requested-
+                               static_cast<int>(controller_.rowRandomVelocity(row)));
+   case 4: {
+     for(int i=0;i<4;++i) {
+       const int current=static_cast<int>(controller_.rowChoke(row));
+       if(current==requested)return true;
+       if(!controller_.cycleRowChoke(row,requested>current?1:-1))return false;
+     }
+     return controller_.rowChoke(row)==static_cast<unsigned>(requested);
+   }
+   default:return false;
+ }
+}
 void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
  if(edit!=nameEdit_)return;
  nameEdit_->setVisible(false);
@@ -380,6 +401,8 @@ void DrumatorView::discardTransientEditsForRecall() noexcept {
  // VSTGUI/Win32 here: closing an EDIT HWND may invoke allocating callbacks.
  laneDragActive_=false;
  laneDragGeneration_=0;
+ detailDragControl_=-1;
+ detailDragRow_=kRows;
  editingNameRow_=kRows;
  nameEditGeneration_=0;
  fillMenuRow_=-1;
@@ -971,6 +994,35 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseEventHandled;
    }
  }
+ const auto detailSlot=UiDetailGeometry::controlAt(x,y,gridBottom);
+ if(detailSlot>=0&&!songEditorOpen_) {
+   const auto index=static_cast<std::size_t>(detailSlot);
+   const auto row=std::min(velocityRow_,controller_.visibleRows()-1);
+   const int lows[]={0,-100,-24,0,0},highs[]={200,100,24,100,4};
+   const int defaults[]={100,0,0,0,0},steps[]={10,10,1,10,1};
+   const int existing=detailSlot==0?static_cast<int>(controller_.rowGain(row)):
+       detailSlot==1?controller_.rowPan(row):
+       detailSlot==2?controller_.rowPitch(row):
+       detailSlot==3?static_cast<int>(controller_.rowRandomVelocity(row)):
+           static_cast<int>(controller_.rowChoke(row));
+   const auto action=UiDetailGeometry::actionAt(x,detailSlot);
+   const bool reset=(buttons&VSTGUI::kControl)!=0;
+   int next=reset?defaults[index]:existing;
+   if(!reset&&action==UiDetailGeometry::Action::Absolute)
+     next=UiDetailGeometry::absoluteAt(x,detailSlot,lows[index],highs[index]);
+   else if(!reset&&action==UiDetailGeometry::Action::Increment)
+     next=std::min(highs[index],existing+steps[index]);
+   else if(!reset&&action==UiDetailGeometry::Action::Decrement)
+     next=std::max(lows[index],existing-steps[index]);
+   if(next!=existing&&!changeDetailValue(row,detailSlot,next))
+     status_="KLANGREGLER: AENDERUNG VOM PROZESSOR ABGELEHNT";
+   if(!reset&&action==UiDetailGeometry::Action::Absolute) {
+     detailDragControl_=detailSlot;
+     detailDragRow_=row;
+     invalid();return VSTGUI::kMouseEventHandled;
+   }
+   invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+ }
  if(y>=actionsY+34&&y<actionsY+64&&x>=916&&x<1220){
    int delta=0;
    if(x<986)delta=-10;
@@ -1043,6 +1095,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(index>=displayedRows()||!UiRowGeometry::mainHit(y,index,velocityLaneOpen_))
      return VSTGUI::kMouseEventNotHandled;
    const auto row=firstRow_+index;
+   if(velocityRow_!=row){velocityRow_=row;invalid();}
    if(x>=16&&x<48) {
      fillMenuRow_=static_cast<int>(row);
      invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
@@ -1127,6 +1180,18 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
+ if(detailDragControl_>=0) {
+   if(!(buttons&VSTGUI::kLButton)){
+     detailDragControl_=-1;detailDragRow_=kRows;
+     return VSTGUI::kMouseEventHandled;
+   }
+   const int lows[]={0,-100,-24,0,0},highs[]={200,100,24,100,4};
+   const auto i=static_cast<std::size_t>(detailDragControl_);
+   const int next=UiDetailGeometry::absoluteAt(pos.x,detailDragControl_,lows[i],highs[i]);
+   if(!changeDetailValue(detailDragRow_,detailDragControl_,next))
+     status_="KLANGREGLER: AENDERUNG VOM PROZESSOR ABGELEHNT";
+   invalid();return VSTGUI::kMouseEventHandled;
+ }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
  if(laneDragGeneration_!=controller_.editGeneration()) {
    laneDragActive_=false;
@@ -1152,6 +1217,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
     VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
+ if(detailDragControl_>=0) {
+   detailDragControl_=-1;detailDragRow_=kRows;
+   return VSTGUI::kMouseEventHandled;
+ }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
  const bool fresh=laneDragGeneration_==controller_.editGeneration();
  laneDragActive_=false;
@@ -1160,6 +1229,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel() {
+ detailDragControl_=-1;detailDragRow_=kRows;
  const bool fresh=laneDragGeneration_==controller_.editGeneration();
  laneDragActive_=false;
  laneDragGeneration_=0;
