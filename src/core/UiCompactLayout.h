@@ -14,7 +14,7 @@ struct UiCompactLayout final {
  static constexpr Slot select{16.,74.},sample{78.,272.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
-   velocityToggle{1233.,1266.};
+   velocityToggle{1233.,1266.},rowAdd{16.,110.},rowRemove{116.,210.};
  static constexpr std::array<double,4> rowKnobCenters{{133.,254.,375.,496.}};
  static constexpr std::array<double,3> globalKnobCenters{{78.,176.,1180.}};
  static constexpr std::array<double,4> userZooms{{1.,1.2,1.3,1.5}};
@@ -61,6 +61,20 @@ struct UiCompactLayout final {
  static int knobValue(double startY,double movedY,int initial,int minimum,int maximum) noexcept {
    // 2.5 logical pixels per discrete controller step, extra range clamped.
    return std::clamp(initial+static_cast<int>(std::lround((startY-movedY)/2.5)),minimum,maximum);
+ }
+ // Use the value's range to choose sensible drag sensitivity, rather
+ // than forcing users to drag 500px just to traverse a 0..200% control.
+ // Fine mode is latched at mouse-down, so adding/removing Shift mid-gesture
+ // cannot unexpectedly jump the value.
+ static constexpr double pixelsPerStep(int slot,bool fine=false) noexcept {
+   const double unit=slot==2||slot==4?2.5:1.5;
+   return fine?unit*4.:unit;
+ }
+ static int knobValueForSlot(int slot,double startY,double movedY,int initial,
+                             bool fine=false) noexcept {
+   const auto delta=static_cast<int>(std::lround(
+       (startY-movedY)/pixelsPerStep(slot,fine)));
+   return std::clamp(initial+delta,minValue(slot),maxValue(slot));
  }
  static constexpr int defaultValue(int slot) noexcept {
    return slot==0||slot==6?100:0;
