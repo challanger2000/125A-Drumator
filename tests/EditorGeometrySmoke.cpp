@@ -7,19 +7,38 @@
 #include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "vst3/PluginIDs.h"
 #include "core/Utf8Path.h"
+#include "integration/ByteStream.h"
+#include "integration/ResultLog.h"
 #include <windows.h>
+#include <objbase.h>
 #include <filesystem>
 #include <iostream>
 #include <system_error>
 
 namespace {
 [[noreturn]] void fail(const char* reason) {
+    drumator::qa::result(std::string("Packaged editor FAIL: ")+reason);
     std::cerr << "125A Drumator editor smoke FAILED: " << reason << '\n';
     std::exit(1);
 }
+struct NativeFrame final:Steinberg::IPlugFrame {
+ bool accept=true;unsigned calls=0;
+ Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID iid,void** out) override {
+   if(Steinberg::FUnknownPrivate::iidEqual(iid,Steinberg::IPlugFrame::iid)||
+      Steinberg::FUnknownPrivate::iidEqual(iid,Steinberg::FUnknown::iid)){
+     *out=static_cast<Steinberg::IPlugFrame*>(this);return Steinberg::kResultOk;
+   }*out=nullptr;return Steinberg::kNoInterface;
+ }
+ Steinberg::uint32 PLUGIN_API addRef() override{return 1;}
+ Steinberg::uint32 PLUGIN_API release() override{return 1;}
+ Steinberg::tresult PLUGIN_API resizeView(Steinberg::IPlugView* view,Steinberg::ViewRect* size) override {
+   ++calls;return accept?view->onSize(size):Steinberg::kResultFalse;
+ }
+};
 }
 int main(int argc,char** argv) {
     if(argc!=2)fail("Expected one VST3 binary path");
+    CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     const auto modulePath=drumator::pathFromUtf8(argv[1]);
     auto* module=LoadLibraryW(modulePath.c_str());
     if(!module) {
@@ -66,6 +85,32 @@ int main(int argc,char** argv) {
        editor->getSize(&rect)!=Steinberg::kResultOk||
        rect.getWidth()!=1280||rect.getHeight()!=300)
         fail("N10 preattach DPI reset did not restore editor dimensions");
+    // Actual packaged DLL: attach a native frame, then exercise controller
+    // restore and host refusal. This complements the source-instrumented QA.
+    NativeFrame hostFrame;
+    auto parent=CreateWindowExW(0,L"STATIC",L"Packaged Drumator QA",WS_OVERLAPPEDWINDOW|WS_VISIBLE,
+        0,0,1280,850,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
+    if(!parent||editor->setFrame(&hostFrame)!=Steinberg::kResultOk||
+       editor->attached(parent,Steinberg::kPlatformTypeHWND)!=Steinberg::kResultOk)
+        fail("Z02 packaged native attach failed");
+    auto restoreZoom=[&](bool large){
+      std::uint8_t bytes[]{0x44,0x5a,0x4d,0x31,static_cast<std::uint8_t>(large)};
+      drumator::qa::ByteStream state(bytes,5);return controller->setState(&state);
+    };
+    for(bool large:{true,false}) {
+      Steinberg::ViewRect before{},after{};editor->getSize(&before);
+      hostFrame.accept=false;
+      if(restoreZoom(large)==Steinberg::kResultOk||editor->getSize(&after)!=Steinberg::kResultOk||
+         before.getWidth()!=after.getWidth()||before.getHeight()!=after.getHeight())
+        fail("Z02 packaged refusal changed editor geometry");
+      hostFrame.accept=true;
+      if(restoreZoom(large)!=Steinberg::kResultOk||editor->getSize(&after)!=Steinberg::kResultOk||
+         after.getWidth()!=(large?1920:1280))fail("Z02 packaged accepted zoom geometry");
+    }
+    if(editor->removed()!=Steinberg::kResultOk)fail("Z02 packaged native remove failed");
+    editor->setFrame(nullptr);DestroyWindow(parent);
+    drumator::qa::result("Z02 packaged DLL PASS: native HWND attach, controller zoom 100/150 and resize rejection");
+    std::cout<<"Z02 packaged DLL native attach, 100/150 controller recall and IPlugFrame refusals PASS\n";
     scale->release();
     std::cout<<"N10 preattach 100/150 percent host DPI geometry PASS\\n";
     editor->release();
@@ -77,6 +122,7 @@ int main(int argc,char** argv) {
         if(!exitDll())fail("ExitDll failed");
     }
     FreeLibrary(module);
+    CoUninitialize();
     std::cout<<"125A Drumator editor geometry smoke PASS\n";
     return 0;
 }

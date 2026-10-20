@@ -13,6 +13,8 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "vst3/PluginIDs.h"
 #include "core/Utf8Path.h"
+#include "integration/ByteStream.h"
+#include "integration/ResultLog.h"
 #include "core/KitState.h"
 #include "core/AtomicPatternBank.h"
 #include "core/FlacImport.h"
@@ -29,12 +31,14 @@
 #include <vector>
 #include <atomic>
 #include <thread>
+#include <chrono>
+#include <algorithm>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 namespace {
 void require(bool value,const char* message) {
- if(!value) {std::cerr<<"Packaged Drumator host FAIL: "<<message<<'\n';std::exit(2);}
+ if(!value) {drumator::qa::result(std::string("Packaged host FAIL: ")+message);std::cerr<<"Packaged Drumator host FAIL: "<<message<<'\n';std::exit(2);}
 }
 void u16(std::vector<std::uint8_t>& v,std::uint16_t x) {
  v.push_back(static_cast<std::uint8_t>(x));
@@ -71,6 +75,20 @@ std::vector<std::uint8_t> makeWav(int bits,bool float32,float amplitude) {
  }
  return w;
 }
+// Two independent channel codes; mono fixtures cannot detect L/R swaps.
+std::vector<std::uint8_t> makeStereoWav(float l,float r) {
+ constexpr std::uint32_t frames=1024,rate=48000;
+ std::vector<std::uint8_t> w;
+ id(w,"RIFF");u32(w,36+frames*8);id(w,"WAVE");
+ id(w,"fmt ");u32(w,16);u16(w,3);u16(w,2);
+ u32(w,rate);u32(w,rate*8);u16(w,8);u16(w,32);
+ id(w,"data");u32(w,frames*8);
+ for(std::uint32_t n=0;n<frames;++n)for(float v:{l,r}) {
+   std::uint32_t raw=0;std::memcpy(&raw,&v,4);u32(w,raw);
+ }
+ return w;
+}
+
 }
 int main(int argc,char** argv) {
  require(argc==2,"expected packaged .vst3 binary argument");
@@ -907,6 +925,14 @@ int main(int argc,char** argv) {
    const auto savedHumanize=patternKit.humanize;
    patternKit.swing=0;patternKit.humanize=0;
    patternKit.songEnabled=0;
+   const auto originalGrid=patternKit.grid;
+   // Distinct nonzero tail markers across all A-H and rows. Keep A step 16
+   // silent because the independent audio test measures that exact downbeat.
+   for(std::size_t p=0;p<drumator::kPatterns;++p)
+     for(std::size_t r=0;r<drumator::kRows;++r)
+       for(std::size_t step=(p==0?17u:16u);step<32;++step)
+         patternKit.grid[drumator::AtomicPatternBank::index(p,r,step)]=
+           static_cast<std::uint8_t>(1+(p*37+r*11+step*3)%127);
    patternKit.patternLengths[0]=16;
    patternKit.grid[drumator::AtomicPatternBank::index(0,0,20)]=95;
    loadPattern(0);
@@ -930,8 +956,6 @@ int main(int argc,char** argv) {
      if(block==375)for(int n=50;n<190;++n)twoBar+=std::abs(left[n]);
    }
    require(twoBar<0.01,"DM15 2T restarted after 1 bar");
-   require(patternKit.grid[drumator::AtomicPatternBank::index(0,0,20)]==95,
-           "DM15 length toggle destroyed steps 17-32");
    context.state=0;
    // Control-message boundary and host serialization of changed A-H lengths.
    auto changeLength=[&](int pattern,int length)->tresult {
@@ -957,7 +981,29 @@ int main(int argc,char** argv) {
        static_cast<const std::uint8_t*>(oneBarSaved.getData()),
        oneBarSaved.getCursor(),captured)&&captured.patternLengths[0]==16,
        "DM15 control edit did not persist to project");
+   // T01: compare the returned component state, never the input fixture.
+   auto tailPreserved=[&](const drumator::KitState& actual) {
+     for(std::size_t p=0;p<drumator::kPatterns;++p)
+       for(std::size_t r=0;r<drumator::kRows;++r)
+         for(std::size_t step=16;step<32;++step) {
+           const auto i=drumator::AtomicPatternBank::index(p,r,step);
+           if(actual.grid[i]!=patternKit.grid[i])return false;
+         }
+     return true;
+   };
+   require(tailPreserved(captured),"T01 1T discarded stored steps 17-32");
    require(changeLength(0,32)==kResultOk,"DM15 restore length 32 rejected");
+   Steinberg::ResizableMemoryIBStream twoBarSaved;
+   require(component->getState(&twoBarSaved)==kResultOk&&
+       drumator::KitCodec::decode(static_cast<const std::uint8_t*>(twoBarSaved.getData()),
+           twoBarSaved.getCursor(),captured)&&captured.patternLengths[0]==32&&
+       tailPreserved(captured),"T01 2T recall lost steps 17-32");
+   auto erasedTail=captured;
+   erasedTail.grid[drumator::AtomicPatternBank::index(0,0,20)]=0;
+   require(!tailPreserved(erasedTail),"T01 negative control accepted lost step 20");
+   drumator::qa::result("T01 PASS: actual returned state after 2T/1T/2T, all A-H/rows tail cells and erased-step negative");
+   std::cout<<"T01 returned DM15 state: all A-H steps 17-32 and erase-negative PASS\n";
+   patternKit.grid=originalGrid;
    patternKit.swing=savedSwing;patternKit.humanize=savedHumanize;
    std::cout<<"DM15 independent 1T/2T pattern loops and preserved steps PASS\n";
  }
@@ -1480,11 +1526,12 @@ int main(int argc,char** argv) {
            processorPoint->notify(&choke)==kResultOk,
            "F08 reset row choke");
  }
- std::array<float,16> expectedBus{};
+ std::array<float,16> expectedBus{},expectedRight{};
  for(int busIndex=1;busIndex<16;++busIndex) {
    const float stemAmplitude=0.04f+static_cast<float>(busIndex)*0.015f;
    expectedBus[static_cast<std::size_t>(busIndex)]=stemAmplitude;
-   require(send(makeWav(32,true,stemAmplitude),busIndex)==kResultOk,
+   expectedRight[static_cast<std::size_t>(busIndex)]=-0.03f-static_cast<float>(busIndex)*0.011f;
+   require(send(makeStereoWav(stemAmplitude,expectedRight[static_cast<std::size_t>(busIndex)]),busIndex)==kResultOk,
            "F08 load dedicated AUX test WAV");
    HostMessage mix;mix.setMessageID("Drumator.RowMix");
    auto* m=mix.getAttributes();
@@ -1523,6 +1570,7 @@ int main(int argc,char** argv) {
  data.outputs=matrixBuses.data();data.numOutputs=16;
  require(audio->process(data)==kResultOk,
          "F08 sixteen-output processing with null MAIN");
+ std::array<double,16> measuredL{},measuredR{};
  for(int busIndex=1;busIndex<16;++busIndex) {
    double avgL=0.,avgR=0.;
    for(int i=80;i<180;++i) {
@@ -1530,63 +1578,132 @@ int main(int argc,char** argv) {
      avgR+=matrixRight[static_cast<std::size_t>(busIndex)][static_cast<std::size_t>(i)];
    }
    avgL/=100.;avgR/=100.;
-   const double expected=expectedBus[static_cast<std::size_t>(busIndex)];
-   require(std::isfinite(avgL)&&std::isfinite(avgR)&&
-           std::abs(avgL-expected)<.03&&std::abs(avgR-expected)<.03,
-           "F08 15-AUX routing amplitude/isolation mismatch");
+   measuredL[static_cast<std::size_t>(busIndex)]=avgL;
+   measuredR[static_cast<std::size_t>(busIndex)]=avgR;
  }
+ auto routingMatches=[&](const auto& l,const auto& r) {
+   // Constant float32 plateau at unity gain: 1e-4 allows rounding/filter error,
+   // yet stays over 100 times below the smallest inter-bus/channel code gap.
+   for(std::size_t b=1;b<16;++b)
+     if(!std::isfinite(l[b])||!std::isfinite(r[b])||
+        std::abs(l[b]-expectedBus[b])>1e-4||
+        std::abs(r[b]-expectedRight[b])>1e-4)return false;
+   return true;
+ };
+ require(routingMatches(measuredL,measuredR),"T02 AUX/stereo signature mismatch");
+ auto swappedL=measuredL,swappedR=measuredR;
+ std::swap(swappedL[7],swappedL[8]);std::swap(swappedR[7],swappedR[8]);
+ require(!routingMatches(swappedL,swappedR),"T02 accepted swapped adjacent AUX buses");
+ std::swap(swappedL[7],swappedL[8]);std::swap(swappedR[7],swappedR[8]);
+ std::swap(swappedL[5],swappedR[5]);
+ require(!routingMatches(swappedL,swappedR),"T02 accepted reversed stereo channels");
+ drumator::qa::result("T02 PASS: 15 distinct AUX stereo codes, neighbor-bus and L/R swap negatives");
+ std::cout<<"T02 15 unique stereo stems; adjacent-bus and L/R negatives PASS\n";
  data.inputEvents=oldInputEvents;
  data.outputs=priorOutputs;data.numOutputs=priorNumOutputs;
  require(component->activateBus(kAudio,kOutput,0,true)==kResultOk,
          "F08 restore MAIN after full matrix");
  std::cout<<"F08 fifteen simultaneous AUX stems, no MAIN, measured PASS\\n";
 
- // P1 kit-recall interleaving regression: VST3 setState remains supported
- // while a separate realtime actor repeatedly invokes process().
+ // T04: two genuinely different kits, coherent four-channel audio signatures.
  Steinberg::ResizableMemoryIBStream runningKitState;
- require(component->getState(&runningKitState)==kResultOk,
-         "Concurrent state fixture save");
+ require(component->getState(&runningKitState)==kResultOk,"T04 save baseline");
+ drumator::KitState kitX,kitY;
+ kitX.grid.fill(0);kitX.visible=2;kitX.selected=0;
+ kitX.wav[0]=makeStereoWav(.25f,-.35f);kitX.names[0]="X0.wav";
+ kitX.wav[1]=makeStereoWav(-.10f,.05f);kitX.names[1]="X1.wav";
+ kitX.grid[0]=127;kitX.grid[drumator::kSteps]=64;
+ kitX.gain[1]=50;kitX.masterVolume=100;
+ kitY=kitX;kitY.selected=1;kitY.grid.fill(0);
+ kitY.grid[drumator::kRows*drumator::kSteps]=64;
+ kitY.grid[drumator::kRows*drumator::kSteps+drumator::kSteps]=127;
+ kitY.wav[0]=makeStereoWav(-.30f,.20f);kitY.names[0]="Y0.wav";
+ kitY.wav[1]=makeStereoWav(.07f,-.11f);kitY.names[1]="Y1.wav";
+ kitY.gain[0]=50;kitY.gain[1]=150;kitY.masterVolume=70;
+ kitY.output[0]=1;kitY.output[1]=0;
+ std::vector<std::uint8_t> bytesX,bytesY;
+ require(drumator::KitCodec::encode(kitX,bytesX)&&drumator::KitCodec::encode(kitY,bytesY),"T04 encode kits");
+ auto restoreBytes=[&](const auto& bytes) {
+   drumator::qa::ByteStream stream(const_cast<std::uint8_t*>(bytes.data()),bytes.size());
+   return component->setState(&stream);
+ };
+ require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,"T04 enable second bus");
+ require(restoreBytes(bytesX)==kResultOk,"T04 initial X");
+ const double v64=64./127.;
+ const std::array<double,4> codeX{{.25,-.35,-.10*.5*v64,.05*.5*v64}};
+ const std::array<double,4> codeY{{.07*1.5*.7,-.11*1.5*.7,-.30*.5*v64*.7,.20*.5*v64*.7}};
+ auto isCode=[](const auto& actual,const auto& expected) {
+   for(std::size_t c=0;c<4;++c)
+     if(!std::isfinite(actual[c])||std::abs(actual[c]-expected[c])>2e-4)return false;
+   return true;
+ };
+ auto hybrid=codeX;hybrid[2]=codeY[2];
+ require(!isCode(hybrid,codeX)&&!isCode(hybrid,codeY),"T04 mixed-generation negative escaped");
  std::atomic<bool> stopAudio{false},audioFailed{false};
- std::atomic<unsigned> audioBlocks{0};
+ std::atomic<unsigned> audioBlocks{0},xBlocks{0},yBlocks{0},gateSilent{0};
+ std::atomic<unsigned> wantedEpoch{0},acknowledgedEpoch{0};
  std::thread audioActor([&](){
-   std::array<float,256> rtLeft{},rtRight{};
-   float* rtPtrs[2]{rtLeft.data(),rtRight.data()};
-   AudioBusBuffers rtBus{};
-   rtBus.numChannels=2;rtBus.channelBuffers32=rtPtrs;
-   EventList rtEvents(2);
-   Event hit{};hit.type=Event::kNoteOnEvent;
-   hit.noteOn.pitch=36;hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
-   rtEvents.addEvent(hit);
-   ProcessContext rtContext{};rtContext.state=0;
-   ProcessData rtData{};
-   rtData.numSamples=256;rtData.numOutputs=1;rtData.outputs=&rtBus;
-   rtData.symbolicSampleSize=kSample32;rtData.processMode=kRealtime;
-   rtData.inputEvents=&rtEvents;rtData.processContext=&rtContext;
-   while(!stopAudio.load(std::memory_order_acquire)&&
-         audioBlocks.load(std::memory_order_relaxed)<4000) {
-     if(audio->process(rtData)!=kResultOk) {
-       audioFailed.store(true);break;
+   std::array<std::array<float,256>,4> buffers{};
+   float* p0[]{buffers[0].data(),buffers[1].data()};
+   float* p1[]{buffers[2].data(),buffers[3].data()};
+   AudioBusBuffers buses[2]{};
+   buses[0].numChannels=2;buses[0].channelBuffers32=p0;
+   buses[1].numChannels=2;buses[1].channelBuffers32=p1;
+   ProcessContext clock{};clock.tempo=120;clock.projectTimeMusic=0;
+   clock.state=ProcessContext::kPlaying|ProcessContext::kProjectTimeMusicValid|ProcessContext::kTempoValid;
+   ProcessData rt{};rt.numSamples=256;rt.numOutputs=2;rt.outputs=buses;
+   rt.symbolicSampleSize=kSample32;rt.processMode=kRealtime;rt.processContext=&clock;
+   while(!stopAudio.load(std::memory_order_acquire)) {
+     const auto epoch=wantedEpoch.load(std::memory_order_acquire);
+     if(audio->process(rt)!=kResultOk){audioFailed=true;break;}
+     std::array<double,4> code{};
+     bool silent=true;
+     for(std::size_t c=0;c<4;++c)for(std::size_t n=80;n<180;++n) {
+       const auto sample=buffers[c][n];
+       if(!std::isfinite(sample))audioFailed=true;
+       code[c]+=sample/100.;if(std::abs(sample)>1e-7)silent=false;
      }
-     for(int n=0;n<256;++n) {
-       if(!std::isfinite(rtLeft[n])||!std::isfinite(rtRight[n])) {
-         audioFailed.store(true);break;
-       }
-     }
-     audioBlocks.fetch_add(1,std::memory_order_relaxed);
+     const bool x=isCode(code,codeX),y=isCode(code,codeY);
+     if(silent)++gateSilent;
+     else if(x)++xBlocks;
+     else if(y)++yBlocks;
+     else {audioFailed=true;break;}
+     ++audioBlocks;
+     if(epoch&&((epoch&1u)?y:x))acknowledgedEpoch.store(epoch,std::memory_order_release);
      if(audioFailed.load())break;
+     std::this_thread::yield();
    }
  });
- for(int n=0;n<6;++n) {
-   runningKitState.rewind();
-   require(component->setState(&runningKitState)==kResultOk,
-           "P1 concurrent complete kit restore failed");
-   std::this_thread::yield();
+ auto waitFor=[&](auto predicate) {
+   const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+   while(!predicate()&&!audioFailed.load()&&std::chrono::steady_clock::now()<until)std::this_thread::yield();
+   return predicate()&&!audioFailed.load();
+ };
+ require(waitFor([&]{return xBlocks.load()>0;}),"T04 initial rendered X absent");
+ for(unsigned epoch=1;epoch<=24;++epoch) {
+   require(restoreBytes((epoch&1u)?bytesY:bytesX)==kResultOk,"T04 concurrent restore rejected");
+   wantedEpoch.store(epoch,std::memory_order_release);
+   if(!waitFor([&]{return acknowledgedEpoch.load(std::memory_order_acquire)==epoch;})) {
+     stopAudio=true;audioActor.join();require(false,"T04 new coherent kit audio absent or mixed");
+   }
+   Steinberg::ResizableMemoryIBStream saved;
+   drumator::KitState observed;
+   const auto& expected=(epoch&1u)?kitY:kitX;
+   require(component->getState(&saved)==kResultOk&&
+       drumator::KitCodec::decode(static_cast<const std::uint8_t*>(saved.getData()),saved.getCursor(),observed)&&
+       observed.grid==expected.grid&&observed.wav==expected.wav&&observed.names==expected.names&&
+       observed.gain==expected.gain&&observed.output==expected.output&&
+       observed.masterVolume==expected.masterVolume&&observed.selected==expected.selected,
+       "T04 serialized kit mixed generations");
  }
- stopAudio.store(true,std::memory_order_release);
- audioActor.join();
- require(!audioFailed.load()&&audioBlocks.load()>0,
-         "P1 concurrent kit processing returned invalid data");
- std::cout<<"P1 concurrent complete kit recall and live audio PASS\\n";
+ stopAudio=true;audioActor.join();
+ require(!audioFailed.load()&&xBlocks.load()>0&&yBlocks.load()>0,"T04 incomplete concurrency coverage");
+ drumator::qa::result("T04 PASS: 24 X/Y restores; coherent X blocks="+std::to_string(xBlocks.load())+
+   ", Y="+std::to_string(yBlocks.load())+", gate silent="+std::to_string(gateSilent.load()));
+ std::cout<<"T04 actual packaged audio: X="<<xBlocks<<" Y="<<yBlocks<<" gate-silent="<<gateSilent
+          <<" total="<<audioBlocks<<"; 24 acknowledged restores PASS\n";
+ runningKitState.rewind();
+ require(component->setState(&runningKitState)==kResultOk,"T04 restore original fixture");
  // F07: reproduce a valid portable kit containing a hidden solo row.
  // Its samples stay intact, but invisible solo flags must not mute row 1.
  Steinberg::ResizableMemoryIBStream baselineKit;

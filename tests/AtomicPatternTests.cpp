@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
+#include <semaphore>
 using namespace drumator;
 static void check(bool okay,const char* msg){if(!okay)throw std::runtime_error(msg);}
 int main(){
@@ -149,7 +150,10 @@ int main(){
   oldPattern.fill(15);newPattern.fill(115);
   check(transactionBank.replacePattern(0,oldPattern.data(),oldPattern.size()),"initial transaction");
   std::atomic<bool> replaceDone{false};
+  std::binary_semaphore readerReady{0},firstRead{0};
   std::thread replacer([&]{
+    readerReady.acquire();
+    firstRead.acquire();
     for(int iteration=0;iteration<2000;++iteration){
       const auto& source=(iteration&1)?oldPattern:newPattern;
       if(!transactionBank.replacePattern(0,source.data(),source.size()))
@@ -158,6 +162,9 @@ int main(){
     replaceDone.store(true,std::memory_order_release);
   });
   std::size_t verified=0;
+  readerReady.release();
+  check(transactionBank.coherentPattern(0,coherent),"T03 first reader snapshot");
+  ++verified;firstRead.release();
   while(!replaceDone.load(std::memory_order_acquire)){
     if(transactionBank.coherentPattern(0,coherent)){
       check(coherent==oldPattern||coherent==newPattern,
@@ -187,7 +194,9 @@ int main(){
   check(coherent==oldPattern||coherent==newPattern,"invalid final generation");
   check(!transactionBank.replacePattern(0,newPattern.data(),newPattern.size()-1),
         "invalid replacement length accepted");
-  (void)verified;
+  check(verified>0,"T03 no successful snapshots");
+  // Exact mid-write/read overlap is additionally forced in the Windows
+  // integration target using test-only generated-source probe points.
   std::cout<<"Atomic pattern bank: PASS\n";
   return 0;
  }catch(const std::exception& ex){
