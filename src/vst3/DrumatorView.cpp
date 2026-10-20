@@ -1171,10 +1171,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
    invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
- const bool fresh=laneDragGeneration_==controller_.editGeneration()&&
-                   laneDragPattern_==controller_.currentPattern();
+ const bool generationValid=laneDragGeneration_==controller_.editGeneration();
+ const bool fresh=generationValid&&laneDragPattern_==controller_.currentPattern();
  laneDragActive_=false;laneDragGeneration_=0;
  if(fresh)controller_.endVelocityStroke(true);
+ else if(generationValid)controller_.endVelocityStroke(false);
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
