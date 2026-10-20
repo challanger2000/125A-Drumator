@@ -72,6 +72,10 @@ public:
  bool clearCurrentPattern();
  bool undoCurrentPattern();
  bool canUndoCurrentPattern() noexcept {return undo_.available(currentPattern());}
+ // One-shot, per-instrument edit for the forthcoming RANDOM VEL button.
+ // Modifies only occupied steps in the active pattern/active bar length,
+ // persisted through PatternReplace as one undoable operation.
+ bool randomizeRowVelocity(std::size_t row);
  bool varyPatternVelocity();
  bool resetPatternVelocity();
  std::uint32_t velocityVariation_{0};
