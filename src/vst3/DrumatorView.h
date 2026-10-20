@@ -55,6 +55,7 @@ private:
  std::size_t velocityStep_{0};
  std::size_t firstRow_{0};
  std::size_t songSlot_{0};
+ std::size_t songPage_{0};
  bool songEditorOpen_{false};
  // UI-only: each instrument controls its own Velocity lane.
  std::array<bool,kRows> velocityExpanded_{};
