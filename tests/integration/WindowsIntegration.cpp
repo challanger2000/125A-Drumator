@@ -295,7 +295,7 @@ void activeEdits(Fixture& f){
  // Actual Undo and clipboard plus an active drag in a real view.
  check(f.c->setStepVelocity(0,0,3,91)&&f.c->copyCurrentPattern(),"Z01 create Undo/clipboard");
  click(*v,80,108+4*29+5+45); // open velocity lane using the real button
- click(*v,630,108+4*29+100);
+ click(*v,630,108+29+12); // inline velocity for first instrument
  check(std::get<0>(IntegrationAccess::viewSnapshot(*v)),"Z01 fixture did not start actual view drag");
  check(f.c->setStepVelocity(0,0,4,85),"Z01 active stroke change");
 }
@@ -358,6 +358,19 @@ void testZoom(){
      f.frames[0].accept=true;check(zoom(*f.c,large)==kResultOk,"Z02 accepted recall failed");
      check(v->zoomMatches(large?1.5:1.)&&std::abs(e.getFrame()->getTransform().m11-dpi*(large?1.5:1.))<.001,"Z02 transform mismatch");
    }
+ }
+ // DZM2 preserves intermediate user zoom; DZM1 remains backward compatible.
+ for(const auto entry : {std::pair<double,std::uint8_t>{1.2,1},
+                         std::pair<double,std::uint8_t>{1.3,2}}) {
+   std::array<std::uint8_t,5> v2{{'D','Z','M','2',entry.second}};
+   drumator::qa::ByteStream in(v2.data(),v2.size());
+   check(f.c->setState(&in)==kResultOk&&v->zoomMatches(entry.first),"Z02 DZM2 intermediate zoom recall");
+   ResizableMemoryIBStream written;
+   check(f.c->getState(&written)==kResultOk&&written.getCursor()==5,
+         "Z02 DZM2 state length");
+   const auto* b=static_cast<const std::uint8_t*>(written.getData());
+   check(b[0]=='D'&&b[1]=='Z'&&b[2]=='M'&&b[3]=='2'&&b[4]==entry.second,
+         "Z02 intermediate zoom not persisted");
  }
  check(zoom(*f.c,true)==kResultOk,"Z02 saved preference set");
  ResizableMemoryIBStream saved;
