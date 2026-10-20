@@ -623,9 +623,10 @@ bool Controller::clearSample(std::size_t row) {
  if(ok){labels_[row]="LEER - WAV LADEN";samplePaths_[row].clear();}
  return ok;
 }
-bool Controller::cycleRowOutput(std::size_t row) {
- if(row>=kRows)return false;
- const auto bus=static_cast<std::uint8_t>((output_[row]+1)%kRows);
+bool Controller::setRowOutput(std::size_t row,unsigned requested) {
+ if(row>=kRows||requested>=kRows)return false;
+ if(output_[row]==requested)return true;
+ const auto bus=static_cast<std::uint8_t>(requested);
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.RowOutput");
  auto* attrs=msg->getAttributes();
@@ -633,21 +634,28 @@ bool Controller::cycleRowOutput(std::size_t row) {
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  attrs->setInt("Bus",static_cast<Steinberg::int64>(bus));
  const bool accepted=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();if(accepted)output_[row]=bus;
+ msg->release();if(accepted){output_[row]=bus;notifyViews(false);}
  return accepted;
 }
-bool Controller::cycleRowChoke(std::size_t row,int direction) {
- if(row>=kRows||(direction!=1&&direction!=-1))return false;
- const auto next=static_cast<std::uint8_t>((static_cast<int>(choke_[row])+5+direction)%5);
+bool Controller::cycleRowOutput(std::size_t row) {
+ return row<kRows?setRowOutput(row,(output_[row]+1)%kRows):false;
+}
+bool Controller::setRowChoke(std::size_t row,unsigned requested) {
+ if(row>=kRows||requested>4)return false;
+ if(choke_[row]==requested)return true;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.RowChoke");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
- attrs->setInt("Group",next);
+ attrs->setInt("Group",static_cast<Steinberg::int64>(requested));
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok)choke_[row]=next;
+ if(ok){choke_[row]=static_cast<std::uint8_t>(requested);notifyViews(false);}
  return ok;
+}
+bool Controller::cycleRowChoke(std::size_t row,int direction) {
+ if(row>=kRows||(direction!=1&&direction!=-1))return false;
+ return setRowChoke(row,static_cast<unsigned>((static_cast<int>(choke_[row])+5+direction)%5));
 }
 bool Controller::adjustRowPitch(std::size_t row,int delta) {
  if(row>=kRows)return false;
