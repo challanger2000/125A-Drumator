@@ -664,6 +664,36 @@ void testPagedSongEditor(){
        "UX Song page/selection left outside recalled chain");
  evidence("UX paged Song editor selection, no offscreen edits, recall and 64-slot navigation PASS");
 }
+void testSongCompactViewport(){
+ Fixture f;f.kit(namedKit('X',4));f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ check(v->getViewSize().getHeight()==538.,"UX expected four-row default editor");
+ click(*v,1026.,65.); // Song edit (compact)
+ check(v->getViewSize().getHeight()==370.,"UX Song editor failed to become compact");
+ captureVstgui(*v,"ux-song-compact-370",1.0);
+ click(*v,1026.,65.); // return to Step grid
+ check(v->getViewSize().getHeight()==538.,"UX Step editor height not restored");
+ // Reject the enlargement after Song edit. Users must still be able to
+ // reach every instrument, not skip rows in a truncated viewport.
+ click(*v,1026.,65.);
+ check(v->getViewSize().getHeight()==370.,"UX Song second open");
+ f.frames[0].accept=false;
+ click(*v,1026.,65.); // host refuses resize back to 538
+ check(v->getViewSize().getHeight()==370.&&v->visibleRowsForHit()==2,
+       "UX refused host resize did not degrade to two reachable rows");
+ const auto bottom=UiCompactLayout::header+2*UiCompactLayout::baseRow;
+ click(*v,1190.,bottom+17.); // next page: rows 3 and 4
+ check(IntegrationAccess::firstRow(*v)==2&&v->visibleRowsForHit()==2,
+       "UX compact fallback skipped rows when paging");
+ click(*v,45.,UiCompactLayout::header+17.);
+ check(IntegrationAccess::selectedRow(*v)==2,"UX compact fallback row 3 not selectable");
+ f.frames[0].accept=true;
+ click(*v,1090.,bottom+17.); // back to rows 1..4, now resize accepted
+ check(IntegrationAccess::firstRow(*v)==0&&
+       v->getViewSize().getHeight()==538.&&v->visibleRowsForHit()==4,
+       "UX compact fallback cannot recover after host accepts again");
+ evidence("UX 370px Song viewport, return to Steps and refused-resize row navigation PASS");
+}
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
    Fixture f;f.kit(namedKit('X',16));f.open();f.open();
@@ -714,6 +744,7 @@ int main(int argc,char** argv){
  run("VSTGUI native pixel render set",testVisualRender);
  run("UX direct pattern length",testPatternLengthControls);
  run("UX paged Song board",testPagedSongEditor);
+ run("UX compact Song viewport",testSongCompactViewport);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
