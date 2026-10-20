@@ -928,6 +928,74 @@ void testControllerMetadataCommit(){
  f.p->setProcessing(false);f.p->setActive(false);
  evidence("N11 Controller metadata allocation, WAV load and clear consistency PASS");
 }
+void testRealSampleFolderStepping(){
+ // N12: exercise genuine controller < > sample browsing, not only the
+ // pure adjacentSample filename helper. Invalid neighbors are skipped
+ // without changing the loaded sound, kit bytes or visible filename.
+ Fixture f;
+ auto fixture=namedKit('X');fixture.displayNames[0].clear();
+ f.kit(fixture);
+ prepareAudio(*f.p);
+ const auto folder=std::filesystem::current_path()/"125A-Drumator-N12-SampleBrowse";
+ std::filesystem::create_directories(folder);
+ const auto A=folder/"A-good.wav";
+ const auto badB=folder/"B-broken.wav";
+ const auto C=folder/"C-good.wav";
+ const auto badD=folder/"D-broken.wav";
+ const auto wavA=constantStereo(.25f,-.25f);
+ const auto wavC=constantStereo(-.5f,.125f);
+ auto writeFile=[&](const std::filesystem::path& p,const std::vector<std::uint8_t>& bytes){
+   std::ofstream out(p,std::ios::binary|std::ios::trunc);
+   check(out.good(),"N12 cannot create folder fixture");
+   out.write(reinterpret_cast<const char*>(bytes.data()),
+             static_cast<std::streamsize>(bytes.size()));
+   check(out.good(),"N12 cannot write folder fixture");
+ };
+ writeFile(A,wavA);
+ writeFile(badB,std::vector<std::uint8_t>(64,0));
+ writeFile(C,wavC);
+ writeFile(badD,std::vector<std::uint8_t>(64,0));
+ auto snapshot=[&]{
+   ResizableMemoryIBStream stream;KitState state;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                          static_cast<std::size_t>(stream.getCursor()),state),
+         "N12 processor project snapshot");
+   return state;
+ };
+ const auto aPath=A.string(),cPath=C.string();
+ check(f.c->loadWav(0,aPath)==Controller::LoadStatus::Accepted,
+       "N12 initial real WAV import");
+ check(IntegrationAccess::paths(*f.c)[0]==aPath&&
+       snapshot().names[0]=="A-good.wav"&&snapshot().wav[0]==wavA,
+       "N12 initial sample/controller/project mismatch");
+ check(f.c->stepSample(0,+1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==cPath&&
+       snapshot().names[0]=="C-good.wav"&&snapshot().wav[0]==wavC,
+       "N12 next did not skip invalid WAV and reach next valid sample");
+ check(f.c->stepSample(0,-1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==aPath&&
+       snapshot().names[0]=="A-good.wav"&&snapshot().wav[0]==wavA,
+       "N12 previous did not skip invalid WAV");
+ check(f.c->stepSample(0,-1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==cPath&&
+       snapshot().wav[0]==wavC,
+       "N12 previous did not wrap after invalid final file");
+ check(f.c->stepSample(0,+1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==aPath&&
+       snapshot().wav[0]==wavA,
+       "N12 next did not wrap after invalid final file");
+ const auto previous=snapshot();
+ check(f.c->stepSample(0,0)==Controller::LoadStatus::Rejected&&
+       f.c->stepSample(1,+1)==Controller::LoadStatus::NotFound&&
+       snapshot().wav[0]==previous.wav[0]&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "N12 invalid browsing request changed existing sample");
+ std::error_code ec;std::filesystem::remove_all(folder,ec);
+ check(!ec,"N12 unable to remove sample browse fixtures");
+ f.p->setProcessing(false);f.p->setActive(false);
+ evidence("N12 real sample folder browsing, invalid-neighbor skip, wrap, rollback PASS");
+}
 void testHostNameAllocationRollback(){
  Fixture f;auto baseline=namedKit('X');f.kit(baseline);
  // Construct the host message before fault injection: only the processor's
@@ -1016,6 +1084,7 @@ int main(int argc,char** argv){
  run("UX compact Song viewport",testSongCompactViewport);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);
+ run("N12 real WAV sample folder previous/next",testRealSampleFolderStepping);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
