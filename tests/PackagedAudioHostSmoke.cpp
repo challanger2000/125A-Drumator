@@ -33,6 +33,7 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include <limits>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -977,6 +978,21 @@ int main(int argc,char** argv) {
      require(downbeat>1.0,
              "Transport bar-2 start/locate/backwards loop missed first pattern step");
    }
+   // The host may claim valid clock flags while supplying NaN values.
+   // Drain the preceding one-shot completely without stopping transport,
+   // then confirm the first step sounds on the next fractional-beat locate.
+   context.projectTimeMusic=0.;
+   run(-1);
+   context.projectTimeMusic=std::numeric_limits<double>::quiet_NaN();
+   context.tempo=std::numeric_limits<double>::quiet_NaN();
+   for(int block=0;block<6;++block)run(-1);
+   context.projectTimeMusic=4.25; // Beat 2 at bar 2: new origin is step 17.
+   context.tempo=120.;
+   run(-1);
+   double resumedHit=0.;
+   for(int i=50;i<190;++i)resumedHit+=std::abs(left[i]);
+   require(resumedHit>1.0,
+           "Invalid host clock poisoned subsequent transport locate/first step");
    context.state=0;
    run(-1);
    patternKit.swing=savedSwing;patternKit.humanize=savedHumanize;

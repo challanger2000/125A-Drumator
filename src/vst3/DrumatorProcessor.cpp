@@ -514,8 +514,17 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  const auto* context=data.processContext;
  const bool playing=context&&
      ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);
+ // Never propagate a malformed host clock into expectedNextPpq_: otherwise
+ // NaN comparison is always false and the next real locate cannot reset phase.
+ const bool validHostClock=context&&
+     (context->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                      Steinberg::Vst::ProcessContext::kTempoValid))==
+                     (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                      Steinberg::Vst::ProcessContext::kTempoValid)&&
+     std::isfinite(context->projectTimeMusic)&&
+     std::isfinite(context->tempo)&&context->tempo>0.0;
  if(wasPlaying_&&!playing)voices_.reset(); // stop old sequencer tails once
- if(!playing)haveExpectedPpq_=false;
+ if(!playing||!validHostClock)haveExpectedPpq_=false;
  wasPlaying_=playing;
  // The first full block after a kit commit starts with no old-kit voices.
  const auto revision=kitRevision_.load(std::memory_order_acquire);
@@ -571,11 +580,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  };
  // Process program changes at their actual sample offset. Schedule each
  // constant-pattern interval separately; no allocation in the audio callback.
- if(playing&&context&&
-    (context->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                     Steinberg::Vst::ProcessContext::kTempoValid))==
-                    (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                     Steinberg::Vst::ProcessContext::kTempoValid)) {
+ if(playing&&validHostClock) {
    const auto initialPpq=context->projectTimeMusic;
    // A new transport run or a locate/loop jump starts at pattern step 1.
    // Normal continuous blocks keep the same origin; switching A-H does not reset it.
