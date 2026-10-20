@@ -372,6 +372,11 @@ void DrumatorView::valueChanged(VSTGUI::CControl* control) {
 }
 bool DrumatorView::changeDetailValue(std::size_t row,int slot,int requested) {
  if(row>=controller_.visibleRows())return false;
+ const int current=slot==0?static_cast<int>(controller_.rowGain(row)):
+     slot==1?controller_.rowPan(row):slot==2?controller_.rowPitch(row):
+     slot==3?static_cast<int>(controller_.rowRandomVelocity(row)):
+     slot==4?static_cast<int>(controller_.rowChoke(row)):-1;
+ if(current==requested)return true;
  switch(slot) {
    case 0:return controller_.adjustRowMix(row,false,requested-
                                static_cast<int>(controller_.rowGain(row)));
