@@ -1692,11 +1692,11 @@ int main(int argc,char** argv) {
    if(!waitFor([&]{return acknowledgedEpoch.load(std::memory_order_acquire)==epoch;})) {
      stopAudio=true;audioActor.join();require(false,"T04 new coherent kit audio absent or mixed");
    }
-   Steinberg::ResizableMemoryIBStream saved;
+   Steinberg::ResizableMemoryIBStream capturedKitState;
    drumator::KitState observed;
    const auto& expected=(epoch&1u)?kitY:kitX;
-   require(component->getState(&saved)==kResultOk&&
-       drumator::KitCodec::decode(static_cast<const std::uint8_t*>(saved.getData()),saved.getCursor(),observed)&&
+   require(component->getState(&capturedKitState)==kResultOk&&
+       drumator::KitCodec::decode(static_cast<const std::uint8_t*>(capturedKitState.getData()),capturedKitState.getCursor(),observed)&&
        observed.grid==expected.grid&&observed.wav==expected.wav&&observed.names==expected.names&&
        observed.gain==expected.gain&&observed.output==expected.output&&
        observed.masterVolume==expected.masterVolume&&observed.selected==expected.selected,

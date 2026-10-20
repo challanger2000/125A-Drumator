@@ -43,6 +43,14 @@ The product already receives it via `smtg_target_prepare_bundle(Drumator)`;
 the separate test EXE needs its own definition. No dummy helper or product
 resource/lifecycle change is used.
 
+All three native Windows QA executables receive `NOMINMAX` as a private CMake
+compile definition, before any SDK or Windows header is parsed. In particular,
+`ResultLog.h` may include `windows.h` before the packaged audio test's core
+headers; Win32 `min`/`max` macros must not corrupt `std::min`, `std::max` or
+`numeric_limits<T>::min/max`. Core/DSP headers are not rewritten for this test
+include-order issue. Own `/W4 /WX` remain enabled. Nonfatal warnings from
+separately compiled upstream VSTGUI sources are not globally suppressed.
+
 ## Oracles
 
 - T01: packaged component `getState` after actual PatternLength messages 32→16→32,

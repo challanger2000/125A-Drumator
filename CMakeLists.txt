@@ -258,5 +258,10 @@ if(DRUMATOR_BUILD_VST3)
   endif()
   if(WIN32 AND BUILD_TESTING)
     include(tests/integration/Configure.cmake)
+    # ResultLog and native fixtures include windows.h before some core headers.
+    # Disable Win32 min/max macros from the start of every QA translation unit.
+    foreach(_drumator_qa_target drumator_audio_host_smoke drumator_editor_smoke drumator_integration_tests)
+      target_compile_definitions(${_drumator_qa_target} PRIVATE NOMINMAX)
+    endforeach()
   endif()
 endif()
