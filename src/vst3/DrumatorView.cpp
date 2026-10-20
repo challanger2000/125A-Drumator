@@ -823,7 +823,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       }
    }else if(kind==2&&x>=782&&x<968&&y>=86&&y<268) {
       const int idx=static_cast<int>((y-86)/26.);
-      if(idx>=0&&idx<7){
+      if(idx>=0&&idx<7&&y<86.+idx*26.+25.){
         const auto pattern=controller_.currentPattern();
         ok=idx==0?controller_.togglePatternLength(pattern):
             idx==1?controller_.copyCurrentPattern():
@@ -840,7 +840,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       if(x>=413&&x<613&&y>=top&&y<top+200.){
         const int col=x>=515?1:0;
         const int cell=static_cast<int>((y-top)/25.);
-        if(cell>=0&&cell<8) {
+        if(cell>=0&&cell<8&&x>=413+col*102&&x<511+col*102&&
+           y<top+cell*25.+24.) {
           const auto selected=static_cast<unsigned>(col*8+cell);
           ok=controller_.setRowOutput(target,selected);acted=true;
         }
@@ -850,10 +851,22 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
                                 getViewSize().getHeight()-145.);
       if(x>=515&&x<615&&y>=top&&y<top+135.){
         const int cell=static_cast<int>((y-top)/27.);
-        if(cell>=0&&cell<5) {
+        if(cell>=0&&cell<5&&y<top+cell*27.+26.) {
           ok=controller_.setRowChoke(target,static_cast<unsigned>(cell));acted=true;
         }
       }
+   }else if(kind==5&&target<controller_.visibleRows()){
+     const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
+                              std::max(108.,getViewSize().getHeight()-100.));
+     if(x>=78&&x<304&&y>=top&&y<top+90.){
+       const auto option=static_cast<int>((y-top)/30.);
+       if(option>=0&&option<3&&y<top+option*30.+29.){
+         if(option==0)load(target);
+         else if(option==1)editName(target);
+         else if(!controller_.clearSample(target))ok=false;
+         acted=true;
+       }
+     }
    }
    if(acted&&!ok)status_="AUSWAHL VOM PROZESSOR / HOST ABGELEHNT";
    invalid();return done;
@@ -1020,6 +1033,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      velocityRow_=row;
      (void)toggleRowVelocity(row);invalid();return done;
    }
+   if(UiCompactLayout::hit(x,UiCompactLayout::sampleMenu)&&
+      y>=top+5&&y<top+35){
+     popup_=5;popupRow_=row;invalid();return done;
+   }
    if(UiCompactLayout::hit(x,UiCompactLayout::sample)&&y>=top+5&&y<top+35){
      if(buttons&VSTGUI::kShift)editName(row);
      else if(buttons&VSTGUI::kAlt){
@@ -1052,7 +1069,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
      invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::choke)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::choke)&&y>=top+54&&y<top+86){
      popup_=4;popupRow_=row;invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::output)&&y>=top+5&&y<top+35){
