@@ -955,6 +955,34 @@ int main(int argc,char** argv) {
    require(component->setActive(true)==kResultOk,"Pattern activate");
    require(audio->setProcessing(true)==kResultOk,"Pattern resume");
  };
+ // Transport regression: a fresh start at DAW bar 2 (PPQ 4), a locate
+ // to bar 3, and a backwards loop must all restart pattern A at step zero.
+ {
+   const auto savedSwing=patternKit.swing;
+   const auto savedHumanize=patternKit.humanize;
+   const auto savedSong=patternKit.songEnabled;
+   patternKit.swing=0;patternKit.humanize=0;patternKit.songEnabled=0;
+   loadPattern(0);
+   context.state=0;
+   run(-1);
+   context.state=ProcessContext::kPlaying|
+                 ProcessContext::kProjectTimeMusicValid|
+                 ProcessContext::kTempoValid;
+   context.tempo=120.;
+   for(double ppq : {4.,8.,4.}) {
+     context.projectTimeMusic=ppq;
+     run(-1);
+     double downbeat=0.;
+     for(int i=50;i<190;++i)downbeat+=std::abs(left[i]);
+     require(downbeat>1.0,
+             "Transport bar-2 start/locate/backwards loop missed first pattern step");
+   }
+   context.state=0;
+   run(-1);
+   patternKit.swing=savedSwing;patternKit.humanize=savedHumanize;
+   patternKit.songEnabled=savedSong;
+ }
+ std::cout<<"VST3 transport bar-2 start, forward locate and loop restart PASS\\n";
  // DM15 independent A-H one/two-bar playback at a continuous 48k clock.
  // Step 20 remains stored when a pattern loops at step 16.
  {
