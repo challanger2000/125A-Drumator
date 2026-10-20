@@ -8,8 +8,8 @@ Ein Beat entsteht durch drei Schritte: Sample in Zeile laden/ziehen → Steps se
 | Funktion | V2-UI und Ort | Entscheidung / Verworfenes |
 |---|---|---|
 | Pattern A–H | acht direkte Tasten im Kopf | keine Dropdown-Verzögerung; aktives Pattern optisch eindeutig |
-| Länge 16/32 Steps | kompaktes Wahlmenü direkt neben Pattern | Shift-Klick als unauffälliger Ersatz darf bleiben, wird nicht vorausgesetzt |
-| Pattern Copy/Paste/Clear/Undo | **ein** PATTERN-AKTIONEN Menü oben neben A–H | vier räumlich getrennte Buttons unten fallen weg |
+| Länge 16/32 Steps | zwei direkte Taster „1 TAKT“ / „2 TAKTE“ im Kopf neben Pattern | Shift-Klick als unauffälliger Ersatz darf bleiben, wird nicht vorausgesetzt |
+| Pattern Copy/Paste/Clear/Undo | **ein** PATTERN-AKTIONEN Menü oben neben A–H (ohne zusätzliche Längenwahl) | vier räumlich getrennte Buttons unten fallen weg |
 | Velocity Variation / Reset | Menüeinträge in PATTERN-AKTIONEN | zwei Großbuttons unten fallen weg; keine Änderung von Random Velocity |
 | Swing | echter bipolar? Nein: **unipolarer Drehregler** 0..50 % (bestehende DSP-/Controllergrenze) mit Wert | +/- fallen weg; 0 % = kein Swing |
 | Humanize | Drehregler 0..100 % im Kopf | keine zusätzliche Fußzeile |
@@ -21,7 +21,7 @@ Ein Beat entsteht durch drei Schritte: Sample in Zeile laden/ziehen → Steps se
 | Sample laden | klarer Dateifeld-Klick oder Drag & Drop auf Instrument | keine unbeschrifteten Modifiertasten als einzige Methode |
 | Vorhören | ▶-Button direkt beim Sample | keine globale Umleitung |
 | Sample im Ordner vor/zurück | ◀ ▶ neben Sample | keine Modifikatoren erforderlich |
-| Instrument umbenennen | Name-Aktion (Menü; optional Shift-Klick für alte Gewohnheit) | Rename darf kein versehentlicher File-Open sein |
+| Instrument umbenennen | eigenes sichtbares „…“-Menü neben dem Samplefeld (Laden / Umbenennen / Entfernen); Shift-Klick optional | Rename darf kein versehentlicher File-Open sein |
 | Instrument + / - | zwei klare Tasten am Fuß bei Zeilenverwaltung | nur leere letzte Zeile entfernen, vorhandene Sicherheit bleibt |
 | VOL | **kleiner Rotary** in Instrumentzeile, 0..200 % | kein +/-; Doppel-/Ctrl-Klick Standard 100 % |
 | PAN | zentrierter bipolarer Rotary -100..+100, Mitte C | kein +/-; Double/Ctrl reset 0 |
@@ -39,7 +39,7 @@ Ein Beat entsteht durch drei Schritte: Sample in Zeile laden/ziehen → Steps se
 ## Geometrieentscheidung
 1280 logische VSTGUI-Pixel, obere Kopfzeile 108 px, 4 Instrumente je Seite, 16 insgesamt; bei weniger als vier zeigt die Seite nur vorhandene Zeilen. Deutlich 4 statt 16 gleichzeitig sichtbare Reihen: vier vollwertige 94px-Reihen sind schneller verständlich als sechzehn 29px-Zeilen. **Jede einzelne Zeile** kann sich um 30px zur Velocity-Bearbeitung erweitern. Das Maximum 108 + 4*124 + 50 = 654 logische px, bei Zoom 130 % = ~850 phys. px; Windows 1080p. Ohne Velocity 108 + 4*94 + 50 = 534 logical. Bei 150 % max 981px Höhe und 1920px Breite. Fensterhöhe wird passend verhandelt, bei Host-Resize-Refusal nicht über Fenster malen.
 
-Je Zeile: linker Bereich x16..616, Steps x622..1230. Gezielte Auswahl x16..66. Oben Samplebereich x70..370 und Fill/M/S/Output x374..616; unten zugeordnet die Rotary-Regler Vol/Pan/Pitch/Random und Choke. 32 Step-Kacheln beginnen x622, Breite 19; am Ende ein kleiner Schalter x1230..1266 (32-Step-Grid endet 1230) schaltet **nur diese** Velocity-Zeile um. Optionaler Balkenbereich unter Step-Reihe, nicht am Fensterfuß. Selected row farbig, eigene Hitfläche.
+Je Zeile: linker Bereich x16..616, Steps x622..1230. Gezielte Auswahl x16..66. Oben Samplebereich x78..398 inklusive sichtbarem „…“/PLAY/Ordnernavigation; Fill/M/S/Output x403..615, Choke darunter; unten zugeordnet die Rotary-Regler Vol/Pan/Pitch/Random und Choke. 32 Step-Kacheln beginnen x622, Breite 19; am Ende ein kleiner Schalter x1230..1266 (32-Step-Grid endet 1230) schaltet **nur diese** Velocity-Zeile um. Optionaler Balkenbereich unter Step-Reihe, nicht am Fensterfuß. Selected row farbig, eigene Hitfläche.
 
 Das Layout der Bedienelemente wird vor endgültigem Code anhand der echten Zeichnungs-Hitboxen zentralisiert. Nicht von einem Bild abmalen. Schrifthöhen bei 100 %, 130 %, 150 %, deutsche Beschriftungen, 4 Zeilen und 2 Seiten prüfen.
 
@@ -61,3 +61,10 @@ Das Layout der Bedienelemente wird vor endgültigem Code anhand der echten Zeich
 
 ## QA / Definition „fertig“
 MSVC Windows build, aktive CTests, Validator 47/47, gepackte VST3 Editor-/Audio-Hostsmoke, tatsächliche Windows-VSTGUI-Rasterbilder aller Views bei 100/120/130/150, UI-Interaktionstests für Knob/Dropdown/Row-Select/Velocity/Pages, Projekt-/Host-Resize-Regression. **Studio One bleibt Eigentümer-Abnahme**. Der spätere echte Skin verwendet ausschließlich Branding Master und freigegebene Knob-Designer-Assets, ohne GUI-Verhalten zu ändern.
+
+## Änderungsabgleich nach unabhängiger UX-Gegenprüfung
+- Der separate 1/2-Takt-Wert im Pattern-Aktionsmenü wäre eine weitere unnötige versteckte Funktion gewesen: V2 zeigt **direkt** „1 TAKT“ und „2 TAKTE“. Pattern-Aktionsmenü enthält nur Copy/Paste/Clear/Undo/Velocity-Operationen; keine doppelte Längensteuerung. Aktuelle C++-Implementation und Win32-Klick-Test sind maßgeblich.
+- Sample-Bereich besitzt eine sichtbare „…“-Aktion mit Laden, Umbenennen, Entfernen. Unentdeckbare Shift/Alt-Spezialklicks sind lediglich optionale Kurzwege.
+- PLAY, MAIN/OUT und CHOKE werden ausdrücklich bezeichnet. Ein eigener VELO-Text benennt den zeilenbezogenen Pfeil.
+- Keine dekorativen Scheinregler: alle Knobs senden die vorhandenen echten Controller-/Processor-Parameter; kein 140%-Zoom ohne persistierten Host-Pfad.
+- Verbindlicher Grafik-/Klickflächen-Handoff ist `resource/VSTGUI_ASSET_SLOTS.json` auf demselben HEAD. Alte V1-Footer-Metadaten sind ungültig.
