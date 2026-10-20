@@ -24,6 +24,9 @@
 #include "vstgui/lib/platform/win32/win32factory.h"
 #include "vstgui/lib/controls/ctextedit.h"
 #include "vstgui/lib/platform/iplatformframe.h"
+#include "vstgui/lib/cbitmap.h"
+#include "vstgui/lib/coffscreencontext.h"
+#include <filesystem>
 #include <array>
 #include <atomic>
 #include <cstdlib>
@@ -388,6 +391,80 @@ void testZoom(){
    IntegrationAccess::view(*f.c,0)->zoomMatches(1.5)&&IntegrationAccess::view(*f.c,1)->zoomMatches(1.5),"Z02 partial multi-view change");
  evidence("Z02 PASS: attached 100/150, DPI 100/150/200, host refusals, saved reopen and atomic two-view rejection");
 }
+// Real VSTGUI offscreen render, exported as top-down 24-bit Windows BMP.
+// The QA artifact provides pixels (including native Windows font rendering),
+// not an invented screenshot or a simulation of the CSS layout.
+void captureVstgui(DrumatorView& v,const std::string& title,double scale){
+ const auto rect=v.getViewSize();
+ check(rect.getWidth()>0&&rect.getHeight()>0,"invalid native GUI dimensions");
+ auto bitmap=VSTGUI::renderBitmapOffscreen(
+     VSTGUI::CPoint(rect.getWidth(),rect.getHeight()),scale,
+     [&](VSTGUI::CDrawContext& ctx){v.draw(&ctx);});
+ check(bitmap!=nullptr,"VSTGUI offscreen bitmap creation failed");
+ auto* access=VSTGUI::CBitmapPixelAccess::create(bitmap.get(),false);
+ check(access!=nullptr,"VSTGUI native bitmap pixel read failed");
+ const auto width=access->getBitmapWidth(),height=access->getBitmapHeight();
+ check(width>0&&height>0&&width<=4096&&height<=4096,"invalid VSTGUI screenshot pixel dimensions");
+ const std::size_t stride=(static_cast<std::size_t>(width)*3u+3u)&~std::size_t{3u};
+ std::array<unsigned char,54> hdr{};
+ auto le16=[&](std::size_t at,std::uint16_t v){
+  hdr[at]=static_cast<unsigned char>(v);hdr[at+1]=static_cast<unsigned char>(v>>8);
+ };
+ auto le32=[&](std::size_t at,std::uint32_t v){
+  for(int b=0;b<4;++b)hdr[at+static_cast<std::size_t>(b)]=static_cast<unsigned char>(v>>(8*b));
+ };
+ hdr[0]='B';hdr[1]='M';
+ le32(2,static_cast<std::uint32_t>(54u+stride*height));le32(10,54);
+ le32(14,40);le32(18,width);
+ le32(22,static_cast<std::uint32_t>(-static_cast<std::int32_t>(height)));
+ le16(26,1);le16(28,24);le32(34,static_cast<std::uint32_t>(stride*height));
+ std::filesystem::create_directories("gui-shots");
+ std::ofstream output("gui-shots/"+title+".bmp",std::ios::binary);
+ check(output.good(),"could not write native GUI screenshot");
+ output.write(reinterpret_cast<const char*>(hdr.data()),hdr.size());
+ std::vector<unsigned char> row(stride,0);
+ std::uint64_t checksum=0;
+ for(std::uint32_t y=0;y<height;++y){
+  for(std::uint32_t x=0;x<width;++x){
+    check(access->setPosition(x,y),"screenshot bitmap out of bounds");
+    VSTGUI::CColor color{};access->getColor(color);
+    const auto at=static_cast<std::size_t>(x)*3u;
+    row[at]=color.blue;row[at+1]=color.green;row[at+2]=color.red;
+    checksum+=color.red+color.green+color.blue;
+  }
+  output.write(reinterpret_cast<const char*>(row.data()),
+               static_cast<std::streamsize>(row.size()));
+ }
+ access->forget();
+ check(output.good()&&checksum>0,"blank or incomplete VSTGUI screenshot");
+ evidence("Native VSTGUI render "+title+" "+std::to_string(width)+"x"+
+          std::to_string(height)+" pixel checksum "+std::to_string(checksum));
+}
+void testVisualRender(){
+ for(const auto zoom: {1.0,1.2,1.3,1.5}){
+  Fixture f;f.kit(namedKit('X',4));f.open();
+  auto* v=IntegrationAccess::view(*f.c,0);
+  captureVstgui(*v,zoom==1.?"four-rows-100":zoom==1.2?"four-rows-120":
+       zoom==1.3?"four-rows-130":"four-rows-150",zoom);
+ }
+ {
+  Fixture f;f.kit(namedKit('X',8));f.open();
+  auto* v=IntegrationAccess::view(*f.c,0);
+  click(*v,100,108+8*29+5+45); // global inline Velocity button
+  captureVstgui(*v,"eight-rows-inline-velocity",1.0);
+ }
+ {
+  Fixture f;f.kit(namedKit('X',16));f.open();
+  captureVstgui(*IntegrationAccess::view(*f.c,0),"sixteen-rows",1.0);
+ }
+ {
+  Fixture f;f.kit(namedKit('X',4));f.open();
+  auto* v=IntegrationAccess::view(*f.c,0);
+  click(*v,720,80); // Song board
+  captureVstgui(*v,"song-board",1.0);
+ }
+ evidence("Native Windows VSTGUI render set PASS; visual human review remains separate");
+}
 void testPrecisionPanel(){
  Fixture f;f.kit(namedKit('X'));
  // Pitch recomputes the row's prepared sample; unlike gain/pan it needs a
@@ -484,6 +561,7 @@ int main(int argc,char** argv){
  run("Z01 legacy Controller",testLegacyReject);
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
+ run("VSTGUI native pixel render set",testVisualRender);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
