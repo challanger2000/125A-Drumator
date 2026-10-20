@@ -969,17 +969,17 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        }
      }
    }else if(y>=277&&y<303) {
-     const auto slot=std::min(songSlot_,count-1);
-     const auto current=controller_.songEntry(slot);
+     const auto selectedSlot=std::min(songSlot_,count-1);
+     const auto current=controller_.songEntry(selectedSlot);
      if(x>=115&&x<563) {
        const auto index=static_cast<std::size_t>((x-115)/56.);
        if(index<8&&x<115+index*56.+50.)
-         ok=controller_.setSongEntry(slot,static_cast<std::uint8_t>(index),current.steps);
+         ok=controller_.setSongEntry(selectedSlot,static_cast<std::uint8_t>(index),current.steps);
      }else if(x>=678&&x<996) {
        const auto index=static_cast<std::size_t>((x-678)/106.);
        if(index<3&&x<678+index*106.+100.) {
          const std::uint8_t lengths[]={8,16,32};
-         ok=controller_.setSongEntry(slot,current.pattern,lengths[index]);
+         ok=controller_.setSongEntry(selectedSlot,current.pattern,lengths[index]);
        }
      }else if(x>=1012&&x<1110) {
        if(count<SongChain::kCapacity){
