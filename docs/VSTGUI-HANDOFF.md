@@ -1,29 +1,32 @@
-# 125A Drumator – Technischer VSTGUI-Handoff
+# 125A Drumator — VSTGUI UX V2 Handoff
 
-**Stand: 20.10.2026 · Windows-validierte technische GUI-Vorlage · kein FINAL-V1-/Studio-One-PASS und kein fertiger Bitmap-Skin.**
+**Stand: 20.10.2026 · V2 technische Arbeitsoberfläche · Windows-Freigabe und Studio-One-Praxistest getrennt.**
 
-## Nachgewiesene Basis
-- Programm-/GUI-Quellstand: [`eaa035bb43cc9fa20682f711b8631a75da0ece4d`](https://github.com/challanger2000/125A-Drumator/commit/eaa035bb43cc9fa20682f711b8631a75da0ece4d).
-- [Windows-Workflow #39418839905](https://github.com/challanger2000/125A-Drumator/actions/runs/39418839905): Build SUCCESS, 21/21 CTests, Steinberg-Validator 47/47, gepackte VST3 mit Editor-/Audio-Hostprüfung.
-- [Reale VSTGUI-Renderings](https://github.com/challanger2000/125A-Drumator/actions/runs/39418839905/artifacts/12262412156): 9 Windows-Offscreen-Aufnahmen. Enthalten: vier Zoomstufen, 8er-Velocity, 16-Zeilen-Ansicht, zwei Seiten mit 16 Instrumenten und Velocity sowie Song-Tafel. 16er-Deaktivierungsbeschriftung ist lesbar; die ausgewählte Klangzeile folgt dem Seitenwechsel.
-- [Aktuelle installierbare Windows-VST3](https://github.com/challanger2000/125A-Drumator/actions/runs/39418839905/artifacts/12262387312): nur Entwickler-/Testpaket, noch keine V1-Freigabe.
+Die bisherige V1-GUI mit 29px Instrumentenzeilen, verteilten Plus-/Minus-Knöpfen, vier einzelnen Zoom-Tasten und zusätzlichem riesigem unteren Präzisions-/Velocitybereich ist **verworfen**. Ihre Koordinaten sind weder Designreferenz noch gültige Asset-Slots.
 
-## Verbindliche Geometrie
-- **Technisch maßgeblich sind die gemeinsamen C++-Koordinaten** und der Asset-Slot-Vertrag, nicht der blaue Mockup und kein altes Standbild.
-- `src/core/UiRowGeometry.h`: Step-/Velocity-Geometrie, Rendering und Hitbereiche gemeinsam: 1280 logische Pixel Breite, y=108 Instrumentenstart, 29 px Hauptzeile, 27 px inline Velocity, Steps ab x=622 in 32 Zellen zu je 19 px.
-- `src/core/UiRowControls.h`: FILL, P, Sample-Text (164 px), Sample vor/zurück (je 24 px), Ausgang, VOL, PAN, PITCH, MUTE/SOLO mit exakt den gezeichneten Klickflächen. Sample-Text wird per VSTGUI-Glyphbreite passend gekürzt, Dateiendung bleibt nach Möglichkeit sichtbar.
-- `src/core/UiDetailGeometry.h`: 5 ausgewählte Klangparameter – Volume, Pan, Pitch, Random Velocity, Choke. Ein einheitlicher 64-Pixel-Detailbereich; sichtbare Werte, lineare Trackpositionen, +/- und Strg-Klick auf den tatsächlichen Standardwert.
-- `src/vst3/DrumatorView.cpp/.h`: Zeichnen und Click/Drag, Fill-/Song-Overlays, Scroll-/Zoom-/Sample-Bedienung und textgebundene Anzeigen. Jeder Position- oder Schriftgrößenwechsel muss mit den zugehörigen Klick-/Dropbereichen und Tests verbunden sein.
-- `src/vst3/DrumatorController.cpp/.h`: tatsächlicher Host-/Prozessor-Aufruf und Session-/Projektzustand. Audioengine, Audioformat, MIDI- und Parameter-IDs sind nicht für den Skin zu ändern.
-- `resource/VSTGUI_ASSET_SLOTS.json`: dokumentierter Austauschvertrag mit Größen, Zuständen und Grafikgruppen; vor Export mit **aktuellem HEAD** vergleichen.
+## Ziel und Bedienhierarchie
+**Sample laden oder hineinziehen → Steps setzen → abspielen.** Regler und ihre Werte gehören direkt zur jeweiligen Instrumentenzeile. Alles was selten gebraucht wird, öffnet man am Ort der betroffenen Funktion. Sichtbare direkte Zeilenauswahl ohne Nebeneffekt. Keine doppelte Bedienfläche.
 
-## Anwenderablauf
-Sample auf eine Instrumentenzeile ziehen oder Dateifeld anklicken. Ein Step-Klick aktiviert/deaktiviert, Shift-Klick verändert Velocity. A–H oben wählen, 1/2 Takte per Shift-Klick. Beim globalen VELOCITY-Schalter erhält **jede sichtbare Instrumentenzeile** ihre 32 vertikalen Balken direkt unter den jeweiligen Steps. Ab neun Instrumenten mit Velocity erscheinen 8 Zeilen/Seite; die Seitenauswahl wechselt die Detailanzeige korrekt mit. Klick/Ziehen in den Balken verändert Werte 1–127, Strg setzt 0, jeweils ein Undo-Stroke. Die Klangleiste steuert das ausgewählte Instrument; Song besitzt eine eigene 64-Slot-Ansicht.
+1. **Header:** Pattern A–H als Tasten; aktive Länge als zwei direkt anwählbare Taster `1 TAKT` / `2 TAKTE`; ein `PATTERN …` Aktionsmenü für Copy/Paste/Clear/Undo/Velocity-Patternaktionen ohne Längen-Duplikat. Rotary für Swing (0–50%), Humanize (0–100%) und Master (0–200%). Song ON/OFF, Song EDIT und **ein** Zoommenü (100/120/130/150%).
+2. **Instrument:** Genau vier gut lesbare Zeilen gleichzeitig. Bis 16 Instrumente bleiben im Kit erhalten, Seitenwechsel über Pfeile am rechten Fuß. Jede Zeile hat: Auswahlnummer; Samplefeld zum Laden, sichtbares `…`-Menü Laden/Umbenennen/Entfernen, Ordnerpfeile, PLAY, Fill, Mute, Solo, Auswahlmenü MAIN/OUT sowie Choke 0–4. Vier VSTGUI-Rotaries Volume (0–200%, Standard 100), Pan (L100…C…R100), Pitch (−24..+24 st) und Random Velocity (0–100%, Standard 0) **direkt in derselben Zeile**.
+3. **Step-Raster:** Immer 32 Kacheln ab x622 mit 19px pro Step. Eindeutige 4/16er-Gliederung, 1T/2T ohne Datenverlust. Rechts pro Zeile der ausdrücklich als VELO beschriftete Pfeil.
+4. **Velocity:** Jede Instrumentenzeile einzeln per Pfeil um 30px aufklappbar; beliebig mehrere zur gleichen Zeit. Genau 32 Balken unter den 32 Steps dieser Zeile, editierbar durch Klick/Ziehen. Kein separater globaler Footer-Toggle, kein zweiter Editor unten.
+5. **Footer:** nur +/− Instrumentzahl (letztes nur leer entfernen), sichtbarer Seitenbereich und Ereignis-/Fehlerstatus.
+6. **Song:** eigener Editor mit 64 Sequenzplätzen und direktem Pattern-/Längenwechsel. Kontextmenüs dürfen nicht hinter der Songtafel verschwinden.
 
-Zoom: 100 / 120 / 130 / 150 %, unter Berücksichtigung von Host- und Windows-DPI. Alte gespeicherte DZM1-Zustände bleiben kompatibel, 120/130 nutzen DZM2. Windows-Render-Auflösungen für 4 Instrumente: 1280×398 / 1536×477 / 1664×517 / 1920×597.
+## Maßgeblicher Code und UI-Werte
+- `src/core/UiCompactLayout.h`: **verbindliche Geometrie/Hitmap** für Seiten, 94px-Reihen, individuell 30px zusätzliche Velocity, Rotary, Step-Zellen. Alt-Dateien `UiRowGeometry.h`, `UiRowControls.h`, `UiDetailGeometry.h` werden nicht mehr als aktuelle Layoutreferenz verwendet (alte Tests bleiben als Regressionen erhalten).
+- `src/vst3/DrumatorView.cpp/.h`: dynamisches Rendering, Overlay-Priorität, Maus- und Drop-Zonen, Vorgabe „Row header = nur auswählen“.
+- `src/vst3/DrumatorController.cpp/.h`: echte hostbestätigte Parameteränderungen; direkte Output-/Choke-Sets statt 16-maligem Durchschalten.
+- `resource/VSTGUI_ASSET_SLOTS.json`: **einziger gültiger V2-Handoff für exakte Koordinaten**. Niemals aus einem alten Screenshot ablesen.
+- `docs/DRUMATOR-UX-V2-CONCEPT-2026-10-20.md` und `docs/UX-AUDIT-2026-10-20.md`: vollständige Funktionsentscheidung + mehrfache kritische Prüfung.
+- VSTGUI-Zoom standardisierte Optionen 100/120/130/150; DZM1/DZM2 Projektkompatibilität. 140% ist nicht zur Anzeige freigegeben, da Code/Projektzustand die Stufe nicht unterstützt. Host-DPI kann Skalierung zusätzlich beeinflussen.
+- Maus-Regler: vertikal ziehen ohne Mausrad. Ctrl+Click oder Doppelklick auf den **tatsächlichen** Standardwert. Kit-Recall invalidiert offene Gesten. Für die spätere Bitmap-Grafik darf die Bedienung nicht umprogrammiert werden.
 
-## Grafik-Integration
-Der Nutzer-Mockup dient der **gestalterischen Orientierung** (blau/blaugraue Studiomaschine, FL-artiger Step-Workflow, E-mu-/DMX-/808-/909-Anmutung), **nicht** als Pixelquelle. Die offizielle 125A-Master-Geometrie kommt aus `125A-Branding/125A_Logo_Master_FINAL.svg`, gerenderte Drehregler-/Schalterfamilien nach aktueller Freigabe aus `125A-Knob-Designer`. Dynamische Beschriftungen, Step-Lauflicht, Parameterwerte und Velocity müssen echte Bedienelemente bleiben und dürfen nicht in statischen Hintergrundbildern verschwinden.
+## Echte Statusbelege / Grenzen
+- Vorgänger UX V2 Basis bei Commit `8fce9025`: Windows-Lauf [#39425815341](https://github.com/challanger2000/125A-Drumator/actions/runs/39425815341) **22/22 CTests, 47/47 Steinberg Validator, Audio-/Editor-Hostsimulator PASS**; VSTGUI-Native-BMPs vorhanden.
+- Die danach vorgenommenen Präzisierungen (sichtbare Sample-Aktionen, längere Outputbeschriftung, VELO-Label, Kopfzeilenabstand, vereinheitlichte direkte Pattern-Längenauswahl, aktualisierte Asset-Slots) sind im [aktuellen gemeinsamen Windows-Lauf #39428171691](https://github.com/challanger2000/125A-Drumator/actions/runs/39428171691) zu prüfen. Bis Abschluss **nicht PASS für den Folge-Commit behaupten**.
+- Unabhängige native Studio-One-Prüfung, echte Mausbedienung/D&D aus dem Browser, 130% FHD und Fensterhöhe bei 150% sowie finaler Vintage-Skin (125A-Branding Master und freigegebene 125A-Knob-Designer-Filmstrips) bleiben externe Gates.
 
-## Offene Abnahme
-Der technische Editor hat automatische Windows-Gates bestanden und die echten Renderings wurden auf Position und sichtbare Überlagerungen geprüft. **Noch nicht nachgewiesen**: Studio-One-Praxistest mit realen WAV/FLAC-Dateien und Browser-D&D, Mausbedienung sämtlicher Funktionen im Host, Zoom/Resize/Recall im tatsächlichen Produktionsfenster und die endgültige Bitmap-/Knob-Designer-Grafikintegration. Erst danach die finale GUI/Pluginversion freigeben.
+## Skin-Integration
+Bitmap-Austausch nur anhand der tatsächlichen V2-Zonen bei gleichem Quellstand. Kein funktionsloser GUI-Knopf. Werte, Dateinamen, Steps, LEDs und Velocity bleiben dynamisch. Wechsel an Koordinaten erfordert automatisch angepasste Click- und Drag-Tests; die Grafik darf die Oberfläche niemals erneut komplizierter machen.
