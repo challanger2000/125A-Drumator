@@ -949,7 +949,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
           [&](){return controller_.addRow();},
           [&](){return adjustEditorHeight();},
           [&](){return controller_.restoreVisibleRows(count);});
-       if(result!=RowResizeResult::Accepted)status_="ZEILE KONNTE NICHT HINZUGEFUEGT WERDEN";
+       if(result!=RowResizeResult::Applied)status_="ZEILE KONNTE NICHT HINZUGEFUEGT WERDEN";
      }
      invalid();return done;
    }
@@ -959,7 +959,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         [&](){return controller_.hideLastEmptyRow();},
         [&](){return adjustEditorHeight();},
         [&](){return controller_.restoreVisibleRows(count);});
-     if(result!=RowResizeResult::Accepted)
+     if(result!=RowResizeResult::Applied)
        status_="NUR LEERE LETZTE ZEILE ENTFERNBAR";
      invalid();return done;
    }
