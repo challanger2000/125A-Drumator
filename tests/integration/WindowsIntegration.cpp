@@ -621,6 +621,7 @@ void testPagedSongEditor(){
  click(*v,17.,160.); // first empty slot 17 is an add action
  check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
        "UX song add slot 17 via its own cell failed");
+ captureVstgui(*v,"ux-song-page-2",1.0);
  click(*v,115.+2.*56.+25.,290.); // select Pattern C for entry 17
  check(f.c->songEntry(16).pattern==2,"UX song pattern selector missed selected entry");
  click(*v,707.,290.); // half bar
@@ -629,7 +630,7 @@ void testPagedSongEditor(){
  click(*v,167.,160.); // 4px gutter between song items, must be inert
  check(IntegrationAccess::songSlot(*v)==16&&
        IntegrationAccess::snapshot(*f.c)==snapshot,"UX song gutter changed entry");
- click(*v,320.,160.); // slot 19 is not yet available: inactive
+ click(*v,350.,160.); // slot 19 is not yet available: inactive
  check(f.c->songCount()==17,"UX future Song item should not implicitly add");
  click(*v,1032.,119.);
  check(IntegrationAccess::songPage(*v)==0,"UX song previous page failed");
