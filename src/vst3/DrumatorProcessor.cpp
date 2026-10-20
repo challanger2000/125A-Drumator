@@ -382,6 +382,10 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  try {retained.assign(static_cast<const std::uint8_t*>(bytes),
                       static_cast<const std::uint8_t*>(bytes)+size);}
  catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
+ // Sample preparation and publication must see the same kit generation.
+ // In particular, pitch cannot be read concurrently with setState().
+ // This mutex is control-thread-only; the realtime process never takes it.
+ std::lock_guard<std::mutex> kitGuard(kitMutex_);
  const auto rate=outputRate_.load(std::memory_order_acquire);
  if(!(rate>0.0)||!std::isfinite(rate))return Steinberg::kResultFalse;
  std::unique_ptr<PreparedSample> candidate;
@@ -392,7 +396,6 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
      1.f,0.f,0,false,candidate);
  if(prepared!=PrepareStatus::Ok)return Steinberg::kResultFalse;
  {
-    std::lock_guard<std::mutex> guard(kitMutex_);
     std::size_t total=size;
     for(std::size_t r=0;r<kRows;++r)
       if(r!=static_cast<std::size_t>(row)) {
@@ -819,10 +822,9 @@ Steinberg::tresult PLUGIN_API Processor::getState(Steinberg::IBStream* state) {
      kit_.gain[row]=static_cast<std::uint8_t>(std::lround(rowGain_[row].load()*100.f));
      kit_.pan[row]=static_cast<std::uint8_t>(std::lround(rowPan_[row].load()*100.f+100.f));
    }
-   for(std::size_t p=0;p<kPatterns;++p)
-    for(std::size_t r=0;r<kRows;++r)
-     for(std::size_t s=0;s<kSteps;++s)
-       kit_.grid[AtomicPatternBank::index(p,r,s)]=patterns_.get(p,r,s);
+   // The regular per-cell getter is safe but not a transaction: a
+   // simultaneous PatternReplace could otherwise serialize a torn kit.
+   kit_.grid=patterns_.snapshotCoherentForState();
    if(!KitCodec::encode(kit_,serialized))return Steinberg::kResultFalse;
  }
  const auto length=static_cast<Steinberg::TSize>(serialized.size());

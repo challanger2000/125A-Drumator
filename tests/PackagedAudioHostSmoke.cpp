@@ -986,7 +986,7 @@ int main(int argc,char** argv) {
    context.projectTimeMusic=std::numeric_limits<double>::quiet_NaN();
    context.tempo=std::numeric_limits<double>::quiet_NaN();
    for(int block=0;block<6;++block)run(-1);
-   context.projectTimeMusic=4.25; // Beat 2 at bar 2: new origin is step 17.
+   context.projectTimeMusic=4.25; // Second 16th at bar 2: origin step 17.
    context.tempo=120.;
    run(-1);
    double resumedHit=0.;

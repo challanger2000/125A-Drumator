@@ -148,6 +148,37 @@ int main(){
         "out-of-range destination accepted");
   check(guarded.coherentPattern(3,readback)&&readback==good,
         "invalid bulk calls changed live pattern");
+  // Project saves run on the control thread and must not serialize a
+  // hybrid of two concurrent full-pattern replacements (T05).
+  {
+    AtomicPatternBank exportBank;
+    std::array<std::uint8_t,kRows*kSteps> a{},b{};
+    a.fill(21);b.fill(105);
+    check(exportBank.replacePattern(0,a.data(),a.size()),"T05 initial pattern");
+    std::binary_semaphore begin{0};
+    std::atomic<bool> finished{false},torn{false};
+    std::thread editing([&] {
+      begin.acquire();
+      for(unsigned iteration=0;iteration<1800;++iteration){
+        const auto& candidate=(iteration&1)?a:b;
+        if(!exportBank.replacePattern(0,candidate.data(),candidate.size()))
+          std::terminate();
+      }
+      finished.store(true,std::memory_order_release);
+    });
+    std::size_t reads=0;
+    begin.release();
+    do {
+      const auto snapshot=exportBank.snapshotCoherentForState();
+      const auto first=snapshot[0];
+      if(first!=21&&first!=105)torn.store(true);
+      for(std::size_t i=1;i<kRows*kSteps;++i)
+        if(snapshot[i]!=first)torn.store(true);
+      ++reads;
+    }while(!finished.load(std::memory_order_acquire));
+    editing.join();
+    check(reads>0&&!torn.load(),"T05 torn full-pattern project snapshot");
+  }
   // Kit recall publishes all eight pattern slices as complete generations.
   AtomicPatternBank recalled;
   std::array<std::uint8_t,kCells> recalledGrid{};

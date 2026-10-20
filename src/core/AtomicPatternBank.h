@@ -57,6 +57,16 @@ public:
         version_[p].fetch_add(1,std::memory_order_release);
         return true;
     }
+    // Host/control-thread project export: lock the same writer mutex as
+    // set() and replacePattern(), so a saved kit cannot contain half of
+    // an in-flight full-pattern replacement. Never call from process().
+    std::array<std::uint8_t,kCells> snapshotCoherentForState() const {
+        std::lock_guard<std::mutex> guard(writeMutex_);
+        std::array<std::uint8_t,kCells> saved{};
+        for(std::size_t i=0;i<kCells;++i)
+            saved[i]=grid_[i].load(std::memory_order_relaxed);
+        return saved;
+    }
     bool select(std::size_t p) noexcept {
         if(p>=kPatterns)return false;
         selected_.store(static_cast<std::uint8_t>(p),std::memory_order_relaxed);
