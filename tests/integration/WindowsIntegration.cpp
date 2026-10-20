@@ -618,6 +618,15 @@ void testPagedSongEditor(){
  // The page before slot 17 must be reachable even when only 16 are configured.
  click(*v,1170.,119.);
  check(IntegrationAccess::songPage(*v)==1,"UX song next page unavailable at boundary");
+ // This page has no existing position: its Pattern/Length controls must
+ // neither highlight nor edit a position that is hidden on page one.
+ const auto originalHidden=f.c->songEntry(0);
+ click(*v,115.+2.*56.+25.,290.);
+ click(*v,707.,290.);
+ check(f.c->songEntry(0).pattern==originalHidden.pattern&&
+       f.c->songEntry(0).steps==originalHidden.steps,
+       "UX empty Song page edited offscreen entry");
+
  click(*v,17.,160.); // first empty slot 17 is an add action
  check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
        "UX song add slot 17 via its own cell failed");
@@ -634,6 +643,9 @@ void testPagedSongEditor(){
  check(f.c->songCount()==17,"UX future Song item should not implicitly add");
  click(*v,1032.,119.);
  check(IntegrationAccess::songPage(*v)==0,"UX song previous page failed");
+ check(IntegrationAccess::songSlot(*v)==0,
+       "UX previous page must select first visible existing entry");
+
  click(*v,1170.,160.); // slot 8 on page 1
  check(IntegrationAccess::songSlot(*v)==7,"UX song cell selection hit unexpected slot");
  click(*v,1060.,290.); // add 18th slot (automatically selects its page)
@@ -644,7 +656,13 @@ void testPagedSongEditor(){
        "UX Song last-entry removal selection incorrect");
  check(f.c->songEntry(16).pattern==2&&f.c->songEntry(16).steps==8,
        "UX Song pagination corrupted edited entry");
- evidence("UX paged Song editor selection, paging, boundaries, add/remove, pattern+length PASS");
+ auto recalled=namedKit('Y',4);
+ check(f.recall(Fixture::encode(recalled))==kResultOk,
+       "UX Song recall reduced chain rejected");
+ check(IntegrationAccess::songPage(*v)==0&&
+       IntegrationAccess::songSlot(*v)<f.c->songCount(),
+       "UX Song page/selection left outside recalled chain");
+ evidence("UX paged Song editor selection, no offscreen edits, recall and 64-slot navigation PASS");
 }
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
