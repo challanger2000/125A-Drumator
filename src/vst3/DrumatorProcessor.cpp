@@ -494,9 +494,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          Steinberg::Vst::ParamValue value=0;
          if(queue->getPoint(j,offset,value)==Steinberg::kResultTrue&&
             offset>=0&&std::isfinite(value))
-           selected_.store(static_cast<std::uint32_t>(
-               patternFromNormalized(value)),
-               std::memory_order_relaxed);
+           selected_.hostSubmit(static_cast<std::uint32_t>(patternFromNormalized(value)));
        }
      }
    }
@@ -673,19 +671,21 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      if(!point.source)continue;
      scheduleRange(offset);
      activePattern=point.pattern;
-     if(point.source==PatternEventTimeline::kMidi)reportMidi(offset,point.pattern);
+      if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
+      else if(point.source==PatternEventTimeline::kMidi){selected_.store(point.pattern,std::memory_order_relaxed);reportMidi(offset,point.pattern);}
    }
    scheduleRange(data.numSamples);
-   selected_.store(activePattern,std::memory_order_relaxed);
+
  }else {
    auto active=selected_.load(std::memory_order_relaxed);
    for(Steinberg::int32 offset=0;offset<data.numSamples;++offset) {
      const auto point=patternTimeline_.get(static_cast<std::size_t>(offset));
      if(!point.source)continue;
      active=point.pattern;
-     if(point.source==PatternEventTimeline::kMidi)reportMidi(offset,point.pattern);
+      if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
+      else if(point.source==PatternEventTimeline::kMidi){selected_.store(point.pattern,std::memory_order_relaxed);reportMidi(offset,point.pattern);}
    }
-   selected_.store(active,std::memory_order_relaxed);
+
  }
  // MIDI one-shot audition also works with stopped DAW transport.
  if(data.inputEvents) {
