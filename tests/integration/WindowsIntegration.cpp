@@ -12,6 +12,7 @@
 #include "vst3/DrumatorView.h"
 #include "core/UiDetailGeometry.h"
 #include "core/UiRowControls.h"
+#include "core/UiCompactLayout.h"
 #include "vst3/DrumatorProcessor.h"
 #include "vst3/DrumatorEditor.h"
 #include "vst3/PluginIDs.h"
@@ -113,6 +114,9 @@ struct IntegrationAccess {
  static VSTGUI::CTextEdit* edit(DrumatorView& v){return v.nameEdit_;}
   static std::size_t firstRow(DrumatorView& v){return v.firstRow_;}
   static std::size_t selectedRow(DrumatorView& v){return v.velocityRow_;}
+  static double rowTop(DrumatorView& v,std::size_t i){return v.rowTopOnPage(i);}
+  static bool velocityExpanded(DrumatorView& v,std::size_t row){return v.velocityExpanded_[row];}
+  static int activeKnob(DrumatorView& v){return v.activeKnob_;}
  static const auto& paths(Controller& c){return c.samplePaths_;}
 };
 }
@@ -187,7 +191,15 @@ HWND nameEditor(Fixture& f,std::size_t view=0,std::size_t row=0){
  SetActiveWindow(f.frames[view].hwnd);SetForegroundWindow(f.frames[view].hwnd);
  SetFocus(static_cast<HWND>(f.editors[view]->getFrame()->getPlatformFrame()->getPlatformRepresentation()));pump();
  auto* v=IntegrationAccess::view(*f.c,view);
- click(*v,120,108+static_cast<double>(row)*29+8,VSTGUI::kLButton|VSTGUI::kShift);
+ while(IntegrationAccess::firstRow(*v)+UiCompactLayout::perPage<=row){
+    const auto bottom=v->getViewSize().getHeight()-UiCompactLayout::footer;
+    click(*v,1190,bottom+17.);
+  }
+  check(row>=IntegrationAccess::firstRow(*v)&&
+        row<IntegrationAccess::firstRow(*v)+UiCompactLayout::perPage,
+        "name editor row not in viewport");
+  click(*v,110,IntegrationAccess::rowTop(*v,row-IntegrationAccess::firstRow(*v))+14.,
+        VSTGUI::kLButton|VSTGUI::kShift);
  pump();auto h=GetFocus();wchar_t cls[32]{};GetClassNameW(h,cls,32);
  check(h&&lstrcmpiW(cls,L"EDIT")==0,"native EDIT HWND/focus missing");
  check(IntegrationAccess::edit(*v)->getPlatformTextEdit()!=nullptr,"CTextEdit platform absent");return h;
@@ -302,8 +314,9 @@ void activeEdits(Fixture& f){
  auto* v=IntegrationAccess::view(*f.c,0);
  // Actual Undo and clipboard plus an active drag in a real view.
  check(f.c->setStepVelocity(0,0,3,91)&&f.c->copyCurrentPattern(),"Z01 create Undo/clipboard");
- click(*v,80,108+4*29+5+45); // open velocity lane using the real button
- click(*v,630,108+29+12); // inline velocity for first instrument
+ click(*v,1248,108+60); // expand velocity only for first instrument
+ check(IntegrationAccess::velocityExpanded(*v,0),"Z01 Velocity row did not expand");
+ click(*v,630,108+94+12); // inline velocity for first instrument
  check(std::get<0>(IntegrationAccess::viewSnapshot(*v)),"Z01 fixture did not start actual view drag");
  check(f.c->setStepVelocity(0,0,4,85),"Z01 active stroke change");
 }
