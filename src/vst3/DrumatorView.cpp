@@ -319,6 +319,8 @@ DrumatorView::~DrumatorView() {
 bool DrumatorView::removed(VSTGUI::CView* parent) {
  if(laneDragActive_){controller_.endVelocityStroke(false);laneDragActive_=false;}
  detailDragControl_=-1;detailDragRow_=kRows;
+ activeKnob_=-1;knobRow_=kRows;
+ closeTransientMenus();
  if(nameEdit_){
    // No pending edit may commit while a native Win32 text HWND is closing.
    editingNameRow_=kRows;
@@ -399,6 +401,8 @@ void DrumatorView::discardTransientEditsForRecall() noexcept {
  laneDragGeneration_=0;
  detailDragControl_=-1;
  detailDragRow_=kRows;
+ activeKnob_=-1;knobRow_=kRows;knobGeneration_=0;
+ closeTransientMenus();
  editingNameRow_=kRows;
  nameEditGeneration_=0;
  fillMenuRow_=-1;
@@ -450,34 +454,29 @@ bool DrumatorView::attached(VSTGUI::CView* parent) {
 }
 bool DrumatorView::adjustEditorHeight() {
  const auto total=controller_.visibleRows();
- const auto page=velocityLaneOpen_?std::min(std::size_t{8},total):total;
- const double height=contentHeight(page,velocityLaneOpen_);
- // The host owns its window; reject an unsupported host resize explicitly.
- // The editor combines user zoom with host content scaling.
- const auto effectiveScale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
- if(!editor_.requestResize({1280.0*effectiveScale,height*effectiveScale})) {
+ if(firstRow_>=total)firstRow_=total>0?((total-1)/UiCompactLayout::perPage)*UiCompactLayout::perPage:0;
+ const auto page=std::min(UiCompactLayout::perPage,total-firstRow_);
+ const auto height=std::max(370.,UiCompactLayout::editorHeight(firstRow_,page,velocityExpanded_));
+ const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
+ if(!editor_.requestResize({1280.*scale,height*scale})){
    compactViewport_=true;
-   const auto clientHeight=getViewSize().getHeight();
-   auto fit=CompactRowViewport::fittingRows(clientHeight,kGridY,
-       UiRowGeometry::pitch(velocityLaneOpen_),UiDetailGeometry::footerHeight);
-   if(velocityLaneOpen_)fit=std::min(std::size_t{8},fit);
-   // A host smaller than one complete row+footer is outside our minimum;
-   // keep first row accessible instead of losing every control.
-   compactPageRows_=std::max(std::size_t{1},fit);
-   firstRow_=CompactRowViewport::first(controller_.visibleRows(),firstRow_);
-   fillMenuRow_=-1;
-   status_="HOST-RESIZE ABGELEHNT: ZEILEN MIT < > WECHSELN";
+   const auto available=getViewSize().getHeight();
+   compactPageRows_=0;
+   for(std::size_t i=1;i<=page;++i) {
+     if(UiCompactLayout::editorHeight(firstRow_,i,velocityExpanded_)>available)break;
+     compactPageRows_=i;
+   }
+   if(compactPageRows_==0)compactPageRows_=1;
+   status_="HOST-FENSTER ZU KLEIN: ZEILEN MIT < > WECHSELN";
    invalid();return false;
  }
- compactViewport_=page<total;compactPageRows_=page;
- if(!compactViewport_)firstRow_=0;
- else firstRow_=std::min(firstRow_,total-page);
- if(auto* container=getParentView()) {
-   container->setViewSize({0,0,1280,height});
- }
+ compactPageRows_=UiCompactLayout::perPage;
+ compactViewport_=total>UiCompactLayout::perPage;
+ if(velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
+   velocityRow_=firstRow_;
+ if(auto* parent=getParentView())parent->setViewSize({0,0,1280,height});
  setViewSize({0,0,1280,height});
- invalid();
- return true;
+ invalid();return true;
 }
 DrumatorView::DrumatorView(const VSTGUI::CRect& size,
                            Controller& controller,VSTGUI::VST3Editor& editor)
@@ -810,7 +809,7 @@ bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
    status_="D&D FEHLER: AUSSERHALB DER INSTRUMENTENZEILEN";
    invalid();return false;
  }
- const auto row=firstRow_+UiRowGeometry::rowAt(position.y,displayedRows(),velocityLaneOpen_);
+ const auto row=firstRow_+UiCompactLayout::rowAt(position.y,firstRow_,displayedRows(),velocityExpanded_);
  if(row>=kRows) {
    status_="D&D FEHLER: ZEILE NICHT VORHANDEN";invalid();return false;
  }
