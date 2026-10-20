@@ -576,7 +576,7 @@ void testPatternLengthControls(){
  Fixture f;
  auto kit=namedKit('X');
  // Row five must actually be empty for the existing safe-removal contract.
- kit.displayNames[4]="LEER - WAV LADEN";
+ kit.displayNames[4].clear();
  kit.names[4].clear();
  f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
