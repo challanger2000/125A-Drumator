@@ -576,18 +576,32 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,rr(UiRowControls::preview),"P");
    const auto& name=controller_.label(row);
    std::string visibleName=name;
-   if(visibleName.size()>18){
-     auto prefixEnd=std::min<std::size_t>(10,name.size());
-     while(prefixEnd>0&&prefixEnd<name.size()&&
-           (static_cast<unsigned char>(name[prefixEnd])&0xC0u)==0x80u)
-       --prefixEnd;
-     auto suffixBegin=name.size()-5;
-     while(suffixBegin<name.size()&&
-           (static_cast<unsigned char>(name[suffixBegin])&0xC0u)==0x80u)
-       ++suffixBegin;
-     visibleName=name.substr(0,prefixEnd)+"..."+name.substr(suffixBegin);
-   }
    c->setFont(VSTGUI::kNormalFont,11);
+   // Fit to the actual glyph widths, not an arbitrary number of bytes.
+   // UTF-8 codepoints remain whole and the WAV/FLAC extension survives.
+   const double available=UiRowControls::sample.right-UiRowControls::sample.left-6.0;
+   if(c->getStringWidth(visibleName.c_str())>available) {
+     const auto dot=name.find_last_of('.');
+     const std::string suffix=(dot!=std::string::npos&&
+          name.size()-dot<=7)?name.substr(dot):std::string{};
+     auto endPrefix=name.size()-suffix.size();
+     bool fitted=false;
+     while(endPrefix>0) {
+       --endPrefix;
+       while(endPrefix>0&&
+            (static_cast<unsigned char>(name[endPrefix])&0xC0u)==0x80u)
+         --endPrefix;
+       const std::string candidate=name.substr(0,endPrefix)+"..."+suffix;
+       if(c->getStringWidth(candidate.c_str())<=available) {
+         visibleName=candidate;fitted=true;break;
+       }
+     }
+     if(!fitted) {
+       visibleName="..."+suffix;
+       if(c->getStringWidth(visibleName.c_str())>available)
+         visibleName="...";
+     }
+   }
    c->setFontColor(letters);
    c->drawString(visibleName.c_str(),rr(UiRowControls::sample,0,26),VSTGUI::kLeftText);
    drawControl(c,rr(UiRowControls::previous),"<");
