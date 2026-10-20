@@ -1,5 +1,9 @@
 # 125A Drumator — development instructions
 
+## Aktuell – Integrationstest-Ausbau, 20.10.2026
+
+Test-/Buildstand `d8c6865c1f111b54c430636e337fbb6211826ccf`: [Windows #39397290415](https://github.com/challanger2000/125A-Drumator/actions/runs/39397290415) **BUILD FAIL**; CTest, Validator und paketierte Hosttests **SKIPPED**. T01–T04/O01/Z01–Z03-Testverbesserungen sind implementiert, aber nicht erfolgreich Windows-validiert. Eigene `/W4 /WX` bleiben aktiv; SDK-Includes sind extern klassifiziert. Die zuletzt gemeldete `iid`-Namenskollision und der fehlende vollständige `ProcessContext`-Header wurden ausschließlich in Testdateien korrigiert und anhand des gepinnten SDK geprüft. Die konkreten neuen Buildfehler sind wegen CONNECT 403 beim offiziellen Joblogdownload noch nicht verfügbar. Produktcode/Ressourcen gegenüber `f6f1933` unverändert; letzter erfolgreicher Produktnachweis bleibt `62f10a4`. [Vollständiger Bericht und Testgrenzen](docs/INTEGRATION-QA-T01-T04-O01-Z01-Z03-2026-10-20.md). Keine Studio-One-Ausführung, keine V1-Freigabe. Keine weiteren spekulativen Actions-Läufe; zuerst konkrete Fehlermeldungen aus Job `118543056017` diagnostizieren.
+
 ## Aktuell – Z01–Z03-Reparatur am 20.10.2026
 
 **Windows-geprüfter Quellcode `62f10a4edade31217c90a32eba3d4e39eefc54ee`**: [Actions #39347442164](https://github.com/challanger2000/125A-Drumator/actions/runs/39347442164) **SUCCESS**, 17/17 CTests, Steinberg Validator 47/47, paketierter Audio-/Editor-Smoke PASS. Codex-Z01 (transaktionaler Recall), Z02 (einfacher geprüfter Zoom ohne partiellen Rollback) und Z03 (nativer Textedit-Fokusabschluss) sind im Code bearbeitet. [Details und ehrliche Testgrenzen](docs/CODEX-Z01-Z03-REPAIR-2026-10-20.md). Mehrfach-Editor-Zoom-Recall mit mehreren nötigen Fensteränderungen wird bewusst und vollständig **vor** Änderungen abgelehnt. Studio One, O01/T01–T04, finale Grafik und Owner-Freigabe offen. **Keine V1-Freigabe.**
