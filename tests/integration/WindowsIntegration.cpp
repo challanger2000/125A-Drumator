@@ -583,7 +583,9 @@ void testVelocityLaneExistingStepsOnly(){
  f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
  const double top=UiCompactLayout::header;
- const double barY=top+UiCompactLayout::baseRow+10.;
+ const double barY=top+UiCompactLayout::baseRow+4.;
+ const auto target=UiCompactLayout::velocityAt(barY,top);
+ check(target!=100&&target!=90,"UX fixture must choose a velocity distinct from both source notes");
  const auto col=[](std::size_t step)->double {
    return UiCompactLayout::stepX+static_cast<double>(step)*UiCompactLayout::stepWidth+8.;
  };
@@ -603,8 +605,8 @@ void testVelocityLaneExistingStepsOnly(){
    v->onMouseMoved(point,VSTGUI::CButtonState(VSTGUI::kLButton));
    v->onMouseUp(point,{});
  }
- check(f.c->velocity(0,0,0)>0&&f.c->velocity(0,0,0)!=100&&
-       f.c->velocity(0,0,2)>0&&f.c->velocity(0,0,2)!=90,
+ check(f.c->velocity(0,0,0)==target&&
+       f.c->velocity(0,0,2)==target,
        "UX occupied velocity bars did not change during row drag");
  check(f.c->velocity(0,0,1)==0,
        "UX dragging across empty column activated a new note");
