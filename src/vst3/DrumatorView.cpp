@@ -8,6 +8,7 @@
 #include "core/UiRowGeometry.h"
 #include "core/UiDetailGeometry.h"
 #include "core/UiRowControls.h"
+#include "core/UiCompactLayout.h"
 #include "core/UiOverlayHitZones.h"
 #include "core/DropFeedback.h"
 #include "core/UiHeaderHitZones.h"
@@ -32,14 +33,9 @@
 
 namespace drumator {
 namespace {
-constexpr double kLabelX=16.0,kGridX=622.0,kGridY=108.0;
-constexpr double kCellWidth=19.0,kRowHeight=29.0;
-constexpr double kGridRight=kGridX+32*kCellWidth;
-constexpr double kMinHeight=326.0;
-double contentHeight(std::size_t rows,bool velocityOpen=false) {
- return std::max(kMinHeight,UiRowGeometry::gridBottom(rows,velocityOpen)+UiDetailGeometry::footerHeight);
-}
-constexpr double kHeaderY=38.0,kPatternX=340.0,kPatternWidth=62.0;
+constexpr double kGridX=UiCompactLayout::stepX,kGridY=UiCompactLayout::header;
+constexpr double kCellWidth=UiCompactLayout::stepWidth,kGridRight=kGridX+32*kCellWidth;
+constexpr double kPatternX=330.,kPatternWidth=55.,kPatternY=52.;
 const VSTGUI::CColor background{26,35,45,255};
 const VSTGUI::CColor panel{41,53,67,255};
 const VSTGUI::CColor border{73,94,114,255};
@@ -62,49 +58,21 @@ void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
  ctx->drawString(title,rect);
 }
 
-// A single selected-instrument panel gives large, precise controls without
-// shrinking the 32-step grid or growing all 16 instrument rows.
-void drawPrecisionPanel(VSTGUI::CDrawContext* c,const Controller& ctrl,
-                        std::size_t row,double gridBottom) {
- const auto top=UiDetailGeometry::top(gridBottom);
- c->setFillColor(panel);
- c->drawRect({16,top,1240,top+UiDetailGeometry::panelHeight},VSTGUI::kDrawFilled);
- c->setFrameColor(border);
- c->drawRect({16,top,1240,top+UiDetailGeometry::panelHeight},VSTGUI::kDrawStroked);
- char selected[50]{};
- std::snprintf(selected,sizeof(selected),"ZEILE %02u | KLANG",static_cast<unsigned>(row+1));
- c->setFont(VSTGUI::kNormalFont,13);
- c->setFontColor(letters);
- c->drawString(selected,VSTGUI::CRect(23,top+5,223,top+58),VSTGUI::kLeftText);
- const char* const labels[]={"LAUTSTAERKEIT","PANORAMA","PITCH","RANDOM VEL.","CHOKE-GRUPPE"};
- const int values[]={static_cast<int>(ctrl.rowGain(row)),ctrl.rowPan(row),ctrl.rowPitch(row),
-      static_cast<int>(ctrl.rowRandomVelocity(row)),static_cast<int>(ctrl.rowChoke(row))};
- const int lows[]={0,-100,-24,0,0},highs[]={200,100,24,100,4};
- for(std::size_t i=0;i<UiDetailGeometry::slots.size();++i){
-   const auto slot=UiDetailGeometry::slots[i];
-   c->setFont(VSTGUI::kNormalFont,11);
-   c->setFontColor(accent);
-   c->drawString(labels[i],VSTGUI::CRect(slot.left+3,top+3,slot.right-3,top+24));
-   drawControl(c,{slot.left+5,top+27,slot.left+42,top+60},"-");
-   drawControl(c,{slot.right-42,top+27,slot.right-5,top+60},"+");
-   const auto l=slot.left+47.,r=slot.right-47.;
-   const double fraction=static_cast<double>(values[i]-lows[i])/
-                         static_cast<double>(highs[i]-lows[i]);
-   c->setFillColor(off);
-   c->drawRect({l,top+51,r,top+57},VSTGUI::kDrawFilled);
-   c->setFillColor(accent);
-   c->drawRect({l,top+51,l+(r-l)*fraction,top+57},VSTGUI::kDrawFilled);
-   char value[24]{};
-   if(i==0||i==3)std::snprintf(value,sizeof(value),"%d%%",values[i]);
-   else if(i==1) {
-     if(values[i]==0)std::snprintf(value,sizeof(value),"MITTE");
-     else std::snprintf(value,sizeof(value),"%c %d",values[i]<0?'L':'R',std::abs(values[i]));
-   }else if(i==2)std::snprintf(value,sizeof(value),"%+d st",values[i]);
-   else std::snprintf(value,sizeof(value),"GRUPPE %d",values[i]);
-   c->setFontColor(letters);
-   c->drawString(value,VSTGUI::CRect(l,top+27,r,top+49));
- }
-}
+void drawRotary(VSTGUI::CDrawContext* c,double cx,double cy,double fraction,
+                const char* title,const char* value,bool selected=false) {
+ fraction=std::clamp(fraction,0.,1.);
+ c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+ c->drawString(title,{cx-46.,cy-34.,cx+46.,cy-18.});
+ c->setFillColor(selected?VSTGUI::CColor{58,89,109,255}:panel);
+ c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawFilled);
+ c->setFrameColor(selected?letters:border);
+ c->setLineWidth(selected?2.:1.3);
+ c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawStroked);
+ const auto angle=(-135.+270.*fraction)*3.14159265358979323846/180.;
+ c->setFrameColor(on);c->setLineWidth(2.5);
+ c->drawLine({cx,cy},{cx+std::sin(angle)*13.,cy-std::cos(angle)*13.});
+ c->setLineWidth(1.);c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
+ c->drawString(value,{cx+21.,cy-11.,cx+72.,cy+14.},VSTGUI::kLeftText);
 }
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
 // Internal Studio One browser objects not exposed as file paths are
@@ -305,23 +273,45 @@ void DrumatorView::onDragLeave(VSTGUI::DragEventData) {}
 bool DrumatorView::onDrop(VSTGUI::DragEventData data) {
  return acceptFileDrop(data);
 }
-std::size_t DrumatorView::visibleRowsForHit() const noexcept {
- return displayedRows();
-}
-bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
- const bool fill=fillMenuRow_>=0;
- const double top=fill?std::max(0.0,std::min(
-    UiRowGeometry::rowTop(static_cast<std::size_t>(std::max(0,fillMenuRow_-static_cast<int>(firstRow_))),velocityLaneOpen_),
-    getViewSize().getHeight()-230.0)):0.0;
- const auto count=displayedRows();
- const auto index=UiRowGeometry::rowAt(y,count,velocityLaneOpen_);
- return !songEditorOpen_&&x>=16.0&&x<=1230.0&&index<count&&
-    UiRowGeometry::mainHit(y,index,velocityLaneOpen_)&&
-    !(fill&&x>=650.0&&x<819.0&&y>=top&&y<top+225.0);
-}
+std::size_t DrumatorView::visibleRowsForHit() const noexcept {return displayedRows();}
 std::size_t DrumatorView::displayedRows() const noexcept {
  const auto total=controller_.visibleRows();
- return compactViewport_?(firstRow_<total?std::min(compactPageRows_,total-firstRow_):0):total;
+ return firstRow_<total?std::min(compactPageRows_,total-firstRow_):0;
+}
+double DrumatorView::rowTopOnPage(std::size_t index) const noexcept {
+ return UiCompactLayout::rowTop(firstRow_,index,velocityExpanded_);
+}
+double DrumatorView::gridBottom() const noexcept {return rowTopOnPage(displayedRows());}
+void DrumatorView::closeTransientMenus() noexcept {
+ popup_=0;popupRow_=kRows;fillMenuRow_=-1;
+}
+bool DrumatorView::toggleRowVelocity(std::size_t row) {
+ if(row>=controller_.visibleRows())return false;
+ if(laneDragActive_){controller_.endVelocityStroke(false);laneDragActive_=false;}
+ const auto previous=velocityExpanded_[row];
+ velocityExpanded_[row]=!previous;
+ if(!adjustEditorHeight()){
+   velocityExpanded_[row]=previous;
+   (void)adjustEditorHeight();
+   status_="HOST HAT HOEHE FUER VELOCITY ABGELEHNT";
+   return false;
+ }
+ return true;
+}
+bool DrumatorView::changeKnobValue(int slot,std::size_t row,int value) {
+ if(slot>=0&&slot<=3)return changeDetailValue(row,slot,value);
+ if(slot==4)return controller_.adjustSwing(value-static_cast<int>(controller_.swingPercent()));
+ if(slot==5)return controller_.adjustHumanize(value-static_cast<int>(controller_.humanizePercent()));
+ if(slot==6)return controller_.adjustMasterVolume(value-static_cast<int>(controller_.masterVolume()));
+ return false;
+}
+bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
+ if(songEditorOpen_||popup_!=0||fillMenuRow_>=0)return false;
+ const auto index=UiCompactLayout::rowAt(y,firstRow_,displayedRows(),velocityExpanded_);
+ if(index>=displayedRows())return false;
+ const auto top=rowTopOnPage(index);
+ return UiCompactLayout::mainHit(y,top)&&x>=UiCompactLayout::sample.left&&
+        x<UiCompactLayout::sample.right;
 }
 DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
@@ -345,15 +335,15 @@ bool DrumatorView::removed(VSTGUI::CView* parent) {
 }
 void DrumatorView::editName(std::size_t row) {
  if(row>=controller_.visibleRows()||!getFrame())return;
- const double y=UiRowGeometry::rowTop(row-firstRow_,velocityLaneOpen_);
+ const double y=rowTopOnPage(row-firstRow_);
  if(!nameEdit_){
-   nameEdit_=new VSTGUI::CTextEdit({UiRowControls::sample.left,y+2,UiRowControls::sample.right,y+26},this,1001,controller_.label(row).c_str());
+   nameEdit_=new VSTGUI::CTextEdit({UiCompactLayout::sample.left,y+4,UiCompactLayout::sample.right,y+33},this,1001,controller_.label(row).c_str());
    nameEdit_->registerTextEditListener(this);
    getFrame()->addView(nameEdit_);
  }
  editingNameRow_=row;
  nameEditGeneration_=controller_.editGeneration();
- nameEdit_->setViewSize({UiRowControls::sample.left,y+2,UiRowControls::sample.right,y+26});
+ nameEdit_->setViewSize({UiCompactLayout::sample.left,y+4,UiCompactLayout::sample.right,y+33});
  nameEdit_->setText(controller_.customName(row).empty()?controller_.label(row).c_str():
                    controller_.customName(row).c_str());
  nameEdit_->setVisible(true);
@@ -563,7 +553,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString(songSummary,VSTGUI::CRect(866,74,1030,98),VSTGUI::kLeftText);
  c->setFont(VSTGUI::kNormalFont,12);
  for(std::size_t row=firstRow_;row<firstRow_+displayedRows();++row) {
-   const double y=UiRowGeometry::rowTop(row-firstRow_,velocityLaneOpen_);
+   const double y=rowTopOnPage(row-firstRow_);
    c->setFillColor(row%2==0?panel:background);
    c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawFilled);
    if(row==velocityRow_){c->setFrameColor(accent);c->drawRect({10,y,1246,y+kRowHeight-1},VSTGUI::kDrawStroked);}
