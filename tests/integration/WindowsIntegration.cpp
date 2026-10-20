@@ -552,6 +552,21 @@ void testPrecisionPanel(){
  check(f.c->rowGain(0)==130,"V2 stale knob edited restored kit");
  evidence("V2 rotary drag, exact defaults, menus, selection and recall PASS");
 }
+void testPatternLengthControls(){
+ Fixture f;f.kit(namedKit('X'));f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ check(f.c->patternLength(0)==32,"UX pattern length initial state");
+ click(*v,481.,20.);
+ check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
+ click(*v,481.,20.);
+ check(f.c->patternLength(0)==16,"UX selected length not idempotent");
+ click(*v,557.,20.);
+ check(f.c->patternLength(0)==32,"UX visible 2 TAKTE control failed");
+ click(*v,820.,65.);
+ click(*v,820.,98.);
+ check(f.c->patternLength(0)==32,"UX copy changed length via duplicate menu");
+ evidence("UX direct length and no duplicate pattern menu control PASS");
+}
 void testNativeName(){
  for(auto key:{VK_RETURN,VK_ESCAPE,0}){
    Fixture f;f.kit(namedKit('X',16));f.open();f.open();
@@ -600,6 +615,7 @@ int main(int argc,char** argv){
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
+ run("UX direct pattern length",testPatternLengthControls);
  run("Z03 Win32 name editor",testNativeName);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
