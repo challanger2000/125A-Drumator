@@ -1,7 +1,7 @@
 {
   "name": "125A-Drumator functional VSTGUI layout contract — 2026-10-20",
-  "functionalSource": "design/vstgui-foundation-2026-10-20 (exact source SHA required after QA)",
-  "artworkStatus": "No artwork, bitmap resources, or runtime skin bindings exist; other chat implements final graphics",
+  "functionalSource": "develop/v1.0.0 (resolve exact HEAD against matching Windows QA run)",
+  "artworkStatus": "Technical VSTGUI functional and Windows-rendered; future branded bitmap skin not yet integrated",
   "canvas": {
     "width": 1280,
     "height": "max(326,108+displayedRows*(velocityVisible?56:29)+174)",
@@ -15,7 +15,8 @@
     "maxLogicalHeight": 850,
     "maxExpectedContentHeightAt16RowsWithVelocity": 730,
     "pageWhenVelocityEnabled": 8,
-    "heightUnit": "logical px, host contentScaleFactor applied separately"
+    "heightUnit": "logical px, host contentScaleFactor applied separately",
+    "maxExpandedPageRows": 8
   },
   "sources": [
     "src/vst3/DrumatorView.cpp",
@@ -360,7 +361,7 @@
             510,
             26
           ],
-          "action": "Pan L100..C..R100 +/- and Ctrl default"
+          "action": "Pan 0=center, L/R100 at extremes; mini +/- and Ctrl default; full label PAN L100 / PAN C / PAN R100"
         },
         {
           "id": "pitch",
@@ -688,7 +689,7 @@
         }
       ],
       "input": "- / +, click/drag middle for exact absolute target, Ctrl click resets to actual default",
-      "selectedRow": "changes when any step/sample/row control clicked; indicated by accented row border",
+      "selectedRow": "Always follows visible page after paging; no hidden selected row",
       "code": "src/core/UiDetailGeometry.h"
     }
   },
@@ -701,12 +702,13 @@
     "At 120/130 percent use DZM2; read older DZM1 states unchanged",
     "No asset export before Windows-attached GUI screenshots and owner review of 4/8/16 rows, velocity, song and zoom",
     "Instrument upper row ranges and row-name editor must match src/core/UiRowControls.h",
-    "Precision panel slider ranges, pointer mapping and Ctrl-defaults must match src/core/UiDetailGeometry.h"
+    "Precision panel slider ranges, pointer mapping and Ctrl-defaults must match src/core/UiDetailGeometry.h",
+    "Disabled buttons need legible text contrast; e.g. MAX. 16 INSTRUMENTE cannot use a near-background text color"
   ],
   "sourceOfTruthForHeaderHitboxes": "src/core/UiHeaderHitZones.h",
   "skinIntegrationReady": false,
   "visualQAGate": {
-    "status": "WINDOWS BUILD NOT VERIFIED for precision controls",
+    "status": "Native Windows renderings generated and inspected (2026-10-20, #39417644156); expanded 16-row paging/contrast final QA pending",
     "windowsBuild": "NOT YET VERIFIED",
     "nativeStudioOne": "NOT YET VERIFIED",
     "states": [
@@ -719,7 +721,8 @@
       "fill menu",
       "name input",
       "zoom 100/120/130/150",
-      "Windows DPI 100/150/200"
+      "Windows DPI 100/150/200",
+      "16 instruments velocity mode: two pages with selected-row follow and programmatically varied bars"
     ]
   }
 }
