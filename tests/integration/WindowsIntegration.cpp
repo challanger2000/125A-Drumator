@@ -1055,6 +1055,33 @@ void testPatternLengthControls(){
  check(f.c->visibleRows()==4,"UX - ZEILE not clickable");
  evidence("UX direct length and no duplicate pattern menu control PASS");
 }
+void testControlExtremeDeltas(){
+ Fixture f;f.kit(namedKit('D',4));
+ constexpr int upper=std::numeric_limits<int>::max();
+ constexpr int lower=std::numeric_limits<int>::min();
+ check(f.c->adjustMasterVolume(upper)&&f.c->masterVolume()==200,"D11 master upper");
+ check(f.c->adjustMasterVolume(lower)&&f.c->masterVolume()==0,"D11 master lower");
+ check(f.c->adjustHumanize(upper)&&f.c->humanizePercent()==100,"D11 humanize upper");
+ check(f.c->adjustHumanize(lower)&&f.c->humanizePercent()==0,"D11 humanize lower");
+ check(f.c->adjustSwing(upper)&&f.c->swingPercent()==50,"D11 swing upper");
+ check(f.c->adjustSwing(lower)&&f.c->swingPercent()==0,"D11 swing lower");
+ check(f.c->adjustRandomVelocity(0,upper)&&f.c->rowRandomVelocity(0)==100,"D11 random upper");
+ check(f.c->adjustRandomVelocity(0,lower)&&f.c->rowRandomVelocity(0)==0,"D11 random lower");
+ check(f.c->adjustRowPitch(0,upper)&&f.c->rowPitch(0)==24,"D11 pitch upper");
+ check(f.c->adjustRowPitch(0,lower)&&f.c->rowPitch(0)==-24,"D11 pitch lower");
+ check(f.c->adjustRowMix(0,false,upper)&&f.c->rowGain(0)==200,"D11 volume upper");
+ check(f.c->adjustRowMix(0,false,lower)&&f.c->rowGain(0)==0,"D11 volume lower");
+ check(f.c->adjustRowMix(0,true,upper)&&f.c->rowPan(0)==100,"D11 pan upper");
+ check(f.c->adjustRowMix(0,true,lower)&&f.c->rowPan(0)==-100,"D11 pan lower");
+ ResizableMemoryIBStream stream;KitState saved;
+ check(f.p->getState(&stream)==kResultOk&&
+       KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                       static_cast<std::size_t>(stream.getCursor()),saved),
+       "D11 saved processor decode");
+ check(saved.masterVolume==0&&saved.humanize==0&&saved.swing==0,
+       "D11 saved global controls mismatch");
+ evidence("D11 extreme control deltas, controller endpoints and processor state PASS");
+}
 void testSongCountExtremeDelta(){
  Fixture f;auto kit=namedKit('C',4);
  check(kit.chain.setCount(3)&&kit.chain.configure(0,5,16),
@@ -1423,6 +1450,7 @@ int main(int argc,char** argv){
  run("UX paged Song board",testPagedSongEditor);
  run("S09 Song entry signed extreme edit deltas",testSongEntryExtremeDelta);
  run("S10 Song count signed extreme edit deltas",testSongCountExtremeDelta);
+ run("D11 control signed extreme deltas",testControlExtremeDeltas);
  run("UX compact Song viewport",testSongCompactViewport);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);

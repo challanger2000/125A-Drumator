@@ -630,7 +630,7 @@ bool Controller::cycleStepVelocity(std::size_t p,std::size_t r,std::size_t s) {
 }
 bool Controller::adjustRandomVelocity(std::size_t row,int delta) {
  if(row>=kRows)return false;
- const auto value=std::clamp(static_cast<int>(randomVelocity_[row])+delta,0,100);
+ const auto value=std::clamp(static_cast<std::int64_t>(randomVelocity_[row])+delta,std::int64_t{0},std::int64_t{100});
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.RowRandomVelocity");
  auto* attrs=msg->getAttributes();
@@ -644,7 +644,7 @@ bool Controller::adjustRandomVelocity(std::size_t row,int delta) {
  return ok;
 }
 bool Controller::adjustMasterVolume(int delta) {
- const auto value=std::clamp(static_cast<int>(masterVolume_)+delta,0,200);
+ const auto value=std::clamp(static_cast<std::int64_t>(masterVolume_)+delta,std::int64_t{0},std::int64_t{200});
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.MasterVolume");
  auto* attrs=msg->getAttributes();
@@ -657,7 +657,7 @@ bool Controller::adjustMasterVolume(int delta) {
  return ok;
 }
 bool Controller::adjustHumanize(int delta) {
- const auto next=std::clamp(static_cast<int>(humanizePercent_)+delta,0,100);
+ const auto next=std::clamp(static_cast<std::int64_t>(humanizePercent_)+delta,std::int64_t{0},std::int64_t{100});
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.Humanize");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
@@ -667,7 +667,7 @@ bool Controller::adjustHumanize(int delta) {
  return ok;
 }
 bool Controller::adjustSwing(int delta) {
- const auto next=std::clamp(static_cast<int>(swingPercent_)+delta,0,50);
+ const auto next=std::clamp(static_cast<std::int64_t>(swingPercent_)+delta,std::int64_t{0},std::int64_t{50});
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.Swing");
  auto* attr=msg->getAttributes();if(!attr){msg->release();return false;}
@@ -740,7 +740,7 @@ bool Controller::cycleRowChoke(std::size_t row,int direction) {
 }
 bool Controller::adjustRowPitch(std::size_t row,int delta) {
  if(row>=kRows)return false;
- const int proposed=std::clamp(static_cast<int>(pitch_[row])+delta,0,48);
+ const int proposed=std::clamp(static_cast<std::int64_t>(pitch_[row])+delta,std::int64_t{0},std::int64_t{48});
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.RowPitch");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
@@ -754,7 +754,7 @@ bool Controller::adjustRowPitch(std::size_t row,int delta) {
 bool Controller::adjustRowMix(std::size_t row,bool adjustPan,int delta) {
  if(row>=kRows)return false;
  auto& values=adjustPan?pan_:gain_;
- const auto proposed=std::clamp(static_cast<int>(values[row])+delta,0,200);
+ const auto proposed=std::clamp(static_cast<std::int64_t>(values[row])+delta,std::int64_t{0},std::int64_t{200});
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.RowMix");
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
