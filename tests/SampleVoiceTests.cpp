@@ -331,6 +331,48 @@ static void testHighRatio64VoiceStress() {
  // qualification. Host-specific scheduling must be measured in Studio One.
  require(elapsed<20.0,"F14 stress exceeded 20-second CI safety ceiling");
 }
+static void testRatioPerformanceComparison() {
+ // Diagnostic only: compare identical 64-voice / 256-frame workloads
+ // across actual polyphase-sinc tap counts, not a realtime certification.
+ constexpr std::size_t frames=256;
+ constexpr unsigned blocks=32;
+ for(const double ratio : {1.0,4.0,16.0}) {
+   const std::size_t sourceFrames=static_cast<std::size_t>(ratio)*frames*(blocks+2);
+   std::vector<float> source(sourceFrames,.125f);
+   SincKernel kernel;
+   require(kernel.prepare(ratio),"F15 ratio kernel");
+   SampleVoiceEngine engine;
+   require(engine.setOutputRate(48000),"F15 engine rate");
+   RowSound row;
+   row.sample={source.data(),nullptr,source.size()};
+   row.kernel=&kernel;
+   for(std::size_t i=0;i<kRows;++i)
+     require(engine.setRow(i,row),"F15 setup rows");
+   std::array<Trigger,64> hits{};
+   for(std::size_t i=0;i<hits.size();++i)
+     hits[i]={0,static_cast<std::uint8_t>(i%kRows),0,127,0};
+   std::array<float,frames> l{},r{};
+   std::vector<double> timings;
+   timings.reserve(blocks);
+   for(unsigned block=0;block<blocks;++block) {
+     const auto begin=std::chrono::steady_clock::now();
+     const auto result=engine.render(block==0?hits.data():nullptr,
+                                     block==0?hits.size():0,
+                                     l.data(),r.data(),frames);
+     const auto finish=std::chrono::steady_clock::now();
+     require(result.status==RenderStatus::Ok&&result.activeVoices==64,
+             "F15 unequal active polyphony");
+     timings.push_back(std::chrono::duration<double,std::milli>(finish-begin).count());
+   }
+   std::sort(timings.begin(),timings.end());
+   const auto p99=timings[static_cast<std::size_t>(std::ceil(blocks*.99))-1];
+   std::cout<<"::notice title=125A Drumator ratio diagnostic::F15 64 voices, "
+            <<ratio<<"x, taps="<<kernel.taps()
+            <<", 48k/256, 32 blocks: p99="<<p99
+            <<"ms max="<<timings.back()
+            <<"ms (offline CI, not realtime qualification)\\n";
+ }
+}
 static void testAssignableOutput() {
  std::array<float,1024> sample{};sample.fill(.5f);
  SincKernel kernel;require(kernel.prepare(1.),"output kernel");
@@ -432,7 +474,7 @@ int main() {
   }
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
-  testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
+  testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
   std::cout<<"::notice title=125A Drumator voice QA::Empty-instrument and 17 explicit sample-voice test groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
