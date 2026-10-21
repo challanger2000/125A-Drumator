@@ -391,7 +391,7 @@ bool Controller::copyCurrentPattern() {
  clipboardValid_=true;return true;
 }
 bool Controller::pasteCurrentPattern(){return clipboardValid_&&replacePattern(currentPattern(),clipboard_);}
-bool Controller::canDuplicateCurrentPattern() const noexcept {
+bool Controller::canDuplicateCurrentPattern() noexcept {
  const auto source=currentPattern();
  PatternSteps content{};
  std::copy_n(grid_.begin()+source*kRows*kSteps,content.size(),content.begin());
