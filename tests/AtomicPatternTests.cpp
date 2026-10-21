@@ -115,6 +115,30 @@ int main(){
     selection.hostSubmit(1);
     selection.restoreIfUnchanged(contested,3);
     check(selection.load()==1,"new host automation lost to kit restore");
+    // M37: MIDI selection was once only a low-bit store(). A fast A-B-A
+    // sequence restored the original pattern value but not its generation,
+    // allowing the in-progress older kit recall to overwrite it.
+    selection.store(2);
+    const auto midiBefore=selection.snapshot();
+    selection.midiSubmit(2); // same-value event is still authoritative
+    check(selection.snapshot()!=midiBefore&&selection.load()==2,
+          "M37 same-pattern MIDI did not advance generation");
+    selection.restoreIfUnchanged(midiBefore,6);
+    check(selection.load()==2,"M37 MIDI same-pattern overwritten by recall");
+    const auto midiAba=selection.snapshot();
+    selection.midiSubmit(5);
+    selection.midiSubmit(2);
+    check(selection.snapshot()!=midiAba&&selection.load()==2,
+          "M37 MIDI A-B-A was invisible to restore arbiter");
+    selection.restoreIfUnchanged(midiAba,7);
+    check(selection.load()==2,"M37 MIDI A-B-A overwritten by older kit");
+    const auto midiCompeting=selection.snapshot();
+    selection.midiSubmit(3);
+    selection.restoreIfUnchanged(midiCompeting,4);
+    check(selection.load()==3,"M37 new MIDI selection lost to kit recall");
+    const auto uncontestedMidi=selection.snapshot();
+    selection.restoreIfUnchanged(uncontestedMidi,1);
+    check(selection.load()==1,"M37 unopposed kit recall stopped working");
   }
   // Simulate control and realtime readers with guaranteed atomic access.
   std::atomic<bool> stop{false};

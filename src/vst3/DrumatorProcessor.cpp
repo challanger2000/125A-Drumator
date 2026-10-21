@@ -707,7 +707,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      scheduleRange(offset);
      activePattern=point.pattern;
       if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
-      else if(point.source==PatternEventTimeline::kMidi){selected_.store(point.pattern,std::memory_order_relaxed);reportMidi(offset,point.pattern);}
+      else if(point.source==PatternEventTimeline::kMidi){selected_.midiSubmit(point.pattern);reportMidi(offset,point.pattern);}
    }
    scheduleRange(data.numSamples);
 
@@ -718,7 +718,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      if(!point.source)continue;
      active=point.pattern;
       if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
-      else if(point.source==PatternEventTimeline::kMidi){selected_.store(point.pattern,std::memory_order_relaxed);reportMidi(offset,point.pattern);}
+      else if(point.source==PatternEventTimeline::kMidi){selected_.midiSubmit(point.pattern);reportMidi(offset,point.pattern);}
    }
 
  }

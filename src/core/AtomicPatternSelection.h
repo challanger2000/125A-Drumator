@@ -19,6 +19,11 @@ public:
  std::uint64_t snapshot() const noexcept {
    return state_.load(std::memory_order_acquire);
  }
+ // Actual incoming MIDI pattern changes are no less authoritative than
+ // host automation while an old kit is being recalled. They must advance
+ // the same event generation (even for same-value / A->B->A sequences).
+ // Plain store() remains for initialization and non-event setup.
+ void midiSubmit(std::uint32_t value) noexcept { hostSubmit(value); }
  void hostSubmit(std::uint32_t value) noexcept {
    auto old=state_.load(std::memory_order_relaxed);
    std::uint64_t next;
