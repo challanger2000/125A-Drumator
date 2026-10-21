@@ -1061,7 +1061,7 @@ void testSongCountExtremeDelta(){
        "S10 song count fixture");
  f.kit(kit);
  auto checkCount=[&](std::size_t expected){
-   check(f.c->songChain_.count()==expected,"S10 controller count mismatch");
+   check(f.c->songCount()==expected,"S10 controller count mismatch");
    ResizableMemoryIBStream stream;KitState saved;
    check(f.p->getState(&stream)==kResultOk&&
          KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
