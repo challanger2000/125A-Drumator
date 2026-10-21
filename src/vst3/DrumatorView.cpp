@@ -749,10 +749,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                 std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
    }
  }else if(popup_==2) {
-   const char* options[]={"KOPIEREN","EINFUEGEN","LOESCHEN","RUECKGAENGIG","VELO VARIIEREN","VELO 100"};
-   for(int i=0;i<6;++i)
+   const char* options[]={"KOPIEREN","EINFUEGEN","LOESCHEN","RUECKGAENGIG",
+                          "VELO VARIIEREN","VELO 100","DUPLIZIEREN"};
+   for(int i=0;i<7;++i)
      drawControl(c,{782,86.+i*26.,968,111.+i*26.},options[i],
-                 false,i!=3||controller_.canUndoCurrentPattern());
+                 false,(i!=3||controller_.canUndoCurrentPattern())&&
+                       (i!=6||controller_.canDuplicateCurrentPattern()));
  }else if(popup_==3&&popupRow_<controller_.visibleRows()) {
    const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-210.);
    for(unsigned i=0;i<16;++i) {
@@ -861,15 +863,16 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         else {status_="HOST HAT ZOOM ABGELEHNT";ok=false;}
         acted=true;
       }
-   }else if(kind==2&&x>=782&&x<968&&y>=86&&y<242) {
+   }else if(kind==2&&x>=782&&x<968&&y>=86&&y<268) {
       const int idx=static_cast<int>((y-86)/26.);
-      if(idx>=0&&idx<6&&y<86.+idx*26.+25.){
+      if(idx>=0&&idx<7&&y<86.+idx*26.+25.){
         ok=idx==0?controller_.copyCurrentPattern():
             idx==1?controller_.pasteCurrentPattern():
             idx==2?controller_.clearCurrentPattern():
             idx==3?controller_.undoCurrentPattern():
             idx==4?controller_.varyPatternVelocity():
-                   controller_.resetPatternVelocity();
+            idx==5?controller_.resetPatternVelocity():
+                   controller_.duplicateCurrentPattern();
         acted=true;
       }
    }else if(kind==3&&target<controller_.visibleRows()){

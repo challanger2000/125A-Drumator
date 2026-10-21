@@ -68,6 +68,7 @@ public:
  SongChain::Entry songEntry(std::size_t slot) const noexcept {return songChain_.entry(slot);}
  bool copyCurrentPattern();
  bool pasteCurrentPattern();
+ bool canDuplicateCurrentPattern() const noexcept;
  bool duplicateCurrentPattern(bool* selectedCopy=nullptr);
  bool clearCurrentPattern();
  bool undoCurrentPattern();

@@ -391,6 +391,17 @@ bool Controller::copyCurrentPattern() {
  clipboardValid_=true;return true;
 }
 bool Controller::pasteCurrentPattern(){return clipboardValid_&&replacePattern(currentPattern(),clipboard_);}
+bool Controller::canDuplicateCurrentPattern() const noexcept {
+ const auto source=currentPattern();
+ PatternSteps content{};
+ std::copy_n(grid_.begin()+source*kRows*kSteps,content.size(),content.begin());
+ if(emptyPattern(content))return false;
+ return nextEmptyPattern(source,[&](std::size_t index){
+   PatternSteps candidate{};
+   std::copy_n(grid_.begin()+index*kRows*kSteps,candidate.size(),candidate.begin());
+   return candidate;
+ })<kPatterns;
+}
 bool Controller::duplicateCurrentPattern(bool* selectedCopy){
  if(selectedCopy)*selectedCopy=false;
  const auto source=currentPattern();

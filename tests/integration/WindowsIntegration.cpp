@@ -857,6 +857,61 @@ void testVelocityResetPattern(){
        "VELO 100 popup Undo did not restore previous velocities");
  evidence("VELO 100 all occupied notes, no new notes, isolated pattern and single Undo PASS");
 }
+void testPatternDuplicateMenu(){
+ Fixture f;
+ KitState kit=namedKit('X',4);
+ kit.grid.fill(0);
+ kit.grid[0]=90;kit.grid[4]=60;kit.grid[20]=25;
+ kit.patternLengths[0]=32;
+ f.kit(kit);f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ check(f.c->canDuplicateCurrentPattern(),"P18 initial pattern not duplicable");
+ auto getGrid=[&]{
+   ResizableMemoryIBStream stream;KitState data;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                          static_cast<std::size_t>(stream.getCursor()),data),
+         "P18 decode actual processor project");
+   return data.grid;
+ };
+ const auto before=getGrid();
+ click(*view,840.,65.); // PATTERN popup
+ click(*view,840.,255.); // seventh and final action: DUPLIZIEREN
+ const auto after=getGrid();
+ for(std::size_t i=0;i<kRows*kSteps;++i){
+   check(after[i]==before[i],"P18 duplicate changed source pattern");
+   check(after[kRows*kSteps+i]==before[i],
+         "P18 native DUPLIZIEREN menu did not copy entire source to pattern B");
+ }
+ check(after[2*kRows*kSteps]==0,"P18 duplicate wrote a third pattern");
+ check(f.c->velocity(1,0,20)==25,"P18 controller not updated for copied pattern");
+ // Existing action returns success if the host refuses selecting the copy:
+ // source remains valid, and manually selecting B still permits Undo.
+ check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk,
+       "P18 cannot navigate to duplicated pattern B");
+ check(f.c->canUndoCurrentPattern()&&f.c->undoCurrentPattern(),
+       "P18 duplicate did not create undo history for target");
+ check(getGrid()==before,"P18 target undo did not restore completely empty B");
+ // With all eight patterns occupied, the menu action is disabled and
+ // neither host nor controller may overwrite an existing pattern.
+ KitState full=kit;
+ for(std::size_t p=0;p<kPatterns;++p)
+   full.grid[p*kRows*kSteps]=static_cast<std::uint8_t>(p+1);
+ f.kit(full);
+ check(!f.c->canDuplicateCurrentPattern(),"P18 full bank incorrectly duplicable");
+ const auto fullBefore=getGrid();
+ click(*view,840.,65.);
+ click(*view,840.,255.);
+ check(getGrid()==fullBefore,"P18 full-bank DUPLIZIEREN overwrote a pattern");
+ // An empty source also must never be duplicated into another slot.
+ KitState empty=kit;empty.grid.fill(0);
+ f.kit(empty);
+ check(!f.c->canDuplicateCurrentPattern(),"P18 empty pattern offered duplicate");
+ click(*view,840.,65.);
+ click(*view,840.,255.);
+ check(getGrid()==empty.grid,"P18 empty source duplicated unexpectedly");
+ evidence("P18 native DUPLIZIEREN menu, whole-grid copy, Undo, full bank and empty source PASS");
+}
 void testPatternLengthControls(){
  Fixture f;
  auto kit=namedKit('X');
@@ -1182,6 +1237,7 @@ int main(int argc,char** argv){
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
  run("UX direct pattern length",testPatternLengthControls);
+ run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("VELO 100 reset existing notes",testVelocityResetPattern);
  run("V16 1T hidden velocity preservation",testVelocityInactiveBarProtection);
