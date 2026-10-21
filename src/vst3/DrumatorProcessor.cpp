@@ -611,7 +611,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    return Steinberg::kResultOk;
  }
  if(!prepared_||data.symbolicSampleSize!=Steinberg::Vst::kSample32||
-    !data.outputs||data.outputs[0].numChannels!=2)
+    !data.outputs||(data.outputs[0].numChannels!=0&&data.outputs[0].numChannels!=2))
    return Steinberg::kResultFalse;
  auto& output=data.outputs[0];
  auto* left=output.channelBuffers32 ? output.channelBuffers32[0] : nullptr;

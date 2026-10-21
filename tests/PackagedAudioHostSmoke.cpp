@@ -1876,6 +1876,12 @@ int main(int argc,char** argv) {
  stemEvent.noteOn.velocity=1.f;stemEvent.noteOn.noteId=-1;
  require(events.addEvent(stemEvent)==kResultOk,"F08 add row 1 MIDI trigger");
  require(audio->process(data)==kResultOk,"F08 process with no MAIN buffers");
+ // T29: hosts may represent a disabled MAIN as zero channels, rather
+ // than a two-channel bus with null sample buffers.
+ stemBuses[0].numChannels=0;
+ f08StemLeft.fill(0.f);f08StemRight.fill(0.f);
+ require(audio->process(data)==kResultOk,"T29 zero-channel MAIN with active AUX rejected");
+ stemBuses[0].numChannels=2;
  for(float v:f08StemLeft)require(std::isfinite(v),"F08 invalid stem L");
  for(float v:f08StemRight)require(std::isfinite(v),"F08 invalid stem R");
  data.outputs=priorOutputs;data.numOutputs=priorNumOutputs;
