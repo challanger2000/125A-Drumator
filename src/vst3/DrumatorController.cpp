@@ -549,7 +549,7 @@ bool Controller::addRow() {
  attrs->setInt("Count",static_cast<Steinberg::int64>(visibleRows_+1));
  const auto good=sendEditMessage(message)==Steinberg::kResultOk;
  message->release();
- if(good)++visibleRows_;
+ if(good){++visibleRows_;notifyViews(false);}
  return good;
 }
 bool Controller::restoreVisibleRows(std::size_t previous) {
@@ -563,7 +563,7 @@ bool Controller::restoreVisibleRows(std::size_t previous) {
  attrs->setInt("Count",static_cast<Steinberg::int64>(previous));
  const bool good=sendEditMessage(message)==Steinberg::kResultOk;
  message->release();
- if(good)visibleRows_=static_cast<std::uint8_t>(previous);
+ if(good){visibleRows_=static_cast<std::uint8_t>(previous);notifyViews(false);}
  return good;
 }
 bool Controller::hideLastEmptyRow() {
@@ -576,7 +576,7 @@ bool Controller::hideLastEmptyRow() {
  attrs->setInt("Count",static_cast<Steinberg::int64>(visibleRows_-1));
  const auto good=sendEditMessage(message)==Steinberg::kResultOk;
  message->release();
- if(good)--visibleRows_;
+ if(good){--visibleRows_;notifyViews(false);}
  return good;
 }
 void Controller::beginVelocityStroke(std::size_t p) {
@@ -664,7 +664,7 @@ bool Controller::adjustHumanize(int delta) {
  auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
  attrs->setInt("Percent",next);
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();if(ok)humanizePercent_=static_cast<std::uint8_t>(next);
+ msg->release();if(ok){humanizePercent_=static_cast<std::uint8_t>(next);notifyViews(false);}
  return ok;
 }
 bool Controller::adjustSwing(int delta) {
@@ -675,7 +675,7 @@ bool Controller::adjustSwing(int delta) {
  attr->setInt("Percent",next);
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok)swingPercent_=static_cast<std::uint8_t>(next);
+ if(ok){swingPercent_=static_cast<std::uint8_t>(next);notifyViews(false);}
  return ok;
 }
 bool Controller::previewSample(std::size_t row) {
@@ -702,7 +702,7 @@ bool Controller::clearSample(std::size_t row) {
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok){labels_[row].swap(emptyLabel);samplePaths_[row].clear();}
+ if(ok){labels_[row].swap(emptyLabel);samplePaths_[row].clear();notifyViews(false);}
  return ok;
 }
 bool Controller::setRowOutput(std::size_t row,unsigned requested) {
@@ -749,7 +749,7 @@ bool Controller::adjustRowPitch(std::size_t row,int delta) {
  attrs->setInt("Semitones",proposed-24);
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok)pitch_[row]=static_cast<std::uint8_t>(proposed);
+ if(ok){pitch_[row]=static_cast<std::uint8_t>(proposed);notifyViews(false);}
  return ok;
 }
 bool Controller::adjustRowMix(std::size_t row,bool adjustPan,int delta) {
@@ -763,7 +763,7 @@ bool Controller::adjustRowMix(std::size_t row,bool adjustPan,int delta) {
  attrs->setInt("Gain",adjustPan?gain_[row]:proposed);
  attrs->setInt("Pan",adjustPan?proposed-100:static_cast<int>(pan_[row])-100);
  const bool accepted=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();if(accepted)values[row]=static_cast<std::uint8_t>(proposed);
+ msg->release();if(accepted){values[row]=static_cast<std::uint8_t>(proposed);notifyViews(false);}
  return accepted;
 }
 bool Controller::toggleRowGate(std::size_t row,bool solo) {
@@ -780,7 +780,7 @@ bool Controller::toggleRowGate(std::size_t row,bool solo) {
  attr->setInt("On",next?1:0);
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok)gates[row]=next;
+ if(ok){gates[row]=next;notifyViews(false);}
  return ok;
 }
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
@@ -890,6 +890,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  // next audio block; no claim is made that the buffer has already rendered.
  labels_[row].swap(name);
  samplePaths_[row].swap(stagedPath);
+ notifyViews(false);
  return LoadStatus::Accepted;
  }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
   catch(const std::exception&) {return LoadStatus::ReadError;}

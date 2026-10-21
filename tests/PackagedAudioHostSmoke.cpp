@@ -1843,11 +1843,11 @@ int main(int argc,char** argv) {
              reported->getPointCount()==(hostTie?255:256)&&
              reported->getPoint(reported->getPointCount()-1,offset,value)==kResultOk&&
              offset==(hostTie?254:255)&&
-             drumator::patternFromNormalized(value)==(hostTie?6:3),
+             drumator::patternFromNormalized(value)==(hostTie?6u:3u),
              "T30 chronological feedback lost events, accepted a MIDI host tie, or reordered the overflow tail");
      for(int32 point=0;point<reported->getPointCount();++point)
        require(reported->getPoint(point,offset,value)==kResultOk&&offset==point&&
-               drumator::patternFromNormalized(value)==(point==255?3:static_cast<unsigned>(point%8)),
+               drumator::patternFromNormalized(value)==(point==255?3u:static_cast<unsigned>(point%8)),
                "T30 intermediate MIDI feedback differs from independent event sequence");
    }
    drumator::qa::result("T30 PASS: 300 MIDI commands, MIDI-only D and host-tie G, rendered/outputless paths and all 255/256 feedback offsets");

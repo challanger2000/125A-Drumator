@@ -1,8 +1,9 @@
 // Uses the same real Windows components and public event/state APIs as the
 // original integration fixture. No substitute Controller or voice model.
 void testSecondAuditViewInvalidation() {
+ for(double userZoom:{1.,1.5}) {
  Fixture f;auto kit=namedKit('X');kit.wav[0]=constantStereo(.25f,-.5f);
- f.kit(kit);prepareAudio(*f.p);f.open();f.open();
+ f.kit(kit);prepareAudio(*f.p);f.c->rememberZoom(userZoom);f.open();f.open();
  auto* first=IntegrationAccess::view(*f.c,0);
  auto* other=IntegrationAccess::view(*f.c,1);
  auto nativeWindow=[&](std::size_t index) {
@@ -34,8 +35,39 @@ void testSecondAuditViewInvalidation() {
  bothInvalidated([&]{return f.c->adjustSwing(1);});
  bothInvalidated([&]{return f.c->adjustHumanize(1);});
  bothInvalidated([&]{return f.c->clearSample(0);});
+ const auto path=std::filesystem::current_path()/"125A-second-audit-load.wav";
+ struct Cleanup {std::filesystem::path file;~Cleanup(){std::error_code ec;std::filesystem::remove(file,ec);}} cleanup{path};
+ const auto wav=constantStereo(.125f,-.25f);
+ {std::ofstream file(path,std::ios::binary|std::ios::trunc);
+  file.write(reinterpret_cast<const char*>(wav.data()),static_cast<std::streamsize>(wav.size()));
+  check(file.good(),"SA01 actual sample file fixture");}
+ const auto pathText=pathToUtf8(path);
+ bothInvalidated([&]{return f.c->loadWav(0,pathText)==Controller::LoadStatus::Accepted;});
+ // Start with a short editor. A change in the shared count must leave every
+ // row reachable in the other editor, without unsolicited resize requests.
+ auto one=kit;one.visible=1;f.kit(one);
+ const auto resizeCalls=f.frames[0].calls+f.frames[1].calls;
+ bothInvalidated([&]{return f.c->addRow();});
+ bothInvalidated([&]{return f.c->addRow();});
+ check(f.c->visibleRows()==3&&other->visibleRowsForHit()==2&&
+       f.frames[0].calls+f.frames[1].calls==resizeCalls,
+       "SA01 peer editor clipped added rows or issued an extra host resize");
+ click(*other,1180.,108.+2.*94.+15.);
+ check(IntegrationAccess::firstRow(*other)==2&&other->visibleRowsForHit()==1,
+       "SA01 newly added row inaccessible in peer compact page");
+ bothInvalidated([&]{return f.c->hideLastEmptyRow();});
+ check(f.c->visibleRows()==2&&IntegrationAccess::firstRow(*other)<2,
+       "SA01 peer page invalid after row removal");
+ bothInvalidated([&]{return f.c->restoreVisibleRows(1);});
+ check(other->visibleRowsForHit()==1,"SA01 row rollback left a stale viewport");
+ auto prior=IntegrationAccess::snapshot(*f.c);
+ ValidateRect(originalWindow,nullptr);ValidateRect(otherWindow,nullptr);
+ check(!f.c->adjustRowMix(kRows,false,1)&&IntegrationAccess::snapshot(*f.c)==prior&&
+       !GetUpdateRect(originalWindow,nullptr,FALSE)&&!GetUpdateRect(otherWindow,nullptr,FALSE),
+       "SA01 rejected edit changed or invalidated peer state");
  f.p->setProcessing(false);f.p->setActive(false);
- evidence("SA01 actual view M click plus Controller row/global edits invalidate both native HWNDs PASS");
+ }
+ evidence("SA01 100/150 actual view M click, row/global/sample edits, count paging/rollback and rejected edit: both native HWNDs PASS");
 }
 void testSecondAuditTriggerPartition() {
  // A dense sequencer downbeat plus MIDI on the same row is a normal merger

@@ -456,7 +456,22 @@ void DrumatorView::refreshFromHost(bool relayout) {
  if(UiSongLayout::first(songPage_)>controller_.songCount())
    songPage_=UiSongLayout::pageOf(songSlot_);
  if(relayout&&getParentView())adjustEditorHeight();
- else invalid();
+ else {
+   // A row-count edit from another editor must fit THIS editor's current
+   // client area. Recompute accessible paging without another host resize:
+   // the initiating editor retains its existing resize/rollback transaction.
+   const auto total=controller_.visibleRows();
+   const auto page=std::min(UiCompactLayout::perPage,total-firstRow_);
+   std::size_t fit=0;
+   for(std::size_t count=1;count<=page;++count) {
+     if(UiCompactLayout::editorHeight(firstRow_,count,velocityExpanded_)>
+        getViewSize().getHeight())break;
+     fit=count;
+   }
+   compactPageRows_=std::max(std::size_t{1},fit);
+   compactViewport_=total>UiCompactLayout::perPage||compactPageRows_<page;
+   invalid();
+ }
 }
 bool DrumatorView::attached(VSTGUI::CView* parent) {
  const auto result=CView::attached(parent);
