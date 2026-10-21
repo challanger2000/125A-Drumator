@@ -1772,6 +1772,11 @@ int main(int argc,char** argv) {
        processorPoint->notify(&song)==kResultOk,"T18 enable Song mode");
  }
  flushData.inputParameterChanges=nullptr;
+ // Song state must also be adopted on outputless blocks with no MIDI.
+ // Follow with a MIDI-bearing block to exercise the cached snapshot.
+ flushData.inputEvents=nullptr;
+ require(audio->process(flushData)==kResultOk,"T24 song-only outputless state update");
+ flushData.inputEvents=&noOutputEvents;
  require(audio->process(flushData)==kResultOk,"T18 outputless song processing");
  Steinberg::ResizableMemoryIBStream t18Saved;
  require(component->getState(&t18Saved)==kResultOk,"T18 state save");
