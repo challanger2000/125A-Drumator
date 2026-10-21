@@ -1658,10 +1658,42 @@ int main(int argc,char** argv) {
    static_cast<const std::uint8_t*>(f05TieState.getData()),
    f05TieState.getCursor(),f05Kit)&&f05Kit.selected==6,
    "F05 host did not win same-offset MIDI event");
+ // T18: Song mode suppresses MIDI pattern selection even when there
+ // are no output buses; the outputless path must not reject the block.
+ {
+   HostMessage song;
+   song.setMessageID("Drumator.SongConfig");
+   auto* a=song.getAttributes();
+   const std::array<std::uint8_t,2> entry{6,16};
+   require(a&&a->setInt("Enabled",1)==kResultOk&&
+       a->setInt("Count",1)==kResultOk&&
+       a->setBinary("Entries",entry.data(),2)==kResultOk&&
+       processorPoint->notify(&song)==kResultOk,"T18 enable Song mode");
+ }
+ flushData.inputParameterChanges=nullptr;
+ require(audio->process(flushData)==kResultOk,"T18 outputless song processing");
+ Steinberg::ResizableMemoryIBStream t18Saved;
+ require(component->getState(&t18Saved)==kResultOk,"T18 state save");
+ drumator::KitState t18Kit;
+ require(drumator::KitCodec::decode(
+   static_cast<const std::uint8_t*>(t18Saved.getData()),
+   t18Saved.getCursor(),t18Kit)&&t18Kit.selected==6&&t18Kit.songEnabled==1,
+   "T18 MIDI overrode song-mode selection");
+ {
+   HostMessage song;
+   song.setMessageID("Drumator.SongConfig");
+   auto* a=song.getAttributes();
+   const std::array<std::uint8_t,2> entry{6,16};
+   require(a&&a->setInt("Enabled",0)==kResultOk&&
+       a->setInt("Count",1)==kResultOk&&
+       a->setBinary("Entries",entry.data(),2)==kResultOk&&
+       processorPoint->notify(&song)==kResultOk,"T18 restore pattern mode");
+ }
  flushData.inputEvents=nullptr;
  flushData.inputParameterChanges=&flushChanges;
  flushData.numSamples=0;
  std::cout<<"F05 outputless MIDI A-H and host tie arbitration PASS\\n";
+ std::cout<<"T18 outputless Song mode MIDI suppression PASS\\n";
  // F08 integration: deactivate MAIN while a real auxiliary row stays active.
  // Bus 1 is row 1 in the 125A fixed-row routing contract.
  require(component->activateBus(kAudio,kOutput,0,false)==kResultOk,
