@@ -1739,11 +1739,13 @@ int main(int argc,char** argv) {
    early.sampleOffset=20;
    early.noteOn.pitch=25; // B
    early.noteOn.velocity=1.f;
-   require(orderedMidi.addEvent(early)==kResultOk,"F05b early MIDI");
    Event late=early;
    late.sampleOffset=150;
    late.noteOn.pitch=30; // G
+   // Deliberately submit the later event first: the timeline must sort by
+   // sample offset, not rely on the host's event enumeration order.
    require(orderedMidi.addEvent(late)==kResultOk,"F05b late MIDI");
+   require(orderedMidi.addEvent(early)==kResultOk,"F05b early MIDI");
    flushData.inputEvents=&orderedMidi;
    flushData.inputParameterChanges=nullptr;
    require(audio->process(flushData)==kResultOk,"F05b outputless ordered MIDI");
