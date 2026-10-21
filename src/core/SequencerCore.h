@@ -54,6 +54,8 @@ struct Clock {
 struct Trigger {
  std::uint32_t sampleOffset;
  std::uint8_t row,step,velocity,pattern;
+ // Internal merge metadata only: never serialized or part of the VST3 ABI.
+ std::uint32_t arrival{0};
 };
 enum class ScheduleStatus {Ok,InvalidClock,TooManyBoundaries};
 struct ScheduleResult {ScheduleStatus status{ScheduleStatus::Ok};std::uint32_t count{0};};

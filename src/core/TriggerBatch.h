@@ -17,7 +17,9 @@ public:
         if(size_>=kCapacity||trigger.row>=kRows||trigger.step>=kSteps||
            trigger.pattern>=kPatterns||trigger.velocity==0||trigger.velocity>127)
             return false;
-        events_[size_++]=trigger;
+        events_[size_]=trigger;
+        events_[size_].arrival=static_cast<std::uint32_t>(size_);
+        ++size_;
         return true;
     }
     // GM-inspired contiguous trigger range: note 36 -> row 1, 51 -> row 16.
@@ -30,9 +32,11 @@ public:
            size_>=kCapacity)return false;
         const auto mapped=std::clamp(static_cast<int>(std::lround(
             static_cast<double>(velocity)*127.0)),1,127);
-        events_[size_++]={static_cast<std::uint32_t>(offset),
+        events_[size_]={static_cast<std::uint32_t>(offset),
                          static_cast<std::uint8_t>(pitch-36),0,
-                         static_cast<std::uint8_t>(mapped),0};
+                         static_cast<std::uint8_t>(mapped),0,
+                         static_cast<std::uint32_t>(size_)};
+        ++size_;
         return true;
     }
     void applyMuteSolo(std::uint32_t muted,std::uint32_t solo) noexcept {
@@ -72,7 +76,11 @@ public:
         std::sort(events_.begin(),events_.begin()+size_,
             [](const Trigger& a,const Trigger& b){
                 if(a.sampleOffset!=b.sampleOffset)return a.sampleOffset<b.sampleOffset;
-                return a.row<b.row;
+                if(a.row!=b.row)return a.row<b.row;
+                // Keep simultaneous same-row hits in their merge order.
+                // An unrelated later event or block split must not change
+                // which accepted choke voice survives. No stable_sort alloc.
+                return a.arrival<b.arrival;
             });
     }
     const Trigger* data() const noexcept{return events_.data();}

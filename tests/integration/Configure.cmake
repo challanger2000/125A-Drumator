@@ -42,6 +42,10 @@ qa_replace(_bank "std::array<std::uint8_t,kRows*kSteps> candidate{};"
 qa_replace(_bank "for(std::size_t i=0;i<count;++i)\n            grid_[p*kRows*kSteps+i].store(values[i],std::memory_order_relaxed);"
   "for(std::size_t i=0;i<count;++i) {\n            grid_[p*kRows*kSteps+i].store(values[i],std::memory_order_relaxed);\n            if(i==count/2)drumator::qa::probe(drumator::qa::patternMidWrite);\n        }")
 file(WRITE "${_qa}/core/AtomicPatternBank.h" "#include \"Probe.h\"\n${_bank}")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/core/TriggerBatch.h" _triggers)
+qa_replace(_triggers "void sort() noexcept {"
+  "void sort() noexcept {\n        if(drumator::qa::legacyTriggerOrdering) {\n            std::sort(events_.begin(),events_.begin()+size_,[](const Trigger& a,const Trigger& b){\n                if(a.sampleOffset!=b.sampleOffset)return a.sampleOffset<b.sampleOffset;\n                return a.row<b.row;\n            });\n            return;\n        }")
+file(WRITE "${_qa}/core/TriggerBatch.h" "#include \"Probe.h\"\n${_triggers}")
 add_executable(drumator_integration_tests tests/integration/WindowsIntegration.cpp
   "${_qa}/vst3/DrumatorController.cpp" "${_qa}/vst3/DrumatorView.cpp"
   "${_qa}/vst3/DrumatorProcessor.cpp" src/vst3/FlacImport.cpp)

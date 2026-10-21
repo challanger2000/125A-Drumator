@@ -45,7 +45,11 @@ void testSecondAuditViewInvalidation() {
  bothInvalidated([&]{return f.c->loadWav(0,pathText)==Controller::LoadStatus::Accepted;});
  // Start with a short editor. A change in the shared count must leave every
  // row reachable in the other editor, without unsolicited resize requests.
- auto one=kit;one.visible=1;f.kit(one);
+ auto one=kit;one.visible=1;
+ // namedKit deliberately gives even unused slots nonempty custom names.
+ // Removal is correctly forbidden until the unused slots are actually empty.
+ for(std::size_t row=1;row<kRows;++row){one.names[row].clear();one.displayNames[row].clear();}
+ f.kit(one);
  const auto resizeCalls=f.frames[0].calls+f.frames[1].calls;
  bothInvalidated([&]{return f.c->addRow();});
  bothInvalidated([&]{return f.c->addRow();});
@@ -78,7 +82,12 @@ void testSecondAuditTriggerPartition() {
  for(std::size_t row=0;row<kRows;++row)kit.grid[row*kSteps]=64;
  f.kit(kit);prepareAudio(*f.p);
  const auto bytes=Fixture::encode(kit);
+ struct OrderingReset {~OrderingReset(){qa::legacyTriggerOrdering=false;}} orderingReset;
+ unsigned legacyDivergences=0;
+ std::string divergentDensities;
  for(unsigned simultaneous:{1u,8u,15u,16u,17u,20u}) {
+  for(bool legacy:{true,false}) {
+   qa::legacyTriggerOrdering=legacy;
    std::array<float,256> wholeL{},wholeR{},splitL{},splitR{};
    auto render=[&](bool split,auto& leftSamples,auto& rightSamples) {
      qa::ByteStream state(const_cast<std::uint8_t*>(bytes.data()),bytes.size());
@@ -109,10 +118,24 @@ void testSecondAuditTriggerPartition() {
      }
    };
    render(false,wholeL,wholeR);render(true,splitL,splitR);
-   check(wholeL==splitL&&wholeR==splitR,
-         "SA02 same absolute sequencer/MIDI/choke events produce different audio at 256 versus 128+128");
+   const bool equal=wholeL==splitL&&wholeR==splitR;
+   if(legacy) {
+     if(!equal){++legacyDivergences;divergentDensities+=std::to_string(simultaneous)+" ";}
+   }else {
+     check(equal,"SA02 same absolute sequencer/MIDI/choke events produce different audio at 256 versus 128+128");
+     const double velocity=static_cast<double>(40+(simultaneous-1)*3)/127.;
+     check(std::abs(splitL[180]-.25*velocity)<2e-7&&
+           std::abs(splitR[180]+.5*velocity)<2e-7,
+           "SA02 final simultaneous MIDI voice does not match independent velocity/stereo code");
+   }
    check(std::abs(splitL[180])>.01f,"SA02 partition comparison is vacuously silent");
+  }
  }
+ check(legacyDivergences>0,"SA02 original-comparator negative control did not reproduce block-dependent PCM");
+ qa::legacyTriggerOrdering=false;
  f.p->setProcessing(false);f.p->setActive(false);
- evidence("SA02 real Processor sequencer+same-row MIDI+choke, six densities, exact 256/128+128 PCM PASS");
+ evidence("SA02 real Processor exact 256/128+128 PCM at six densities; original-comparator negatives="+
+          std::to_string(legacyDivergences)+" PASS");
+ qa::workflowNotice("SA02 actual Processor PCM PASS; original-comparator negative divergences="+
+     std::to_string(legacyDivergences)+"; simultaneous MIDI counts="+divergentDensities);
 }

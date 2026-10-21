@@ -84,6 +84,7 @@ void operator delete[](void* p) noexcept{std::free(p);}
 void operator delete(void* p,std::size_t) noexcept{std::free(p);}
 void operator delete[](void* p,std::size_t) noexcept{std::free(p);}
 namespace drumator::qa {
+thread_local bool legacyTriggerOrdering=false;
 void probe(Point p) noexcept {
  if(stopPoint.load(std::memory_order_acquire)!=p)return;
  SetEvent(entered);
