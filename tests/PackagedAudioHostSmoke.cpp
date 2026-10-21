@@ -1486,6 +1486,28 @@ int main(int argc,char** argv) {
            "Failed VST3 recall changed the active kit");
  }
  std::cout<<"M34 VST3 corrupt/truncated state rejection and rollback PASS\\n";
+ // R26: successful recall of an unchanged, valid project must be
+ // idempotent and preserve the entire portable kit byte-for-byte.
+ {
+   Steinberg::ResizableMemoryIBStream repeatedState;
+   Steinberg::int32 repeatWritten=0;
+   require(repeatedState.write(originalState.data(),
+           static_cast<Steinberg::int32>(originalState.size()),
+           &repeatWritten)==kResultOk&&
+           repeatWritten==static_cast<Steinberg::int32>(originalState.size()),
+           "R26 write valid kit state");
+   repeatedState.rewind();
+   require(component->setState(&repeatedState)==kResultOk,
+           "R26 valid kit second recall rejected");
+   Steinberg::ResizableMemoryIBStream repeatSaved;
+   require(component->getState(&repeatSaved)==kResultOk,
+           "R26 save after repeated recall");
+   require(static_cast<std::size_t>(repeatSaved.getCursor())==originalState.size()&&
+           std::memcmp(repeatSaved.getData(),originalState.data(),
+                       originalState.size())==0,
+           "R26 repeated valid recall changed serialized kit");
+ }
+ std::cout<<"R26 repeated valid VST3 project recall PASS\\n";
  // M26: real FLAC fixture, 128 frames of 0.25 PCM16 at 48 kHz.
  const std::uint8_t flacFixture[]{0x66,0x4c,0x61,0x43,0x00,0x00,0x00,0x22,0x10,0x00,0x10,0x00,0x00,0x00,0x0c,0x00,0x00,0x0c,0x0b,0xb8,0x00,0xf0,0x00,0x00,0x00,0x80,0xb1,0x44,0xc4,0xb3,0x94,0xfd,0x9c,0xff,0xe7,0x8c,0x33,0xf1,0x9d,0x64,0xa1,0x61,0x84,0x00,0x00,0x28,0x20,0x00,0x00,0x00,0x72,0x65,0x66,0x65,0x72,0x65,0x6e,0x63,0x65,0x20,0x6c,0x69,0x62,0x46,0x4c,0x41,0x43,0x20,0x31,0x2e,0x34,0x2e,0x33,0x20,0x32,0x30,0x32,0x33,0x30,0x36,0x32,0x33,0x00,0x00,0x00,0x00,0xff,0xf8,0x6a,0x08,0x00,0x7f,0x5d,0x01,0x00,0x09,0x04,0x3a};
  std::vector<std::uint8_t> imported;
