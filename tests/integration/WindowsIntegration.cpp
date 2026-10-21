@@ -1057,6 +1057,12 @@ void testPatternLengthControls(){
 }
 void testControlExtremeDeltas(){
  Fixture f;f.kit(namedKit('D',4));
+ // Pitch updates rebuild a prepared sample; the processor needs the host
+ // sample rate even for a kit whose audio sample is not yet loaded.
+ ProcessSetup setup{};
+ setup.sampleRate=48000.;setup.maxSamplesPerBlock=256;
+ setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
+ check(f.p->setupProcessing(setup)==kResultOk,"D11 pitch rate not initialized");
  constexpr int upper=std::numeric_limits<int>::max();
  constexpr int lower=std::numeric_limits<int>::min();
  check(f.c->adjustMasterVolume(upper)&&f.c->masterVolume()==200,"D11 master upper");
