@@ -519,6 +519,55 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  if(data.numSamples<0)return Steinberg::kInvalidArgument;
  // Hosts may flush discrete automation without providing any audio buffers.
  if(data.numSamples==0||data.numOutputs==0) {
+   // A nonzero block without output buses still carries genuine host and
+   // MIDI pattern-selection events. Keep sample-offset/host-tie ordering.
+   if(data.numSamples>0&&data.numOutputs==0) {
+     if(!patternTimeline_.reset(static_cast<std::size_t>(data.numSamples)))
+       return Steinberg::kInvalidArgument;
+     if(data.inputParameterChanges)
+       for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
+         auto* q=data.inputParameterChanges->getParameterData(i);
+         if(!q||q->getParameterId()!=kPatternParam)continue;
+         for(Steinberg::int32 j=0;j<q->getPointCount();++j) {
+           Steinberg::int32 offset=-1;
+           Steinberg::Vst::ParamValue value=0;
+           if(q->getPoint(j,offset,value)==Steinberg::kResultTrue&&std::isfinite(value))
+             patternTimeline_.insert(offset,patternFromNormalized(value),true);
+         }
+       }
+     if(data.inputEvents&&!songMailbox_.snapshot(audioSongChain_,audioSongEnabled_))
+       return Steinberg::kResultFalse;
+     if(data.inputEvents&&!audioSongEnabled_)
+       for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+         Steinberg::Vst::Event event{};
+         if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
+            event.type!=Steinberg::Vst::Event::kNoteOnEvent||
+            event.noteOn.pitch<24||event.noteOn.pitch>31||
+            !std::isfinite(event.noteOn.velocity)||
+            event.noteOn.velocity<=0.f||event.noteOn.velocity>1.f)continue;
+         patternTimeline_.insert(event.sampleOffset,
+                                 static_cast<unsigned>(event.noteOn.pitch-24),false);
+       }
+     Steinberg::Vst::IParamValueQueue* feedback=nullptr;
+     for(Steinberg::int32 offset=0;offset<data.numSamples;++offset) {
+       const auto point=patternTimeline_.get(static_cast<std::size_t>(offset));
+       if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
+       else if(point.source==PatternEventTimeline::kMidi) {
+         selected_.midiSubmit(point.pattern);
+         if(data.outputParameterChanges) {
+           if(!feedback) {
+             Steinberg::int32 index=0;
+             feedback=data.outputParameterChanges->addParameterData(kPatternParam,index);
+           }
+           if(feedback) {
+             Steinberg::int32 index=0;
+             (void)feedback->addPoint(offset,static_cast<double>(point.pattern)/7.0,index);
+           }
+         }
+       }
+     }
+     return Steinberg::kResultOk;
+   }
    if(data.inputParameterChanges) {
      for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
        auto* queue=data.inputParameterChanges->getParameterData(i);
