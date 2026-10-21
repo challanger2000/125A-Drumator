@@ -486,6 +486,9 @@ Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
  return Steinberg::Vst::kInfiniteTail;
 }
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
+ // Validate the host frame count before the restore-gate silence path: a
+ // negative count must never be converted to a huge size_t by fill_n.
+ if(data.numSamples<0)return Steinberg::kInvalidArgument;
  AudioGateEntry currentCall(restoreGate_);
  if(!currentCall.allowed()) {
    // Even a zero-frame flush must survive restore. The counter distinguishes
@@ -516,7 +519,6 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    }
    return Steinberg::kResultOk;
  }
- if(data.numSamples<0)return Steinberg::kInvalidArgument;
  // Hosts may flush discrete automation without providing any audio buffers.
  if(data.numSamples==0||data.numOutputs==0) {
    // A nonzero block without output buses still carries genuine host and
