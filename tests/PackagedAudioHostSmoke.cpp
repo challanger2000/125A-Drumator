@@ -1573,6 +1573,20 @@ int main(int argc,char** argv) {
            "T17 negative frame count not rejected");
  }
  std::cout<<"T17 negative host frame count rejection PASS\\n";
+ // T19: after setupProcessing(maxSamplesPerBlock=256), an oversized
+ // host block must be rejected before any buffer access or restore gate.
+ {
+   ProcessData oversized{};
+   oversized.numSamples=257;
+   oversized.numOutputs=0;
+   oversized.outputs=nullptr;
+   oversized.symbolicSampleSize=kSample32;
+   oversized.processMode=kRealtime;
+   require(audio->process(oversized)==kInvalidArgument,
+           "T19 oversized host block not rejected");
+ }
+ std::cout<<"T19 oversized host frame count rejection PASS\\n";
+
  // F04: hosts flush automation using zero sample frames and no output bus.
  // The saved component state must reflect the last flushed pattern.
  ParameterChanges flushChanges;
