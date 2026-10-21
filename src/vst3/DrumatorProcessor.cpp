@@ -522,6 +522,11 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    // A nonzero block without output buses still carries genuine host and
    // MIDI pattern-selection events. Keep sample-offset/host-tie ordering.
    if(data.numSamples>0&&data.numOutputs==0) {
+     // There is no render clock while outputs are absent. Do not resume
+     // frozen voices or reuse the previous phase after an outputless gap.
+     voices_.reset();
+     wasPlaying_=false;
+     haveExpectedPpq_=false;
      if(!patternTimeline_.reset(static_cast<std::size_t>(data.numSamples)))
        return Steinberg::kInvalidArgument;
      if(data.inputParameterChanges)
