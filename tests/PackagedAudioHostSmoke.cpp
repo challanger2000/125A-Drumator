@@ -1586,6 +1586,25 @@ int main(int argc,char** argv) {
            "T19 oversized host block not rejected");
  }
  std::cout<<"T19 oversized host frame count rejection PASS\\n";
+ // T20: reject malformed output-bus metadata before accessing any
+ // host buffers, including while the restore gate is active.
+ {
+   ProcessData bad{};
+   bad.numSamples=256;
+   bad.symbolicSampleSize=kSample32;
+   bad.processMode=kRealtime;
+   bad.numOutputs=-1;
+   require(audio->process(bad)==kInvalidArgument,
+           "T20 negative bus count not rejected");
+   bad.numOutputs=17;
+   require(audio->process(bad)==kInvalidArgument,
+           "T20 excessive bus count not rejected");
+   bad.numOutputs=1;
+   bad.outputs=nullptr;
+   require(audio->process(bad)==kInvalidArgument,
+           "T20 missing output array not rejected");
+ }
+ std::cout<<"T20 malformed output bus metadata rejection PASS\\n";
 
  // F04: hosts flush automation using zero sample frames and no output bus.
  // The saved component state must reflect the last flushed pattern.

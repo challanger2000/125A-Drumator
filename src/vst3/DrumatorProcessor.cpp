@@ -488,7 +488,9 @@ Steinberg::uint32 PLUGIN_API Processor::getTailSamples() {
 Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& data) {
  // Validate the host frame count before the restore-gate silence path: a
  // negative count must never be converted to a huge size_t by fill_n.
- if(data.numSamples<0||
+ if(data.numSamples<0||data.numOutputs<0||
+    data.numOutputs>static_cast<Steinberg::int32>(kRows)||
+    (data.numOutputs>0&&!data.outputs)||
     (prepared_&&data.numSamples>processSetup.maxSamplesPerBlock))
    return Steinberg::kInvalidArgument;
  AudioGateEntry currentCall(restoreGate_);
