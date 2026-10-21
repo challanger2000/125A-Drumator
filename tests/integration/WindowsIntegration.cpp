@@ -91,6 +91,14 @@ namespace drumator {
 // Added as a friend in generated TEST headers only. Observes real state,
 // including Undo/clipboard/paths, rather than mirroring the commit algorithm.
 struct IntegrationAccess {
+ static void seedTransportClock(Processor& p) {
+   p.haveExpectedPpq_=true;
+   p.expectedNextPpq_=19.5;
+   p.phaseOriginStep_=76;
+ }
+ static bool clockReset(const Processor& p) {
+   return !p.haveExpectedPpq_&&p.expectedNextPpq_==0.0&&p.phaseOriginStep_==0;
+ }
  static auto snapshot(Controller& c) {
    std::array<PatternSteps,kPatterns> undo{};
    std::array<bool,kPatterns> available{};
@@ -680,6 +688,21 @@ void testVelocityLaneExistingStepsOnly(){
  check(f.c->velocity(0,0,1)>0,
        "UX standard Step click no longer enables a blank note");
  evidence("UX velocity lane edits occupied notes only; drag/Undo and explicit Step creation PASS");
+}
+void testRateChangeTransportReset(){
+ Fixture f;
+ ProcessSetup first{};
+ first.sampleRate=48000.;
+ first.maxSamplesPerBlock=256;
+ first.symbolicSampleSize=kSample32;
+ first.processMode=kRealtime;
+ check(f.p->setupProcessing(first)==kResultOk,"T28 initial rate setup");
+ IntegrationAccess::seedTransportClock(*f.p);
+ first.sampleRate=44100.;
+ check(f.p->setupProcessing(first)==kResultOk,"T28 rate reconfiguration");
+ check(IntegrationAccess::clockReset(*f.p),
+       "T28 rate change retained old expected PPQ or phase origin");
+ evidence("T28 rate reconfiguration clears expected host PPQ and phase origin PASS");
 }
 void testRandomVelocityOneShot(){
  Fixture f;
@@ -1448,6 +1471,7 @@ int main(int argc,char** argv){
  run("UX direct pattern length",testPatternLengthControls);
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
  run("P19 1T/2T copy-paste-duplicate duration",testPatternDurationClipboard);
+ run("T28 rate-switch transport clock reset",testRateChangeTransportReset);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("VELO 100 reset existing notes",testVelocityResetPattern);
  run("V16 1T hidden velocity preservation",testVelocityInactiveBarProtection);
