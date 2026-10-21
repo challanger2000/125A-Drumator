@@ -130,6 +130,7 @@ struct IntegrationAccess {
      v.velocityRow_,v.velocityStep_,v.firstRow_,v.songSlot_,v.songEditorOpen_,
      v.compactViewport_,v.compactPageRows_,v.velocityExpanded_,v.popup_,v.popupRow_,v.activeKnob_,v.knobRow_,v.knobStartY_,v.knobStartValue_,v.knobGeneration_,v.status_};
  }
+ static std::size_t viewCount(const Controller& c){return c.views_.size();}
  static DrumatorView* view(Controller& c,std::size_t n){check(n<c.views_.size(),"real custom view absent");return c.views_[n];}
  static VSTGUI::CTextEdit* edit(DrumatorView& v){return v.nameEdit_;}
   static std::size_t firstRow(DrumatorView& v){return v.firstRow_;}
@@ -391,6 +392,35 @@ void testLegacyReject(){
    check(f.recall(b)==kResultOk&&!f.c->canUndoCurrentPattern(),"Z01 successful Legacy failed");
  }
  evidence("Z01 Legacy PASS: DMR1/2/3 48 actual default-name OOM rejections and successful recalls");
+}
+void testMultiViewLifecycleNotifications(){
+ // V18: attached native views receive controller notifications while
+ // both exist; removing one must leave no dangling registration.
+ Fixture f;
+ f.kit(namedKit('X'));
+ f.open();f.open();
+ check(IntegrationAccess::viewCount(*f.c)==2,"V18 both views not registered");
+ auto* original=IntegrationAccess::view(*f.c,0);
+ auto* second=IntegrationAccess::view(*f.c,1);
+ check(original!=second,"V18 duplicate view registration");
+ check(f.c->setParamNormalized(kPatternParam,3.0/7.0)==kResultOk,
+       "V18 dual-view parameter notification");
+ check(IntegrationAccess::viewCount(*f.c)==2&&
+       IntegrationAccess::view(*f.c,0)==original&&
+       IntegrationAccess::view(*f.c,1)==second,
+       "V18 view collection corrupted by notification");
+ f.closeLast();
+ check(IntegrationAccess::viewCount(*f.c)==1&&IntegrationAccess::view(*f.c,0)==original,
+       "V18 removed view still registered");
+ check(f.c->setParamNormalized(kPatternParam,4.0/7.0)==kResultOk,
+       "V18 notification after second view removal");
+ check(IntegrationAccess::viewCount(*f.c)==1,"V18 stale view after notification");
+ f.open();
+ check(IntegrationAccess::viewCount(*f.c)==2&&IntegrationAccess::view(*f.c,0)==original,
+       "V18 reopened editor lost original view");
+ check(f.c->setParamNormalized(kPatternParam,5.0/7.0)==kResultOk,
+       "V18 notification after reopening");
+ evidence("V18 two native views, notification, removal, reopening PASS");
 }
 void testZoom(){
  Fixture f;f.kit(namedKit('X'));auto& e=f.open();auto* v=IntegrationAccess::view(*f.c,0);
@@ -1473,6 +1503,7 @@ int main(int argc,char** argv){
  }
  run("Z01 full Controller allocation injection",testRecallOOM);
  run("Z01 legacy Controller",testLegacyReject);
+ run("V18 multi-view native lifecycle",testMultiViewLifecycleNotifications);
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
