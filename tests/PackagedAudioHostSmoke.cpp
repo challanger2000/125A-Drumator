@@ -1560,6 +1560,19 @@ int main(int argc,char** argv) {
    view->release();
  }
  std::cout<<"F03 host controller state and parameter recall PASS\\n";
+ // T17: a malformed negative host frame count must be rejected before
+ // any silence, scheduling, or buffer-clearing operation.
+ {
+   ProcessData invalidFrames{};
+   invalidFrames.numSamples=-1;
+   invalidFrames.numOutputs=0;
+   invalidFrames.outputs=nullptr;
+   invalidFrames.symbolicSampleSize=kSample32;
+   invalidFrames.processMode=kRealtime;
+   require(audio->process(invalidFrames)==kInvalidArgument,
+           "T17 negative frame count not rejected");
+ }
+ std::cout<<"T17 negative host frame count rejection PASS\\n";
  // F04: hosts flush automation using zero sample frames and no output bus.
  // The saved component state must reflect the last flushed pattern.
  ParameterChanges flushChanges;
