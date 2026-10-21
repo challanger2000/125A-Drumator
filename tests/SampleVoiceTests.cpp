@@ -418,7 +418,7 @@ static void testRatioPerformanceComparison() {
             <<ratio<<"x, taps="<<kernel.taps()
             <<", 48k/256, 32 blocks: p99="<<p99
             <<"ms max="<<timings.back()
-            <<"ms (offline CI, not realtime qualification)\\n";
+            <<"ms (offline CI, not realtime qualification)\n";
  }
 }
 static void testUnityRateExactPCM() {
@@ -554,7 +554,7 @@ int main() {
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testChokeSplitBlockEquivalence();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
   testUnityRateExactPCM();testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
-  std::cout<<"::notice title=125A Drumator voice QA::Empty-instrument and 17 explicit sample-voice test groups PASS\n";
+  std::cout<<"::notice title=125A Drumator voice QA::Sample-voice test sequence completed PASS\n";
   return 0;
  } catch(const std::exception& ex) {
   std::cerr<<"Drumator sample-voice regression FAIL: "<<ex.what()<<'\n';

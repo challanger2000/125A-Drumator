@@ -1820,18 +1820,37 @@ int main(int argc,char** argv) {
    int32 densePointIndex=0;
    require(queue->addPoint(255,6.0/7.0,densePointIndex)==kResultOk,
            "T30 host tie creation");
-   flushData.inputEvents=&denseMidi;
-   flushData.inputParameterChanges=&denseHost;
-   require(audio->process(flushData)==kResultOk,"T30 dense processor events");
-   Steinberg::ResizableMemoryIBStream denseState;
-   require(component->getState(&denseState)==kResultOk,"T30 state save");
-   drumator::KitState denseKit;
-   require(drumator::KitCodec::decode(
-       static_cast<const std::uint8_t*>(denseState.getData()),
-       denseState.getCursor(),denseKit)&&denseKit.selected==6,
-       "T30 dense host/MIDI arbitration lost final selection");
-   flushData.inputEvents=&noOutputEvents;
-   flushData.inputParameterChanges=nullptr;
+   // A final host-only G would also pass if all 300 MIDI commands vanished.
+   // Require MIDI-only D first and real feedback, on BOTH process branches.
+   for(bool rendered:{false,true})for(bool hostTie:{false,true}) {
+     auto denseData=rendered?data:flushData;
+     ParameterChanges feedback;
+     denseData.inputEvents=&denseMidi;
+     denseData.inputParameterChanges=hostTie?&denseHost:nullptr;
+     denseData.outputParameterChanges=&feedback;
+     require(audio->process(denseData)==kResultOk,"T30 dense processor events");
+     Steinberg::ResizableMemoryIBStream denseState;
+     require(component->getState(&denseState)==kResultOk,"T30 state save");
+     drumator::KitState denseKit;
+     require(drumator::KitCodec::decode(
+         static_cast<const std::uint8_t*>(denseState.getData()),
+         denseState.getCursor(),denseKit)&&denseKit.selected==(hostTie?6:3),
+         "T30 dense host/MIDI arbitration lost final selection");
+     require(feedback.getParameterCount()==1,"T30 MIDI was not reported to host");
+     auto* reported=feedback.getParameterData(0);
+     int32 offset=-1;ParamValue value=-1.;
+     require(reported&&reported->getParameterId()==drumator::kPatternParam&&
+             reported->getPointCount()==(hostTie?255:256)&&
+             reported->getPoint(reported->getPointCount()-1,offset,value)==kResultOk&&
+             offset==(hostTie?254:255)&&
+             drumator::patternFromNormalized(value)==(hostTie?6:3),
+             "T30 chronological feedback lost events, accepted a MIDI host tie, or reordered the overflow tail");
+     for(int32 point=0;point<reported->getPointCount();++point)
+       require(reported->getPoint(point,offset,value)==kResultOk&&offset==point&&
+               drumator::patternFromNormalized(value)==(point==255?3:static_cast<unsigned>(point%8)),
+               "T30 intermediate MIDI feedback differs from independent event sequence");
+   }
+   drumator::qa::result("T30 PASS: 300 MIDI commands, MIDI-only D and host-tie G, rendered/outputless paths and all 255/256 feedback offsets");
  }
  std::cout<<"T30 >256 real MIDI events and final host tie PASS\\n";
 

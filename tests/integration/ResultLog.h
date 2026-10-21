@@ -16,7 +16,9 @@ inline void workflowNotice(const std::string& message){
    else if(ch=='\n')escaped+="%0A";
    else escaped+=ch;
  }
- std::cout<<"::notice title=125A Drumator QA::"<<escaped<<'\n';
+ // Older test output may end in a literal "\\n" instead of a newline.
+ // Workflow commands must start on a real line to remain individually visible.
+ std::cout<<'\n'<<"::notice title=125A Drumator QA::"<<escaped<<'\n';
 }
 inline void result(const std::string& line){
  workflowNotice(line);

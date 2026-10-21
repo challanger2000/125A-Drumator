@@ -1479,6 +1479,7 @@ void testNativeName(){
  evidence("Z03 PASS: real Win32 EDIT lifetime, rejected/accepted 16-to-4 recall, late live-listener callbacks, Enter/Escape/blur, two views and close");
 }
 #include "FunctionalAuditCases.inl"
+#include "SecondAuditCases.inl"
 }
 int main(int argc,char** argv){
  if(argc!=2)return 2;
@@ -1531,6 +1532,8 @@ int main(int argc,char** argv){
  run("FA04 sample path failures and real View drop callbacks",testAuditSamplePathFailures);
  run("FA05 modal menu gutters",testAuditMenuGutters);
  run("FA06 minimum-height host refusal menus",testAuditMinimumHeightMenus);
+ run("SA01 two-view native invalidation after row and global edits",testSecondAuditViewInvalidation);
+ run("SA02 actual sequencer/MIDI choke partition",testSecondAuditTriggerPartition);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::workflowNotice(qaCaseSummary);
