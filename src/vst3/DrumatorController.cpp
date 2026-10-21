@@ -451,12 +451,15 @@ bool Controller::randomizeRowVelocity(std::size_t row){
 }
 bool Controller::varyPatternVelocity(){
  const auto p=currentPattern();
+ const auto active=static_cast<std::size_t>(patternLength(p));
+ if(active!=16&&active!=32)return false;
  PatternSteps data{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
- // Deterministic per edit: changes stored velocities only, never note placement.
+ // Deterministic per edit: change ONLY currently active steps. A 1-bar
+ // pattern must preserve bars 2 data for a subsequent 2-bar reactivation.
  const auto variation=velocityVariation_+1u;
  for(std::size_t row=0;row<kRows;++row)
-  for(std::size_t step=0;step<kSteps;++step){
+  for(std::size_t step=0;step<active;++step){
    const auto index=row*kSteps+step;
    if(data[index]==0)continue;
    std::uint32_t hash=static_cast<std::uint32_t>((row+1u)*0x9e3779b9u)^
@@ -472,9 +475,16 @@ bool Controller::varyPatternVelocity(){
 }
 bool Controller::resetPatternVelocity(){
  const auto p=currentPattern();
+ const auto active=static_cast<std::size_t>(patternLength(p));
+ if(active!=16&&active!=32)return false;
  PatternSteps data{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
- for(auto& value:data)if(value!=0)value=100;
+ // Do not reset invisible steps 17-32 while editing a 1-bar pattern.
+ for(std::size_t row=0;row<kRows;++row)
+   for(std::size_t step=0;step<active;++step) {
+     auto& value=data[row*kSteps+step];
+     if(value!=0)value=100;
+   }
  return replacePattern(p,data);
 }
 bool Controller::fillRow(std::size_t row,RowFill mode){

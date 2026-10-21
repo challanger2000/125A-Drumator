@@ -718,6 +718,57 @@ void testRandomVelocityOneShot(){
  check(f.c->undoCurrentPattern()&&f.c->velocity(0,0,0)==before,"Button Undo failed");
  evidence("RANDOM one-shot occupied-only, 1T/2T, isolated row/pattern and Undo PASS");
 }
+void testVelocityInactiveBarProtection(){
+ // V16: 1T editing operations must never change stored steps 17-32.
+ // These steps must reappear at their original velocities on returning to 2T.
+ Fixture f;auto kit=namedKit('X',4);
+ kit.grid.fill(0);kit.patternLengths[0]=16;
+ kit.grid[0]=90;kit.grid[4]=110;kit.grid[20]=64;
+ kit.grid[kSteps+1]=60;kit.grid[kSteps+21]=33;
+ kit.grid[kRows*kSteps]=77; // other pattern must remain unchanged
+ f.kit(kit);f.open();
+ auto gridAt=[&]{
+   ResizableMemoryIBStream b;KitState state;
+   check(f.p->getState(&b)==kResultOk&&
+      KitCodec::decode(static_cast<const std::uint8_t*>(b.getData()),
+                       static_cast<std::size_t>(b.getCursor()),state),
+      "V16 actual processor state");
+   return state;
+ };
+ check(f.c->patternLength(0)==16,"V16 1T fixture lost pattern length");
+ check(f.c->varyPatternVelocity(),"V16 1T velocity vary rejected");
+ const auto varied=gridAt();
+ for(std::size_t row=0;row<kRows;++row)
+   for(std::size_t step=16;step<kSteps;++step)
+     check(varied.grid[row*kSteps+step]==kit.grid[row*kSteps+step],
+           "V16 VELO VARIIEREN silently changed hidden bar two");
+ check(varied.grid[kRows*kSteps]==77&&
+       varied.grid[1]==0&&varied.grid[kSteps]==0,
+       "V16 vary modified another pattern or introduced a note");
+ check(f.c->undoCurrentPattern(),"V16 vary not undoable");
+ check(gridAt().grid==kit.grid,"V16 vary Undo failed to restore full pattern");
+ check(f.c->resetPatternVelocity(),"V16 1T velocity reset rejected");
+ const auto reset=gridAt();
+ check(reset.grid[0]==100&&reset.grid[4]==100&&
+       reset.grid[kSteps+1]==100&&
+       reset.grid[20]==64&&reset.grid[kSteps+21]==33&&
+       reset.grid[kRows*kSteps]==77,
+       "V16 1T reset touched bar 2/other pattern or missed active notes");
+ check(f.c->undoCurrentPattern()&&gridAt().grid==kit.grid,
+       "V16 1T reset Undo failed");
+ check(f.c->togglePatternLength(0)&&f.c->patternLength(0)==32,
+       "V16 could not return to two bars");
+ check(f.c->velocity(0,0,20)==64&&f.c->velocity(0,1,21)==33,
+       "V16 hidden notes changed when restored to 2T");
+ check(f.c->resetPatternVelocity(),"V16 2T reset rejected");
+ const auto reset2=gridAt();
+ check(reset2.grid[20]==100&&reset2.grid[kSteps+21]==100,
+       "V16 2T reset failed to reach second bar");
+ check(f.c->undoCurrentPattern()&&gridAt().grid[20]==64&&
+       gridAt().grid[kSteps+21]==33,
+       "V16 2T undo did not recover hidden velocities");
+ evidence("V16 active 1T VELO VARIIEREN/100 preserves second bar; 2T and Undo PASS");
+}
 void testVelocityResetPattern(){
  Fixture f;
  auto kit=namedKit('X',4);
@@ -1079,6 +1130,7 @@ int main(int argc,char** argv){
  run("UX direct pattern length",testPatternLengthControls);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("VELO 100 reset existing notes",testVelocityResetPattern);
+ run("V16 1T hidden velocity preservation",testVelocityInactiveBarProtection);
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
  run("UX paged Song board",testPagedSongEditor);
  run("UX compact Song viewport",testSongCompactViewport);
