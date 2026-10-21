@@ -1,5 +1,11 @@
 # 125A Drumator — development instructions
 
+## Aktueller unabhängiger Funktionsaudit — 21.10.2026 (maßgeblich)
+
+**Windows-geprüfter Programm-/Teststand `826c6d8b0a3c0d038678061d7ad97092e37927e3`:** [Windows-QA #39676937642](https://github.com/challanger2000/125A-Drumator/actions/runs/39676937642) **SUCCESS**, **22/22 CTests**, darin **43 native Integrationsfälle ohne Fehler**, **47/47 Steinberg Validator**, paketierte Audio-/Editor-Hosttests erfolgreich. Sechs konkrete Fehler FA01–FA06 wurden korrigiert; T28/T29 und das Random-Velocity-Testorakel wurden verstärkt. [Vollständiger unabhängiger Bericht mit Quellen, Matrix und Beweisgrenzen](docs/audits/CODEX-FINAL-FUNCTIONAL-RECHECK-2026-10-21.md).
+
+**Keine V1-/endgültige GUI-Freigabe.** Studio One wurde nicht ausgeführt. Offline-64-Voice-/16x-Messung: p95 4.7974 ms, p99 7.403 ms, Maximum 8.892 ms bei 5.33333 ms Blockfrist. Keine garantierte Echtzeitfähigkeit; kontrollierte Host-Abnahme und dokumentierte Nacharbeiten bleiben erforderlich. Vollständige Logs/Artefaktdownloads sind hier durch den Cloud-Proxy blockiert; tatsächliche Checks-Annotations und deren Grenzen stehen im Bericht. Die älteren „aktuellen“ Abschnitte unten sind historische Stände.
+
 ## Aktueller GUI-Funktionsstand — 20.10.2026 (maßgeblich)
 
 **Geprüfter Quellstand `eaa035bb43cc9fa20682f711b8631a75da0ece4d`:** [Windows-QA #39418839905](https://github.com/challanger2000/125A-Drumator/actions/runs/39418839905) **SUCCESS**; **21/21 CTests**, **47/47 Steinberg Validator**, reale gepackte VST3-Audio-/Editor-Host-Smokes PASS. Das native VSTGUI-Rendering ist als eigenes Artifakt `125A-Drumator-VSTGUI-Native-Renderings` (ID `12262412156`, 9 Renderings) gespeichert und wurde angesehen; das neue VST3-Testpaket ist `125A-Drumator-M11-Full-Kit-Stress-QA` (ID `12262387312`). Kein Ausführungstest in Studio One, **keine endgültige V1-Veröffentlichung und noch kein endgültiger Bitmap-Skin**.
