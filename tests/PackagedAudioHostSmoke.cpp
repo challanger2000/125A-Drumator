@@ -1012,6 +1012,20 @@ int main(int argc,char** argv) {
      require(downbeat>1.0,
              "Transport bar-2 start/locate/backwards loop missed first pattern step");
    }
+   // T16: an outputless processing gap must not strand the transport
+   // or prevent a fresh downbeat when audio outputs return.
+   context.projectTimeMusic=4.;
+   auto noOutputBlock=data;
+   noOutputBlock.numOutputs=0;
+   noOutputBlock.outputs=nullptr;
+   require(audio->process(noOutputBlock)==kResultOk,
+           "T16 outputless transport gap rejected");
+   context.projectTimeMusic=4.;
+   run(-1);
+   double resumedDownbeat=0.;
+   for(int i=50;i<190;++i)resumedDownbeat+=std::abs(left[i]);
+   require(resumedDownbeat>1.0,
+           "T16 missing first step on output restoration");
    // The host may claim valid clock flags while supplying NaN values.
    // Drain the preceding one-shot completely without stopping transport,
    // then confirm the first step sounds on the next fractional-beat locate.
