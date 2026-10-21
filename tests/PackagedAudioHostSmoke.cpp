@@ -1030,6 +1030,19 @@ int main(int argc,char** argv) {
      require(downbeat>1.0,
              "Transport bar-2 start/locate/backwards loop missed first pattern step");
    }
+   // T25: stop and restart at the same PPQ, without an intervening locate.
+   // The transport origin must re-arm and replay the first step.
+   context.state=0;
+   run(-1);
+   context.state=ProcessContext::kPlaying|
+                 ProcessContext::kProjectTimeMusicValid|
+                 ProcessContext::kTempoValid;
+   context.projectTimeMusic=4.;
+   run(-1);
+   double samePositionRestart=0.;
+   for(int i=50;i<190;++i)samePositionRestart+=std::abs(left[i]);
+   require(samePositionRestart>1.0,
+           "T25 stop/restart at same PPQ missed first sequencer step");
    // T16: an outputless processing gap must not strand the transport
    // or prevent a fresh downbeat when audio outputs return.
    context.projectTimeMusic=4.;
