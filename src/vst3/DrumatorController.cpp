@@ -316,7 +316,9 @@ bool Controller::configureSong(bool enabled,std::size_t count,const SongChain& c
 bool Controller::toggleSongMode(){return configureSong(!songEnabled_,songChain_.count(),songChain_);}
 bool Controller::adjustSongCount(int delta){
  const auto old=static_cast<int>(songChain_.count());
- const auto next=std::clamp(old+delta,1,static_cast<int>(SongChain::kCapacity));
+ // Clamp in a wider signed domain: int deltas may be INT_MIN or INT_MAX.
+ const auto next=std::clamp(static_cast<std::int64_t>(old)+static_cast<std::int64_t>(delta),
+                            std::int64_t{1},static_cast<std::int64_t>(SongChain::kCapacity));
  SongChain candidate=songChain_;
  if(!candidate.setCount(static_cast<std::size_t>(next)))return false;
  return configureSong(songEnabled_,candidate.count(),candidate);

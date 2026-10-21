@@ -1055,6 +1055,34 @@ void testPatternLengthControls(){
  check(f.c->visibleRows()==4,"UX - ZEILE not clickable");
  evidence("UX direct length and no duplicate pattern menu control PASS");
 }
+void testSongCountExtremeDelta(){
+ Fixture f;auto kit=namedKit('C',4);
+ check(kit.chain.setCount(3)&&kit.chain.configure(0,5,16),
+       "S10 song count fixture");
+ f.kit(kit);
+ auto checkCount=[&](std::size_t expected){
+   check(f.c->songChain_.count()==expected,"S10 controller count mismatch");
+   ResizableMemoryIBStream stream;KitState saved;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                     static_cast<std::size_t>(stream.getCursor()),saved),
+         "S10 processor state decode");
+   check(saved.chain.count()==expected&&saved.chain.entry(0).pattern==5&&
+         saved.chain.entry(0).steps==16,
+         "S10 processor count or existing song entry mismatch");
+ };
+ check(f.c->adjustSongCount(std::numeric_limits<int>::max()),
+       "S10 INT_MAX delta rejected");
+ checkCount(SongChain::kCapacity);
+ check(f.c->adjustSongCount(std::numeric_limits<int>::min()),
+       "S10 INT_MIN delta rejected");
+ checkCount(1);
+ check(f.c->adjustSongCount(2),"S10 ordinary +2 rejected");
+ checkCount(3);
+ check(f.c->adjustSongCount(-1),"S10 ordinary -1 rejected");
+ checkCount(2);
+ evidence("S10 song count INT_MIN/MAX saturation, normal edits and persisted state PASS");
+}
 void testSongEntryExtremeDelta(){
  Fixture f;auto kit=namedKit('X',4);
  kit.songEnabled=1;
@@ -1394,6 +1422,7 @@ int main(int argc,char** argv){
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
  run("UX paged Song board",testPagedSongEditor);
  run("S09 Song entry signed extreme edit deltas",testSongEntryExtremeDelta);
+ run("S10 Song count signed extreme edit deltas",testSongCountExtremeDelta);
  run("UX compact Song viewport",testSongCompactViewport);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);
