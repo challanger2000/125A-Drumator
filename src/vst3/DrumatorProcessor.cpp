@@ -539,6 +539,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      voices_.reset();
      wasPlaying_=false;
      haveExpectedPpq_=false;
+     // An audition requested while there is no audio sink must not fire
+     // unexpectedly when the host restores its outputs.
+     previewPending_.store(0,std::memory_order_release);
      if(!patternTimeline_.reset(static_cast<std::size_t>(data.numSamples)))
        return Steinberg::kInvalidArgument;
      if(data.inputParameterChanges)

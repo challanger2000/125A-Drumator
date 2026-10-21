@@ -321,6 +321,24 @@ int main(int argc,char** argv) {
          "Repeated preview requests stacked voices or went silent");
  for(int i=0;i<8;++i)run(-1);
  std::cout<<"Packaged GUI one-shot sample preview / stopped transport / invalid rows PASS\\n";
+ // T22: an audition consumed during an outputless processing gap
+ // must not play later when the host restores the MAIN bus.
+ require(preview(0)==kResultOk,"T22 preview request");
+ ProcessData noPreviewOutputs=data;
+ noPreviewOutputs.numOutputs=0;
+ noPreviewOutputs.outputs=nullptr;
+ require(audio->process(noPreviewOutputs)==kResultOk,"T22 outputless block");
+ run(-1);
+ for(int i=0;i<256;++i)
+   require(left[i]==0.f&&right[i]==0.f,
+           "T22 deferred stale GUI preview after outputs restored");
+ require(preview(0)==kResultOk,"T22 fresh preview request");
+ run(-1);
+ double t22Level=0.;
+ for(int i=50;i<190;++i)t22Level+=std::abs(left[i]);
+ require(t22Level>1.0,"T22 fresh preview lost after outputless gap");
+ for(int i=0;i<8;++i)run(-1);
+ std::cout<<"T22 outputless GUI preview lifetime PASS\\n";
  // Exercise actual packaged VST3 global master DSP at zero, half and double
  // gain, including invalid control values and return to neutral gain.
  auto setMaster=[&](int value)->tresult {
