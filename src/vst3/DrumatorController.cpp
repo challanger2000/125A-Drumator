@@ -331,10 +331,18 @@ bool Controller::editSongEntry(std::size_t slot,int patternDelta,int lengthDelta
  if(slot>=songChain_.count())return false;
  SongChain candidate=songChain_;
  const auto old=candidate.entry(slot);
- const auto pattern=static_cast<std::uint8_t>((static_cast<int>(old.pattern)+patternDelta+8)%8);
+ // Reduce first: adding a raw int delta (e.g. INT_MAX/INT_MIN) could
+ // overflow before modulo or produce a negative array index.
+ const auto wrap=[](std::int64_t index,std::int64_t delta,std::int64_t count) noexcept {
+   const auto remainder=delta%count;
+   const auto sum=(index+remainder)%count;
+   return static_cast<std::size_t>(sum<0?sum+count:sum);
+ };
+ const auto pattern=static_cast<std::uint8_t>(
+     wrap(old.pattern,patternDelta,static_cast<std::int64_t>(kPatterns)));
  const std::array<std::uint8_t,3> lengths{8,16,32};
- const auto index=old.steps==8?0:(old.steps==16?1:2);
- const auto length=lengths[static_cast<std::size_t>((index+lengthDelta+3)%3)];
+ const std::int64_t index=old.steps==8?0:(old.steps==16?1:2);
+ const auto length=lengths[wrap(index,lengthDelta,3)];
  if(!candidate.configure(slot,pattern,length))return false;
  return configureSong(songEnabled_,candidate.count(),candidate);
 }

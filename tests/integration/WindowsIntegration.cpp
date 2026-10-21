@@ -30,6 +30,7 @@
 #include "vstgui/lib/coffscreencontext.h"
 #include <filesystem>
 #include <array>
+#include <limits>
 #include <atomic>
 #include <cstdlib>
 #include <fstream>
@@ -1054,6 +1055,43 @@ void testPatternLengthControls(){
  check(f.c->visibleRows()==4,"UX - ZEILE not clickable");
  evidence("UX direct length and no duplicate pattern menu control PASS");
 }
+void testSongEntryExtremeDelta(){
+ Fixture f;auto kit=namedKit('X',4);
+ kit.songEnabled=1;
+ check(kit.chain.setCount(3)&&kit.chain.configure(0,7,32)&&
+       kit.chain.configure(1,0,8)&&kit.chain.configure(2,3,16),
+       "S09 song test fixture");
+ f.kit(kit);
+ auto checkState=[&](std::uint8_t p,std::uint8_t len) {
+   const auto e=f.c->songEntry(0);
+   check(e.pattern==p&&e.steps==len,"S09 controller wrong song entry");
+   ResizableMemoryIBStream stream;KitState saved;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                 static_cast<std::size_t>(stream.getCursor()),saved),
+         "S09 processor state decode");
+   const auto persisted=saved.chain.entry(0);
+   check(persisted.pattern==p&&persisted.steps==len,
+         "S09 processor/controller Song entry mismatch");
+ };
+ check(f.c->editSongEntry(0,1,1),"S09 ordinary +1 rejected");
+ checkState(0,8);
+ check(f.c->editSongEntry(0,-1,-1),"S09 ordinary -1 rejected");
+ checkState(7,32);
+ // All these arguments were previously liable to signed overflow or
+ // negative indexing when the native API was invoked directly.
+ const auto big=std::numeric_limits<int>::max();
+ const auto small=std::numeric_limits<int>::min();
+ check(f.c->editSongEntry(0,big,big),"S09 INT_MAX delta rejected");
+ checkState(6,8); // 7+(INT_MAX mod 8)=6; length 32 -> 8
+ check(f.c->editSongEntry(0,small,small),"S09 INT_MIN delta rejected");
+ checkState(6,16); // INT_MIN mod 8=0, mod 3=-2: 8 -> 16
+ check(f.c->editSongEntry(0,0,0),"S09 zero delta rejected");
+ checkState(6,16);
+ check(!f.c->editSongEntry(99,1,1),"S09 invalid song slot accepted");
+ checkState(6,16);
+ evidence("S09 song editor signed modular delta INT_MIN/MAX, normal edits and recall PASS");
+}
 void testPagedSongEditor(){
  Fixture f;
  auto kit=namedKit('X',4);
@@ -1355,6 +1393,7 @@ int main(int argc,char** argv){
  run("V17 1T row FILL/CLEAR hidden-step protection",testFillActivePatternLength);
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
  run("UX paged Song board",testPagedSongEditor);
+ run("S09 Song entry signed extreme edit deltas",testSongEntryExtremeDelta);
  run("UX compact Song viewport",testSongCompactViewport);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);
