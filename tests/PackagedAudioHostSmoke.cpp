@@ -1881,6 +1881,13 @@ int main(int argc,char** argv) {
  stemBuses[0].numChannels=0;
  f08StemLeft.fill(0.f);f08StemRight.fill(0.f);
  require(audio->process(data)==kResultOk,"T29 zero-channel MAIN with active AUX rejected");
+ double t29AuxEnergy=0.0;
+ for(std::size_t frame=0;frame<f08StemLeft.size();++frame) {
+   require(std::isfinite(f08StemLeft[frame])&&std::isfinite(f08StemRight[frame]),
+           "T29 nonfinite AUX signal");
+   t29AuxEnergy+=std::abs(f08StemLeft[frame])+std::abs(f08StemRight[frame]);
+ }
+ require(t29AuxEnergy>1.0,"T29 zero-channel MAIN muted active AUX signal");
  stemBuses[0].numChannels=2;
  for(float v:f08StemLeft)require(std::isfinite(v),"F08 invalid stem L");
  for(float v:f08StemRight)require(std::isfinite(v),"F08 invalid stem R");
