@@ -542,8 +542,11 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
              patternTimeline_.insert(offset,patternFromNormalized(value),true);
          }
        }
-     if(data.inputEvents&&!songMailbox_.snapshot(audioSongChain_,audioSongEnabled_))
-       return Steinberg::kResultFalse;
+     // A concurrently published song edit can make this lock-free
+     // snapshot temporarily unavailable. As in the audio-render path,
+     // retain the last coherent chain instead of failing process().
+     if(data.inputEvents)
+       (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_);
      if(data.inputEvents&&!audioSongEnabled_)
        for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
          Steinberg::Vst::Event event{};
