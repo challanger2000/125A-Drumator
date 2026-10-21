@@ -343,10 +343,24 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       target<0||target>=static_cast<Steinberg::int64>(kPatterns)||
       attrs->getBinary("Steps",bytes,count)!=Steinberg::kResultOk||
       !bytes||count!=kRows*kSteps)return Steinberg::kInvalidArgument;
+   // Legacy PatternReplace sends only Steps. COPY/PASTE/DUPLICATE can
+   // also request a 1T/2T duration in the same host control transaction.
+   Steinberg::int64 desiredLength=0;
+   const bool updateLength=attrs->getInt("Length",desiredLength)==Steinberg::kResultOk;
+   if(updateLength&&desiredLength!=16&&desiredLength!=32)
+      return Steinberg::kInvalidArgument;
    const auto* values=static_cast<const std::uint8_t*>(bytes);
    for(std::size_t i=0;i<kRows*kSteps;++i)if(values[i]>127)return Steinberg::kInvalidArgument;
-   return patterns_.replacePattern(static_cast<std::size_t>(target),values,count)
-       ?Steinberg::kResultOk:Steinberg::kResultFalse;
+   const auto index=static_cast<std::size_t>(target);
+   // The exporter holds kitMutex_ before the pattern-bank write lock.
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   if(!patterns_.replacePattern(index,values,count))return Steinberg::kResultFalse;
+   if(updateLength) {
+      const auto length=static_cast<std::uint8_t>(desiredLength);
+      patternLengths_[index].store(length,std::memory_order_release);
+      kit_.patternLengths[index]=length;
+   }
+   return Steinberg::kResultOk;
  }
  if(std::strcmp(msg->getMessageID(),"Drumator.StepEdit")==0) {
    Steinberg::int64 pattern=-1,step=-1,velocity=-1;

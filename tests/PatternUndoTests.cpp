@@ -14,5 +14,14 @@ int main() {
  if(u.available(0)||!u.available(1))return 7;
  u.reset();
  if(u.available(1)||u.snapshot(1))return 8;
+ // U09 duration-only Undo and ordinary step edits preserve duration.
+ if(!u.capture(2,a,a,32,16)||u.snapshotLength(2)!=32||
+    *u.snapshot(2)!=a)return 9;
+ u.consume(2);
+ if(u.snapshotLength(2)!=0)return 10;
+ if(!u.capture(2,a,b,16,16)||u.snapshotLength(2)!=0)return 11;
+ if(u.capture(2,b,b,16,16))return 12;
+ u.reset();
+ if(u.snapshotLength(2)!=0)return 13;
  return 0;
 }

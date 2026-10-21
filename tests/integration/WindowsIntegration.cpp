@@ -93,14 +93,19 @@ struct IntegrationAccess {
  static auto snapshot(Controller& c) {
    std::array<PatternSteps,kPatterns> undo{};
    std::array<bool,kPatterns> available{};
-   for(std::size_t p=0;p<kPatterns;++p){available[p]=c.undo_.available(p);if(auto* x=c.undo_.snapshot(p))undo[p]=*x;}
+   std::array<std::uint8_t,kPatterns> undoLengths{};
+   for(std::size_t p=0;p<kPatterns;++p){
+     available[p]=c.undo_.available(p);
+     undoLengths[p]=c.undo_.snapshotLength(p);
+     if(auto* x=c.undo_.snapshot(p))undo[p]=*x;
+   }
    std::array<std::pair<std::uint8_t,std::uint8_t>,SongChain::kCapacity> chain{};
    for(std::size_t n=0;n<SongChain::kCapacity;++n){const auto e=c.songChain_.entry(n);chain[n]={e.pattern,e.steps};}
    return std::tuple{c.grid_,c.patternLengths_,c.labels_,c.customNames_,c.samplePaths_,
      c.muted_,c.solo_,c.gain_,c.pan_,c.pitch_,c.choke_,c.output_,c.visibleRows_,
      c.swingPercent_,c.humanizePercent_,c.masterVolume_,c.randomVelocity_,c.songEnabled_,
-     c.clipboard_,c.clipboardValid_,c.strokeBefore_,c.strokePattern_,c.strokeGeneration_,
-     c.editGeneration(),available,undo,chain,c.songChain_.count(),c.velocityVariation_,c.preferredZoom_,c.getParamNormalized(kPatternParam)};
+     c.clipboard_,c.clipboardLength_,c.clipboardValid_,c.strokeBefore_,c.strokePattern_,c.strokeGeneration_,
+     c.editGeneration(),available,undo,undoLengths,chain,c.songChain_.count(),c.velocityVariation_,c.preferredZoom_,c.getParamNormalized(kPatternParam)};
  }
  static auto viewSnapshot(DrumatorView& v) {
    VSTGUI::IPlatformTextEdit* platform=nullptr;
@@ -857,6 +862,107 @@ void testVelocityResetPattern(){
        "VELO 100 popup Undo did not restore previous velocities");
  evidence("VELO 100 all occupied notes, no new notes, isolated pattern and single Undo PASS");
 }
+void testPatternDurationClipboard(){
+ // P19: COPY/PASTE and DUPLIZIEREN must transfer both stored steps
+ // and their musical length, and Undo must restore both in one operation.
+ Fixture f;
+ KitState kit=namedKit('X',4);
+ kit.grid.fill(0);
+ kit.grid[0]=91;kit.grid[20]=64;
+ kit.grid[kRows*kSteps]=42;kit.grid[kRows*kSteps+20]=37;
+ kit.patternLengths[0]=16;kit.patternLengths[1]=32;kit.patternLengths[2]=32;
+ f.kit(kit);
+ auto state=[&] {
+   ResizableMemoryIBStream stream;KitState value;
+   check(f.p->getState(&stream)==kResultOk&&
+      KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                       static_cast<std::size_t>(stream.getCursor()),value),
+      "P19 processor state decode");
+   return value;
+ };
+ check(f.c->copyCurrentPattern(),"P19 copy one-bar A");
+ check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk,
+       "P19 select B");
+ check(f.c->pasteCurrentPattern(),"P19 paste one bar into 2T");
+ auto saved=state();
+ check(saved.patternLengths[1]==16&&f.c->patternLength(1)==16&&
+       saved.grid[kRows*kSteps]==91&&saved.grid[kRows*kSteps+20]==64,
+       "P19 paste failed to atomically transfer length and hidden steps");
+ check(f.c->undoCurrentPattern(),"P19 paste Undo");
+ saved=state();
+ check(saved.patternLengths[1]==32&&f.c->patternLength(1)==32&&
+       saved.grid[kRows*kSteps]==42&&saved.grid[kRows*kSteps+20]==37,
+       "P19 paste Undo failed to restore B's original 2T grid and duration");
+ check(f.c->pasteCurrentPattern()&&f.c->duplicateCurrentPattern(),
+       "P19 paste and duplicate to empty C");
+ saved=state();
+ check(saved.patternLengths[2]==16&&
+       saved.grid[2*kRows*kSteps]==91&&saved.grid[2*kRows*kSteps+20]==64,
+       "P19 duplicate failed to copy 1T musical length");
+ check(f.c->setParamNormalized(kPatternParam,2./7.)==kResultOk&&
+       f.c->undoCurrentPattern(),"P19 duplicate Undo");
+ saved=state();
+ check(saved.patternLengths[2]==32&&
+       saved.grid[2*kRows*kSteps]==0&&saved.grid[2*kRows*kSteps+20]==0,
+       "P19 duplicate Undo failed to restore previous empty 2T pattern");
+ // Check other direction: 2T copied over an existing 1T pattern.
+ KitState reverse=kit;reverse.patternLengths[0]=32;reverse.patternLengths[1]=16;
+ f.kit(reverse);
+ check(f.c->copyCurrentPattern()&&
+       f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&
+       f.c->pasteCurrentPattern(),"P19 2T->1T paste");
+ saved=state();
+ check(saved.patternLengths[1]==32&&f.c->patternLength(1)==32&&
+       saved.grid[kRows*kSteps+20]==64,
+       "P19 paste 2T did not activate second bar");
+ check(f.c->undoCurrentPattern(),"P19 2T->1T Undo");
+ saved=state();
+ check(saved.patternLengths[1]==16&&saved.grid[kRows*kSteps+20]==37,
+       "P19 2T->1T undo duration or step failure");
+ // Identical note contents still require the length change and Undo.
+ KitState matching=kit;
+ matching.grid[kRows*kSteps]=matching.grid[0];
+ matching.grid[kRows*kSteps+20]=matching.grid[20];
+ f.kit(matching);
+ check(f.c->copyCurrentPattern()&&
+       f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&
+       f.c->pasteCurrentPattern(),"P19 length-only paste rejected");
+ check(state().patternLengths[1]==16,"P19 length-only edit not persisted");
+ check(f.c->undoCurrentPattern()&&state().patternLengths[1]==32,
+       "P19 length-only undo failed");
+ // A malformed combined control message must be rejected *before* changing
+ // either pattern bytes or the musical duration.
+ const auto unaffected=state();
+ PatternSteps malformedSteps{};malformedSteps[0]=125;
+ HostMessage malformed;malformed.setMessageID("Drumator.PatternReplace");
+ auto* bad=malformed.getAttributes();
+ check(bad&&bad->setInt("Pattern",1)==kResultOk&&
+       bad->setBinary("Steps",malformedSteps.data(),
+                     static_cast<uint32>(malformedSteps.size()))==kResultOk&&
+       bad->setInt("Length",24)==kResultOk,
+       "P19 invalid-length message setup");
+ check(f.p->notify(&malformed)==kInvalidArgument,
+       "P19 malformed length not rejected");
+ check(state().grid==unaffected.grid&&
+       state().patternLengths==unaffected.patternLengths,
+       "P19 malformed length partially committed pattern");
+ // Legacy hosts/controllers have always sent PatternReplace with Steps only:
+ // they must continue working without resetting any pattern duration.
+ KitState oldProtocol=matching;
+ oldProtocol.patternLengths[7]=16;
+ f.kit(oldProtocol);
+ HostMessage legacy;legacy.setMessageID("Drumator.PatternReplace");
+ auto* attrs=legacy.getAttributes();
+ check(attrs&&attrs->setInt("Pattern",7)==kResultOk&&
+       attrs->setBinary("Steps",malformedSteps.data(),
+                        static_cast<uint32>(malformedSteps.size()))==kResultOk,
+       "P19 legacy message setup");
+ check(f.p->notify(&legacy)==kResultOk&&
+       state().patternLengths[7]==16&&
+       state().grid[7*kRows*kSteps]==125,
+       "P19 legacy Steps-only message broke duration or edit compatibility");
+ evidence("P19 COPY/PASTE/DUPLICATE length 1T/2T, Undo, legacy and invalid-length PASS");
+}
 void testPatternDuplicateMenu(){
  Fixture f;
  KitState kit=namedKit('X',4);
@@ -1238,6 +1344,7 @@ int main(int argc,char** argv){
  run("VSTGUI native pixel render set",testVisualRender);
  run("UX direct pattern length",testPatternLengthControls);
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
+ run("P19 1T/2T copy-paste-duplicate duration",testPatternDurationClipboard);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("VELO 100 reset existing notes",testVelocityResetPattern);
  run("V16 1T hidden velocity preservation",testVelocityInactiveBarProtection);

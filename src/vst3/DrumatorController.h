@@ -122,13 +122,15 @@ private:
  std::array<std::uint8_t,kCells> grid_{};
  std::array<std::uint8_t,kPatterns> patternLengths_{{32,32,32,32,32,32,32,32}};
  PatternSteps clipboard_{};
+ std::uint8_t clipboardLength_{32};
  PatternUndo undo_{};
  PatternSteps strokeBefore_{};
  KitEditGeneration editGeneration_{};
  KitEditGeneration::Token strokeGeneration_{0};
  std::size_t strokePattern_{kPatterns};
  bool clipboardValid_{false};
- bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true);
+ bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true,
+                     std::uint8_t requestedLength=0);
  void rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next);
  std::array<std::string,kRows> labels_{};
  std::array<std::string,kRows> customNames_{};

@@ -364,23 +364,29 @@ bool Controller::changePattern(std::size_t pattern) {
  setParamNormalized(kPatternParam,value);
  return true;
 }
-bool Controller::replacePattern(std::size_t p,const PatternSteps& data,bool remember) {
- if(p>=kPatterns)return false;
+bool Controller::replacePattern(std::size_t p,const PatternSteps& data,bool remember,
+                                std::uint8_t requestedLength) {
+ if(p>=kPatterns||(requestedLength!=0&&requestedLength!=16&&requestedLength!=32))
+   return false;
+ const auto oldLength=patternLengths_[p];
+ const auto nextLength=requestedLength==0?oldLength:requestedLength;
  PatternSteps old{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,old.size(),old.begin());
- if(old==data)return true;
+ if(old==data&&oldLength==nextLength)return true;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.PatternReplace");
  auto* a=msg->getAttributes();
  if(!a||a->setInt("Pattern",static_cast<Steinberg::int64>(p))!=Steinberg::kResultOk||
-    a->setBinary("Steps",data.data(),static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk){
+    a->setBinary("Steps",data.data(),static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk||
+    (requestedLength!=0&&a->setInt("Length",nextLength)!=Steinberg::kResultOk)){
    msg->release();return false;
  }
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(ok){
-   if(remember)undo_.capture(p,old,data);
+   if(remember)undo_.capture(p,old,data,oldLength,nextLength);
    std::copy(data.begin(),data.end(),grid_.begin()+p*kRows*kSteps);
+   patternLengths_[p]=nextLength;
    notifyViews(false);
  }
  return ok;
@@ -388,9 +394,12 @@ bool Controller::replacePattern(std::size_t p,const PatternSteps& data,bool reme
 bool Controller::copyCurrentPattern() {
  const auto p=currentPattern();
  std::copy_n(grid_.begin()+p*kRows*kSteps,clipboard_.size(),clipboard_.begin());
+ clipboardLength_=patternLengths_[p];
  clipboardValid_=true;return true;
 }
-bool Controller::pasteCurrentPattern(){return clipboardValid_&&replacePattern(currentPattern(),clipboard_);}
+bool Controller::pasteCurrentPattern(){
+ return clipboardValid_&&replacePattern(currentPattern(),clipboard_,true,clipboardLength_);
+}
 bool Controller::canDuplicateCurrentPattern() noexcept {
  const auto source=currentPattern();
  PatternSteps content{};
@@ -414,7 +423,7 @@ bool Controller::duplicateCurrentPattern(bool* selectedCopy){
    return data;
  });
  if(destination>=kPatterns)return false; // never replace an occupied beat
- if(!replacePattern(destination,data))return false;
+ if(!replacePattern(destination,data,true,patternLengths_[source]))return false;
  const bool switched=changePattern(destination);
  if(selectedCopy)*selectedCopy=switched;
  return true; // the copy exists even if host refuses selecting it
@@ -424,7 +433,7 @@ bool Controller::undoCurrentPattern(){
  const auto p=currentPattern();
  const auto* old=undo_.snapshot(p);
  if(!old)return false;
- if(!replacePattern(p,*old,false))return false;
+ if(!replacePattern(p,*old,false,undo_.snapshotLength(p)))return false;
  undo_.consume(p);
  return true;
 }
