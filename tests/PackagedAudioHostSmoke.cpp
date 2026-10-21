@@ -1589,19 +1589,19 @@ int main(int argc,char** argv) {
  // T20: reject malformed output-bus metadata before accessing any
  // host buffers, including while the restore gate is active.
  {
-   ProcessData bad{};
-   bad.numSamples=256;
-   bad.symbolicSampleSize=kSample32;
-   bad.processMode=kRealtime;
-   bad.numOutputs=-1;
-   require(audio->process(bad)==kInvalidArgument,
+   ProcessData badOutputMetadata{};
+   badOutputMetadata.numSamples=256;
+   badOutputMetadata.symbolicSampleSize=kSample32;
+   badOutputMetadata.processMode=kRealtime;
+   badOutputMetadata.numOutputs=-1;
+   require(audio->process(badOutputMetadata)==kInvalidArgument,
            "T20 negative bus count not rejected");
-   bad.numOutputs=17;
-   require(audio->process(bad)==kInvalidArgument,
+   badOutputMetadata.numOutputs=17;
+   require(audio->process(badOutputMetadata)==kInvalidArgument,
            "T20 excessive bus count not rejected");
-   bad.numOutputs=1;
-   bad.outputs=nullptr;
-   require(audio->process(bad)==kInvalidArgument,
+   badOutputMetadata.numOutputs=1;
+   badOutputMetadata.outputs=nullptr;
+   require(audio->process(badOutputMetadata)==kInvalidArgument,
            "T20 missing output array not rejected");
  }
  std::cout<<"T20 malformed output bus metadata rejection PASS\\n";
