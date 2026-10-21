@@ -1605,6 +1605,24 @@ int main(int argc,char** argv) {
            "T20 missing output array not rejected");
  }
  std::cout<<"T20 malformed output bus metadata rejection PASS\\n";
+ // T21: even the restore-silence path must not trust a host-provided
+ // channel count beyond the plugin's fixed stereo output contract.
+ {
+   AudioBusBuffers malformedBus{};
+   ProcessData malformedChannels{};
+   malformedChannels.numSamples=256;
+   malformedChannels.numOutputs=1;
+   malformedChannels.outputs=&malformedBus;
+   malformedChannels.symbolicSampleSize=kSample32;
+   malformedChannels.processMode=kRealtime;
+   malformedBus.numChannels=-1;
+   require(audio->process(malformedChannels)==kInvalidArgument,
+           "T21 negative channel count not rejected");
+   malformedBus.numChannels=3;
+   require(audio->process(malformedChannels)==kInvalidArgument,
+           "T21 excess channel count not rejected");
+ }
+ std::cout<<"T21 malformed output channel metadata rejection PASS\\n";
 
  // F04: hosts flush automation using zero sample frames and no output bus.
  // The saved component state must reflect the last flushed pattern.

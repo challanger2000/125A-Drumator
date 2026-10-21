@@ -493,6 +493,12 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
     (data.numOutputs>0&&!data.outputs)||
     (prepared_&&data.numSamples>processSetup.maxSamplesPerBlock))
    return Steinberg::kInvalidArgument;
+ // The plugin exposes fixed stereo outputs. Reject impossible host channel
+ // counts before the restore-gate silence loop uses numChannels as a bound.
+ for(Steinberg::int32 bus=0;bus<data.numOutputs;++bus) {
+   const auto channels=data.outputs[bus].numChannels;
+   if(channels<0||channels>2)return Steinberg::kInvalidArgument;
+ }
  AudioGateEntry currentCall(restoreGate_);
  if(!currentCall.allowed()) {
    // Even a zero-frame flush must survive restore. The counter distinguishes
