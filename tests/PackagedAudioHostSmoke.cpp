@@ -1596,6 +1596,45 @@ int main(int argc,char** argv) {
  }
  std::cout<<"N05 actual processor/host noncanonical automation PASS\\n";
  std::cout<<"F04 zero-frame host automation state PASS\\n";
+ // F05: a nonzero audio block with no output buses still carries
+ // sample-offset MIDI A-H changes. Host automation wins same-offset ties.
+ flushData.numSamples=256;
+ EventList noOutputEvents(4);
+ Event noOutputNote{};
+ noOutputNote.type=Event::kNoteOnEvent;
+ noOutputNote.sampleOffset=10;
+ noOutputNote.noteOn.pitch=27; // pattern D
+ noOutputNote.noteOn.velocity=1.f;
+ require(noOutputEvents.addEvent(noOutputNote)==kResultOk,"F05 MIDI event");
+ flushData.inputEvents=&noOutputEvents;
+ flushData.inputParameterChanges=nullptr;
+ require(audio->process(flushData)==kResultOk,"F05 no-output MIDI process");
+ Steinberg::ResizableMemoryIBStream f05State;
+ require(component->getState(&f05State)==kResultOk,"F05 state save");
+ drumator::KitState f05Kit;
+ require(drumator::KitCodec::decode(
+   static_cast<const std::uint8_t*>(f05State.getData()),
+   f05State.getCursor(),f05Kit)&&f05Kit.selected==3,
+   "F05 MIDI selection discarded without output buses");
+ ParameterChanges f05Automation;
+ int32 f05QueueIndex=0;
+ auto* f05Queue=f05Automation.addParameterData(drumator::kPatternParam,f05QueueIndex);
+ require(f05Queue!=nullptr,"F05 automation queue");
+ int32 f05Index=0;
+ require(f05Queue->addPoint(10,6.0/7.0,f05Index)==kResultOk,
+   "F05 simultaneous host point");
+ flushData.inputParameterChanges=&f05Automation;
+ require(audio->process(flushData)==kResultOk,"F05 host MIDI tie");
+ Steinberg::ResizableMemoryIBStream f05TieState;
+ require(component->getState(&f05TieState)==kResultOk,"F05 tied state save");
+ require(drumator::KitCodec::decode(
+   static_cast<const std::uint8_t*>(f05TieState.getData()),
+   f05TieState.getCursor(),f05Kit)&&f05Kit.selected==6,
+   "F05 host did not win same-offset MIDI event");
+ flushData.inputEvents=nullptr;
+ flushData.inputParameterChanges=&flushChanges;
+ flushData.numSamples=0;
+ std::cout<<"F05 outputless MIDI A-H and host tie arbitration PASS\\n";
  // F08 integration: deactivate MAIN while a real auxiliary row stays active.
  // Bus 1 is row 1 in the 125A fixed-row routing contract.
  require(component->activateBus(kAudio,kOutput,0,false)==kResultOk,
