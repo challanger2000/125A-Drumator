@@ -1491,7 +1491,8 @@ int main(int argc,char** argv) {
  {
    Steinberg::ResizableMemoryIBStream repeatedState;
    Steinberg::int32 repeatWritten=0;
-   require(repeatedState.write(originalState.data(),
+   auto writableState=originalState;
+   require(repeatedState.write(writableState.data(),
            static_cast<Steinberg::int32>(originalState.size()),
            &repeatWritten)==kResultOk&&
            repeatWritten==static_cast<Steinberg::int32>(originalState.size()),
