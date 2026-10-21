@@ -1639,6 +1639,9 @@ int main(int argc,char** argv) {
    malformedBus.numChannels=3;
    require(audio->process(malformedChannels)==kInvalidArgument,
            "T21 excess channel count not rejected");
+   malformedBus.numChannels=1;
+   require(audio->process(malformedChannels)==kInvalidArgument,
+           "T23 mono channel count on a stereo bus not rejected");
  }
  std::cout<<"T21 malformed output channel metadata rejection PASS\\n";
 
