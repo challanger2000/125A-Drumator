@@ -1818,7 +1818,7 @@ int main(int argc,char** argv) {
    auto* queue=denseHost.addParameterData(drumator::kPatternParam,denseQueueIndex);
    require(queue!=nullptr,"T30 dense host queue");
    int32 densePointIndex=0;
-   require(queue->addPoint(255,2.0/7.0,densePointIndex)==kResultOk,
+   require(queue->addPoint(255,6.0/7.0,densePointIndex)==kResultOk,
            "T30 host tie creation");
    flushData.inputEvents=&denseMidi;
    flushData.inputParameterChanges=&denseHost;
@@ -1828,7 +1828,7 @@ int main(int argc,char** argv) {
    drumator::KitState denseKit;
    require(drumator::KitCodec::decode(
        static_cast<const std::uint8_t*>(denseState.getData()),
-       denseState.getCursor(),denseKit)&&denseKit.selected==2,
+       denseState.getCursor(),denseKit)&&denseKit.selected==6,
        "T30 dense host/MIDI arbitration lost final selection");
    flushData.inputEvents=&noOutputEvents;
    flushData.inputParameterChanges=nullptr;
