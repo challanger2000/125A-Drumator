@@ -8,6 +8,9 @@
 #include <malloc.h>
 #include "Probe.h"
 #include "ByteStream.h"
+#include "ResultLog.h"
+#include "core/PatternQuantization.h"
+#include "core/Utf8Path.h"
 #include "vst3/DrumatorController.h"
 #include "vst3/DrumatorView.h"
 #include "core/UiDetailGeometry.h"
@@ -20,6 +23,7 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/parameterchanges.h"
+#include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/utility/memoryibstream.h"
 #include "vstgui/lib/vstguiinit.h"
 #include "vstgui/lib/platform/platformfactory.h"
@@ -28,6 +32,7 @@
 #include "vstgui/lib/platform/iplatformframe.h"
 #include "vstgui/lib/cbitmap.h"
 #include "vstgui/lib/coffscreencontext.h"
+#include "vstgui/lib/idatapackage.h"
 #include <filesystem>
 #include <array>
 #include <limits>
@@ -1443,6 +1448,7 @@ void testNativeName(){
  }
  evidence("Z03 PASS: real Win32 EDIT lifetime, rejected/accepted 16-to-4 recall, late live-listener callbacks, Enter/Escape/blur, two views and close");
 }
+#include "FunctionalAuditCases.inl"
 }
 int main(int argc,char** argv){
  if(argc!=2)return 2;
@@ -1452,9 +1458,11 @@ int main(int argc,char** argv){
  if(!platform)return 3;platform->setResourceBasePath(VSTGUI::UTF8String(argv[1]));
  entered=CreateEventW(nullptr,TRUE,FALSE,nullptr);resume=CreateEventW(nullptr,TRUE,FALSE,nullptr);
  int failures=0;
+ std::string qaCaseSummary="Executed native integration cases:\n";
  auto run=[&](const std::string& name,const auto& test){
-   try{test();evidence(name+" PASS");}
-   catch(const std::exception& ex){allocationFail=-1;releaseProbe();++failures;evidence(name+" FAIL: "+ex.what());}
+   try{test();const auto line=name+" PASS";evidence(line);qaCaseSummary+=line+'\n';}
+   catch(const std::exception& ex){allocationFail=-1;releaseProbe();++failures;
+     const auto line=name+" FAIL: "+ex.what();evidence(line);qaCaseSummary+=line+'\n';}
  };
  run("T03 controlled actual bank",testPatternOverlap);
  run("T04 controlled real restore gate",testKitGate);
@@ -1486,6 +1494,14 @@ int main(int argc,char** argv){
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);
  run("N12 real WAV sample folder previous/next",testRealSampleFolderStepping);
  run("Z03 Win32 name editor",testNativeName);
+ run("FA02 MIDI/host arbitration during actual kit restore",testAuditMidiRecall);
+ run("FA02 zero-frame valid-offset arbitration",testAuditZeroFlushOffsets);
+ run("FA03 new-kit Song fallback during publication",testAuditSongGeneration);
+ run("FA04 sample path failures and real View drop callbacks",testAuditSamplePathFailures);
+ run("FA05 modal menu gutters",testAuditMenuGutters);
+ run("FA06 minimum-height host refusal menus",testAuditMinimumHeightMenus);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
+ qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
+ drumator::qa::workflowNotice(qaCaseSummary);
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
 }

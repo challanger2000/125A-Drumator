@@ -19,6 +19,12 @@ struct UiCompactLayout final {
  static constexpr std::array<double,3> globalKnobCenters{{78.,176.,1180.}};
  static constexpr std::array<double,4> userZooms{{1.,1.2,1.3,1.5}};
  static constexpr bool hit(double x,Slot slot) noexcept {return x>=slot.left&&x<slot.right;}
+ // At the supported 300px minimum, tall modal menus must extend over the
+ // header. Keep every item visible and std::clamp's lower <= upper contract.
+ static constexpr double popupTop(double rowY,double clientHeight,double requiredHeight) noexcept {
+   const double upper=std::max(0.,clientHeight-requiredHeight);
+   return std::clamp(rowY+36.,std::min(header,upper),upper);
+ }
  static constexpr double rowTop(std::size_t first,std::size_t index,
                                   const std::array<bool,16>& expanded) noexcept {
    double y=header;

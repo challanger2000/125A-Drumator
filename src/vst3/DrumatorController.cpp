@@ -19,6 +19,7 @@
 #include <cctype>
 #include <cstring>
 #include <filesystem>
+#include <exception>
 #include "core/SampleFolderNavigation.h"
 #include <fstream>
 #include <vector>
@@ -824,6 +825,7 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
 Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& path) {
  if(row>=kRows)return LoadStatus::InvalidRow;
  if(path.empty())return LoadStatus::NotFound;
+ try {
  const auto suffix=pathToUtf8(pathFromUtf8(path).extension());
  std::string ext=suffix;
  std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char ch){
@@ -889,5 +891,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  labels_[row].swap(name);
  samplePaths_[row].swap(stagedPath);
  return LoadStatus::Accepted;
+ }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
+  catch(const std::exception&) {return LoadStatus::ReadError;}
 }
 }

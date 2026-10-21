@@ -30,6 +30,7 @@
 #include <string>
 #include <string_view>
 #include <filesystem>
+#include <exception>
 #include <system_error>
 
 namespace drumator {
@@ -104,6 +105,7 @@ private:
  public:
  static bool extractSamplePath(VSTGUI::IDataPackage* drag,
                                      std::string& path) {
+    try {
     if (!drag)
         return false;
 
@@ -247,6 +249,7 @@ private:
     }
 
     return false;
+    }catch(const std::exception&) {return false;}
 }
  DrumatorView& view_;
 };
@@ -735,8 +738,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
 
  // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
-   const double top=std::clamp(rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_)+36.,
-                               108.,fullHeight-230.);
+   const double top=UiCompactLayout::popupTop(
+       rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_),fullHeight,230.);
    const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALOPP","SNARE + GHOST"};
    for(int i=0;i<9;++i)drawControl(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
  }
@@ -756,7 +759,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                  false,(i!=3||controller_.canUndoCurrentPattern())&&
                        (i!=6||controller_.canDuplicateCurrentPattern()));
  }else if(popup_==3&&popupRow_<controller_.visibleRows()) {
-   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-210.);
+   const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,210.);
    for(unsigned i=0;i<16;++i) {
      char z[16]{};
      if(i==0)std::snprintf(z,sizeof(z),"MAIN");
@@ -766,13 +769,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                  controller_.rowOutput(popupRow_)==i);
    }
  }else if(popup_==5&&popupRow_<controller_.visibleRows()) {
-   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,
-                               std::max(108.,fullHeight-100.));
+   const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,100.);
    const char* options[]={"SAMPLE LADEN","INSTRUMENT UMBENENNEN","SAMPLE ENTFERNEN"};
    for(int i=0;i<3;++i)
       drawControl(c,{78,top+i*30.,304,top+i*30.+29.},options[i]);
  }else if(popup_==4&&popupRow_<controller_.visibleRows()) {
-   const double top=std::clamp(rowTopOnPage(popupRow_-firstRow_)+36.,108.,fullHeight-145.);
+   const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,145.);
    for(unsigned i=0;i<5;++i) {
      char z[12]{};
      std::snprintf(z,sizeof(z),"CHOKE %u",i);
@@ -856,7 +858,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    bool acted=false,ok=true;
    if(kind==1&&x>=1098&&x<1229&&y>=39&&y<159) {
       const auto option=static_cast<std::size_t>((y-39)/30.);
-      if(option<UiCompactLayout::userZooms.size()) {
+      if(option<UiCompactLayout::userZooms.size()&&y<39.+option*30.+29.) {
         const auto factor=UiCompactLayout::userZooms[option];
         if(static_cast<DrumatorEditor&>(editor_).setZoomChecked(factor))
           controller_.rememberZoom(factor);
@@ -876,8 +878,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         acted=true;
       }
    }else if(kind==3&&target<controller_.visibleRows()){
-      const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
-                                getViewSize().getHeight()-210.);
+      const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),210.);
       if(x>=413&&x<613&&y>=top&&y<top+200.){
         const int col=x>=515?1:0;
         const int cell=static_cast<int>((y-top)/25.);
@@ -888,8 +889,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         }
       }
    }else if(kind==4&&target<controller_.visibleRows()){
-      const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
-                                getViewSize().getHeight()-145.);
+      const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),145.);
       if(x>=515&&x<615&&y>=top&&y<top+135.){
         const int cell=static_cast<int>((y-top)/27.);
         if(cell>=0&&cell<5&&y<top+cell*27.+26.) {
@@ -897,8 +897,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         }
       }
    }else if(kind==5&&target<controller_.visibleRows()){
-     const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
-                              std::max(108.,getViewSize().getHeight()-100.));
+     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),100.);
      if(x>=78&&x<304&&y>=top&&y<top+90.){
        const auto option=static_cast<int>((y-top)/30.);
        if(option>=0&&option<3&&y<top+option*30.+29.){
@@ -916,14 +915,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    const auto target=static_cast<std::size_t>(fillMenuRow_);
    fillMenuRow_=-1;
    if(target>=firstRow_&&target<firstRow_+displayedRows()){
-     const auto top=std::clamp(rowTopOnPage(target-firstRow_)+36.,108.,
-                               getViewSize().getHeight()-230.);
+     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),230.);
      if(x>=405&&x<614&&y>=top&&y<top+225.){
        const auto selected=static_cast<std::size_t>((y-top)/25.);
        constexpr RowFill fills[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,
            RowFill::Snare24,RowFill::All,RowFill::Clear,RowFill::Offbeat8,
            RowFill::Gallop,RowFill::SnareGhost};
-       if(selected<9&&!controller_.fillRow(target,fills[selected]))
+       if(selected<9&&y<top+selected*25.+24.&&
+          !controller_.fillRow(target,fills[selected]))
           status_="FILL NICHT UEBERNOMMEN";
      }
    }

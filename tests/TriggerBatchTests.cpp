@@ -34,7 +34,7 @@ int main(){
   // RND velocity: 0% is bit-identical and enabled amounts never create
   // triggers or modify stored patterns. A callback split must not alter hits.
   batch.clear();
-  const Trigger reference{0,3,0,100,1};
+  const Trigger reference{6100,3,0,100,1};
   need(batch.appendStep(reference),"random test append");
   std::array<std::uint8_t,kRows> depth{};
   batch.varyVelocity(depth,8.0,120.0,48000.0);
@@ -45,10 +45,16 @@ int main(){
   need(first>=1&&first<=127,"random must stay in MIDI velocity range");
   batch.clear();
   need(batch.appendStep({100,3,0,100,1}),"split callback append");
-  // 100 samples corresponds to the exact offset of the second callback.
-  const double ppq=8.0+100.0*120.0/(60.0*48000.0);
+  // Same absolute instant: 6100 in the full block equals 100 after a
+  // 6000-frame split. This crosses a musical-step boundary; the old fixture
+  // advanced both start and offset by 100 while remaining in the same step.
+  const double ppq=8.0+6000.0*120.0/(60.0*48000.0);
   batch.varyVelocity(depth,ppq,120.0,48000.0);
   need(batch.data()[0].velocity==first,"random changed across host blocks");
+  batch.clear();
+  need(batch.appendStep({100,3,0,100,1}),"wrong-time negative append");
+  batch.varyVelocity(depth,8.0,120.0,48000.0);
+  need(batch.data()[0].velocity!=first,"random partition oracle cannot detect a different absolute step");
   batch.clear();
   need(batch.appendStep(reference),"random fixed-seed append");
   batch.varyVelocity(depth,8.0,120.0,48000.0);

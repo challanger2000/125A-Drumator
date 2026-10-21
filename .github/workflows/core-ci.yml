@@ -33,7 +33,19 @@ jobs:
       - name: Build tests and Drumator VST3
         run: cmake --build build --config Release --target drumator_test_suite drumator_editor_smoke drumator_audio_host_smoke Drumator validator moduleinfotool --parallel 2
       - name: Run deterministic regressions
-        run: ctest --test-dir build -C Release --output-on-failure
+        shell: pwsh
+        run: |
+          ctest --test-dir build -C Release --output-on-failure --output-log build/ctest-functional.log
+          $testExit = $LASTEXITCODE
+          # CTest normally hides passing-test stdout. Preserve actual case
+          # results and measured timings in the Checks API as well as logs.
+          Get-Content build/Testing/Temporary/LastTest.log | Where-Object {
+            $_.StartsWith('::notice ')
+          } | Write-Output
+          Get-Content build/ctest-functional.log | Where-Object {
+            $_ -match 'tests passed, .*tests failed out of'
+          } | ForEach-Object { Write-Output "::notice title=125A Drumator CTest summary::$_" }
+          if ($testExit -ne 0) { exit $testExit }
       - name: Assemble standard Windows VST3 bundle and validate
         shell: pwsh
         run: |
@@ -64,8 +76,12 @@ jobs:
           [System.IO.File]::WriteAllText($moduleInfo, $normalizedInfo, [System.Text.UTF8Encoding]::new($false))
           & './build/bin/Release/moduleinfotool.exe' -validate -path $bundle
           if ($LASTEXITCODE -ne 0) { throw 'Official Steinberg moduleinfotool validation failed' }
-          & './build/bin/Release/validator.exe' $bundle
-          if ($LASTEXITCODE -ne 0) { throw 'Steinberg VST3 Validator failed' }
+          $validatorOutput = @(& './build/bin/Release/validator.exe' $bundle)
+          $validatorExit = $LASTEXITCODE
+          $validatorOutput | Write-Output
+          $validatorOutput | Where-Object { $_ -match '^Result: .*tests passed, .*tests failed' } |
+            ForEach-Object { Write-Output "::notice title=Official Steinberg Validator::$_" }
+          if ($validatorExit -ne 0) { throw 'Steinberg VST3 Validator failed' }
           $bundleFiles = @(Get-ChildItem $bundle -File -Recurse)
           if (@($bundleFiles | Where-Object { $_.Length -eq 0 }).Count -gt 0) {
             throw 'Bundle contains zero-length files'

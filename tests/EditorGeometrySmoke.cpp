@@ -123,6 +123,6 @@ int main(int argc,char** argv) {
     }
     FreeLibrary(module);
     CoUninitialize();
-    std::cout<<"125A Drumator editor geometry smoke PASS\n";
+    drumator::qa::result("125A Drumator editor geometry smoke PASS: packaged native HWND and geometry checks completed");
     return 0;
 }

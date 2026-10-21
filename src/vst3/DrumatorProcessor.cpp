@@ -504,16 +504,60 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  }
  AudioGateEntry currentCall(restoreGate_);
  if(!currentCall.allowed()) {
-   // Even a zero-frame flush must survive restore. The counter distinguishes
-   // host automation from the kit's own selected pattern.
-   if(data.inputParameterChanges) {
+   // Preserve genuine selection events while audio is gated. Use the same
+   // bounded sample timeline and host-over-MIDI priority as ordinary blocks.
+   // Do not touch voices or the Song cache being installed by setState().
+   if(data.numSamples>0) {
+     if(!patternTimeline_.reset(static_cast<std::size_t>(data.numSamples)))
+       return Steinberg::kResultFalse;
+     if(data.inputParameterChanges)
+       for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
+         auto* queue=data.inputParameterChanges->getParameterData(i);
+         if(!queue||queue->getParameterId()!=kPatternParam)continue;
+         for(Steinberg::int32 j=0;j<queue->getPointCount();++j) {
+           Steinberg::int32 offset=-1;Steinberg::Vst::ParamValue value=0;
+           if(queue->getPoint(j,offset,value)==Steinberg::kResultOk&&std::isfinite(value))
+             patternTimeline_.insert(offset,patternFromNormalized(value),true);
+         }
+       }
+     if(data.inputEvents&&!songMailbox_.midiPatternSuppressed())
+       for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+         Steinberg::Vst::Event event{};
+         if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
+            event.type!=Steinberg::Vst::Event::kNoteOnEvent||
+            event.noteOn.pitch<24||event.noteOn.pitch>31||
+            !std::isfinite(event.noteOn.velocity)||
+            event.noteOn.velocity<=0.f||event.noteOn.velocity>1.f)continue;
+         patternTimeline_.insert(event.sampleOffset,
+             static_cast<unsigned>(event.noteOn.pitch-24),false);
+       }
+     Steinberg::Vst::IParamValueQueue* feedback=nullptr;
+     for(Steinberg::int32 offset=0;offset<data.numSamples;++offset) {
+       const auto point=patternTimeline_.get(static_cast<std::size_t>(offset));
+       if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
+       else if(point.source==PatternEventTimeline::kMidi) {
+         selected_.midiSubmit(point.pattern);
+         if(data.outputParameterChanges) {
+           if(!feedback) {
+             Steinberg::int32 index=0;
+             feedback=data.outputParameterChanges->addParameterData(kPatternParam,index);
+           }
+           if(feedback) {
+             Steinberg::int32 index=0;
+             (void)feedback->addPoint(offset,static_cast<double>(point.pattern)/7.,index);
+           }
+         }
+       }
+     }
+   }else if(data.inputParameterChanges) {
+     // Zero-frame flushes carry offset-zero parameters, no rendered MIDI.
      for(Steinberg::int32 i=0;i<data.inputParameterChanges->getParameterCount();++i) {
        auto* q=data.inputParameterChanges->getParameterData(i);
        if(!q||q->getParameterId()!=kPatternParam)continue;
        for(Steinberg::int32 j=0;j<q->getPointCount();++j) {
          Steinberg::int32 offset=0;Steinberg::Vst::ParamValue v=0;
          if(q->getPoint(j,offset,v)!=Steinberg::kResultTrue||
-            offset<0||!std::isfinite(v))continue;
+            offset!=0||!std::isfinite(v))continue;
          const auto pattern=patternFromNormalized(v);
          selected_.hostSubmit(pattern);
        }
@@ -603,7 +647,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          Steinberg::int32 offset=0;
          Steinberg::Vst::ParamValue value=0;
          if(queue->getPoint(j,offset,value)==Steinberg::kResultTrue&&
-            offset>=0&&std::isfinite(value))
+            offset==0&&std::isfinite(value))
            selected_.hostSubmit(static_cast<std::uint32_t>(patternFromNormalized(value)));
        }
      }
@@ -614,8 +658,10 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
     !data.outputs||(data.outputs[0].numChannels!=0&&data.outputs[0].numChannels!=2))
    return Steinberg::kResultFalse;
  auto& output=data.outputs[0];
- auto* left=output.channelBuffers32 ? output.channelBuffers32[0] : nullptr;
- auto* right=output.channelBuffers32 ? output.channelBuffers32[1] : nullptr;
+ // A zero-channel bus has no pointer-array elements, even if the host leaves
+ // its pointer union non-null. Never inspect or render those absent channels.
+ auto* left=output.numChannels==2&&output.channelBuffers32 ? output.channelBuffers32[0] : nullptr;
+ auto* right=output.numChannels==2&&output.channelBuffers32 ? output.channelBuffers32[1] : nullptr;
  // An inactive MAIN bus may legally omit audio buffers while aux buses run.
  const bool mainReady=left&&right;
  if(!mainReady&&((left!=nullptr)!=(right!=nullptr)))return Steinberg::kResultFalse;
@@ -998,6 +1044,12 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     for(std::size_t i=0;i<kPatterns;++i)
       patternLengths_[i].store(kit_.patternLengths[i],std::memory_order_relaxed);
     songMailbox_.publish(kit_.chain,kit_.songEnabled!=0);
+    // Seed the fallback with THIS kit before audio can re-enter. If a later
+    // SongConfig publication overlaps the first block, its rejected snapshot
+    // must not fall back to the previous kit's chain/mode. Gate-denied audio
+    // handles selections without reading these non-atomic cache fields.
+    audioSongChain_=kit_.chain;
+    audioSongEnabled_=kit_.songEnabled!=0;
     // Publish restored rhythms per complete pattern generation. A live
     // scheduler must never observe a half-restored pattern.
     for(std::size_t p=0;p<kPatterns;++p)

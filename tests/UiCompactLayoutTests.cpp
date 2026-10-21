@@ -75,6 +75,17 @@ int main(){
  EXPECT(UiCompactLayout::hit(76.,UiCompactLayout::rowAdd));
  EXPECT(UiCompactLayout::hit(150.,UiCompactLayout::rowRemove));
  EXPECT(!UiCompactLayout::hit(113.,UiCompactLayout::rowAdd));
+ // A host may keep the advertised minimum 300px editor instead of accepting
+ // automatic growth. All modal items must still fit; no reversed clamp bounds.
+ for(double client:{300.,370.,538.,658.,850.})
+   for(double rowY:{108.,202.,296.,390.})
+     for(double required:{100.,145.,210.,230.}) {
+       const auto top=UiCompactLayout::popupTop(rowY,client,required);
+       EXPECT(top>=0.&&top+required<=client);
+     }
+ EXPECT(UiCompactLayout::popupTop(108.,300.,230.)==70.);
+ EXPECT(UiCompactLayout::popupTop(108.,300.,210.)==90.);
+ EXPECT(UiCompactLayout::popupTop(108.,538.,230.)==144.);
 
 
  return 0;

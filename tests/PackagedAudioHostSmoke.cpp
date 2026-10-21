@@ -90,6 +90,7 @@ std::vector<std::uint8_t> makeStereoWav(float l,float r) {
  return w;
 }
 
+#include "PackagedFunctionalAudit.inl"
 }
 int main(int argc,char** argv) {
  require(argc==2,"expected packaged .vst3 binary argument");
@@ -1562,6 +1563,7 @@ int main(int argc,char** argv) {
  require(audio->setProcessing(false)==kResultOk,"Rate switch stop");
  require(component->setActive(false)==kResultOk,"Rate switch deactivate");
  setup.sampleRate=44100;
+ context.sampleRate=setup.sampleRate;
  require(audio->setupProcessing(setup)==kResultOk,
          "Host sample rate 48k to 44.1k setup");
  // T28: after a rate switch the next valid host clock must establish
@@ -1582,6 +1584,7 @@ int main(int argc,char** argv) {
  require(std::abs(rateChangedAudio/70.-.25)<.025,
          "Previously loaded sample failed after host rate switch");
  std::cout<<"M35 VST3 48k to 44.1k host rate switch playback PASS\\n";
+ auditRateSwitchClock(component,audio,setup);
  // F03: verify the public host parameter/recall path on the live controller.
  require(ctrl->setParamNormalized(drumator::kPatternParam,3.0/7.0)==kResultOk,
          "F03 host-driven parameter update rejected");
@@ -1876,19 +1879,9 @@ int main(int argc,char** argv) {
  stemEvent.noteOn.velocity=1.f;stemEvent.noteOn.noteId=-1;
  require(events.addEvent(stemEvent)==kResultOk,"F08 add row 1 MIDI trigger");
  require(audio->process(data)==kResultOk,"F08 process with no MAIN buffers");
- // T29: hosts may represent a disabled MAIN as zero channels, rather
- // than a two-channel bus with null sample buffers.
- stemBuses[0].numChannels=0;
- f08StemLeft.fill(0.f);f08StemRight.fill(0.f);
- require(audio->process(data)==kResultOk,"T29 zero-channel MAIN with active AUX rejected");
- double t29AuxEnergy=0.0;
- for(std::size_t frame=0;frame<f08StemLeft.size();++frame) {
-   require(std::isfinite(f08StemLeft[frame])&&std::isfinite(f08StemRight[frame]),
-           "T29 nonfinite AUX signal");
-   t29AuxEnergy+=std::abs(f08StemLeft[frame])+std::abs(f08StemRight[frame]);
- }
- require(t29AuxEnergy>1.0,"T29 zero-channel MAIN muted active AUX signal");
- stemBuses[0].numChannels=2;
+ // T29 uses isolated real kit state and fresh voices, with independent L/R,
+ // pre-trigger silence and both null/non-null zero-channel MAIN tables.
+ auditZeroChannelMain(component,audio,setup.sampleRate);
  for(float v:f08StemLeft)require(std::isfinite(v),"F08 invalid stem L");
  for(float v:f08StemRight)require(std::isfinite(v),"F08 invalid stem R");
  data.outputs=priorOutputs;data.numOutputs=priorNumOutputs;
@@ -2235,5 +2228,5 @@ int main(int argc,char** argv) {
  if(auto* exitDll=reinterpret_cast<PluginInit>(GetProcAddress(dll,"ExitDll")))
    require(exitDll(),"ExitDll");
  FreeLibrary(dll);
- std::cout<<"125A Drumator packaged audio-host smoke PASS\n";
+ drumator::qa::result("125A Drumator packaged audio-host smoke PASS: all preceding require checks completed");
 }

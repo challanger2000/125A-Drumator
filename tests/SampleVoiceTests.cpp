@@ -321,12 +321,12 @@ static void testHighRatio64VoiceStress() {
    return blockMillis[position];
  };
  constexpr double kBlockDeadlineMs=256.0/48000.0*1000.0;
- std::cout<<"F14 64-voice 16x offline block times: p95="
+ std::cout<<"::notice title=125A Drumator offline performance::F14 64-voice 16x offline block times: p95="
           <<atPercentile(95)<<"ms p99="<<atPercentile(99)
           <<"ms max="<<blockMillis.back()
           <<"ms; 48k/256 deadline="<<kBlockDeadlineMs
-          <<"ms (CI runner, NOT Studio One real-time evidence)\\n";
- std::cout<<"F14 high-ratio 64-voice stress elapsed "<<elapsed<<" s\\n";
+          <<"ms (CI runner, NOT Studio One real-time evidence)\n";
+ std::cout<<"F14 high-ratio 64-voice stress elapsed "<<elapsed<<" s\n";
  // A deliberately generous CI hang/regression ceiling; NOT a real-time CPU
  // qualification. Host-specific scheduling must be measured in Studio One.
  require(elapsed<20.0,"F14 stress exceeded 20-second CI safety ceiling");
@@ -433,7 +433,7 @@ int main() {
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
   testStressAndRecovery();testHighRatio64VoiceStress();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
-  std::cout<<"Drumator sample-voice regression: 10 groups PASS\n";
+  std::cout<<"::notice title=125A Drumator voice QA::Empty-instrument and 17 explicit sample-voice test groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {
   std::cerr<<"Drumator sample-voice regression FAIL: "<<ex.what()<<'\n';

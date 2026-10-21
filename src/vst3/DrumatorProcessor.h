@@ -59,6 +59,11 @@ public:
   if(first!=last||last&1u)return false;
   chain=candidate;enabled=state!=0;return true;
  }
+ // Gate-denied callbacks must not read the non-atomic audio cache while
+ // the control actor installs a kit. MIDI eligibility needs only this bit.
+ bool midiPatternSuppressed() const noexcept {
+  return enabled_.load(std::memory_order_acquire)!=0;
+ }
 };
 class Processor final:public Steinberg::Vst::AudioEffect {
 public:
