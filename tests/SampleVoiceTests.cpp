@@ -163,6 +163,54 @@ static void testChokeAndStereo() {
  near(l[50],.5,.001,"center L WAV unity amplitude");
  near(r[50],-.25,.001,"center R WAV unity amplitude");
 }
+static void testChokeSplitBlockEquivalence() {
+ // S16: two choke-group hits at the identical sample offset, followed by
+ // another choke later in the block. Render both as one block and as
+ // differently sized host blocks, checking every actual PCM output sample.
+ std::array<float,1024> a{},b{},c{};
+ a.fill(.25f);b.fill(-.125f);c.fill(.0625f);
+ SincKernel kernel;require(kernel.prepare(1.0),"S16 kernel");
+ SampleVoiceEngine whole,split;
+ require(whole.setOutputRate(48000)&&split.setOutputRate(48000),
+         "S16 output rate");
+ const std::array<const float*,3> sources{a.data(),b.data(),c.data()};
+ for(std::size_t rowIndex=0;rowIndex<3;++rowIndex) {
+   RowSound row;
+   row.kernel=&kernel;
+   row.sample={sources[rowIndex],nullptr,a.size()};
+   row.chokeGroup=1;
+   row.pan=-1.f;
+   require(whole.setRow(rowIndex,row)&&split.setRow(rowIndex,row),
+           "S16 row preparation");
+ }
+ const std::array<Trigger,4> all{{
+   {0,0,0,127,0},{128,1,0,127,0},
+   {128,2,0,127,0},{300,1,0,127,0}
+ }};
+ std::array<float,512> fullL{},fullR{},splitL{},splitR{};
+ const auto wholeResult=whole.render(all.data(),all.size(),
+                                     fullL.data(),fullR.data(),512);
+ require(wholeResult.status==RenderStatus::Ok&&wholeResult.accepted==4,
+         "S16 one-block trigger count");
+ const Trigger first{0,0,0,127,0};
+ const std::array<Trigger,2> simultaneous{{
+   {0,1,0,127,0},{0,2,0,127,0}
+ }};
+ const Trigger last{0,1,0,127,0};
+ const auto r0=split.render(&first,1,splitL.data(),splitR.data(),128);
+ const auto r1=split.render(simultaneous.data(),simultaneous.size(),
+                            splitL.data()+128,splitR.data()+128,172);
+ const auto r2=split.render(&last,1,splitL.data()+300,splitR.data()+300,212);
+ require(r0.status==RenderStatus::Ok&&r0.accepted==1&&
+         r1.status==RenderStatus::Ok&&r1.accepted==2&&
+         r2.status==RenderStatus::Ok&&r2.accepted==1,
+         "S16 split-block trigger count");
+ for(std::size_t frame=0;frame<512;++frame)
+   require(fullL[frame]==splitL[frame]&&fullR[frame]==splitR[frame],
+           "S16 split blocks altered simultaneous choke audio");
+ require(whole.active()==split.active(),
+         "S16 voice activity differs with host block partition");
+}
 static void testCapacityValidationAndAutomation() {
  std::array<float,1000> source{};
  source.fill(1.f);
@@ -504,7 +552,7 @@ int main() {
       require(left[i]==0.f&&right[i]==0.f,"empty sampler produced sound");
   }
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
-  testChokeAndStereo();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
+  testChokeAndStereo();testChokeSplitBlockEquivalence();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
   testUnityRateExactPCM();testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
   std::cout<<"::notice title=125A Drumator voice QA::Empty-instrument and 17 explicit sample-voice test groups PASS\n";
   return 0;
