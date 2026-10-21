@@ -1564,6 +1564,8 @@ int main(int argc,char** argv) {
  setup.sampleRate=44100;
  require(audio->setupProcessing(setup)==kResultOk,
          "Host sample rate 48k to 44.1k setup");
+ // T28: after a rate switch the next valid host clock must establish
+ // a fresh phase origin, rather than reuse the preceding sample-rate clock.
  require(audio->getTailSamples()==kInfiniteTail,
          "Generator tail changed after host sample-rate switch");
  require(component->setActive(true)==kResultOk,"Rate switch activate");

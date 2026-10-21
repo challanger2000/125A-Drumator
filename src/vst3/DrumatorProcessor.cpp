@@ -458,6 +458,9 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  outputRate_.store(0.0,std::memory_order_release);
  voices_.reset(); // old voice buffers are not retained across sample-rate changes
  wasPlaying_=false;
+ haveExpectedPpq_=false;
+ expectedNextPpq_=0.0;
+ phaseOriginStep_=0;
  // A rate change invalidates any prior per-voice interpolation kernel.
  // Preserve retired asset ownership; mute existing rows until reloaded.
  for(std::size_t row=0;row<kRows;++row)voices_.setRow(row,RowSound{});
