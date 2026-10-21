@@ -1081,10 +1081,10 @@ void testSongEntryExtremeDelta(){
  // All these arguments were previously liable to signed overflow or
  // negative indexing when the native API was invoked directly.
  const auto big=std::numeric_limits<int>::max();
- const auto small=std::numeric_limits<int>::min();
+ const auto minimumDelta=std::numeric_limits<int>::min();
  check(f.c->editSongEntry(0,big,big),"S09 INT_MAX delta rejected");
  checkState(6,8); // 7+(INT_MAX mod 8)=6; length 32 -> 8
- check(f.c->editSongEntry(0,small,small),"S09 INT_MIN delta rejected");
+ check(f.c->editSongEntry(0,minimumDelta,minimumDelta),"S09 INT_MIN delta rejected");
  checkState(6,16); // INT_MIN mod 8=0, mod 3=-2: 8 -> 16
  check(f.c->editSongEntry(0,0,0),"S09 zero delta rejected");
  checkState(6,16);
