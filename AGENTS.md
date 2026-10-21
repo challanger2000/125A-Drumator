@@ -1,5 +1,11 @@
 # 125A Drumator — development instructions
 
+## Zweiter unabhängiger Abschlussaudit — 22.10.2026 (maßgeblich)
+
+**Windows-geprüfter Programm-/Teststand `7598252828d709c23a5bed33756c085a4d052a08`:** [Windows-QA #39695738761](https://github.com/challanger2000/125A-Drumator/actions/runs/39695738761) **SUCCESS**, **22/22 CTests**, **46 native Integrationsfälle**, **47/47 Steinberg Validator**, paketierte Audio-/Editorhosts PASS. Zwei neue Produktfehler behoben: SA01 normale Peer-View-Benachrichtigungen/zugängliche Zeilenseiten und SA02 blockabhängige Sortierung gleichzeitiger Choke-Trigger. Der ursprüngliche Komparator reproduziert in der echten Prozessor-Negativkontrolle die PCM-Divergenz bei 16 gleichzeitigen MIDI-Noten; die Korrektur besteht alle sechs Dichten. T30 prüft nun MIDI-only/Hosttie und vollständige Zwischenrückmeldungen in Render-/Outputless-Pfaden. PCM-/Sinc-Optimierung unverändert erhalten.
+
+[Vollständiger zweiter Audit mit Ursachen, Quellstellen, echten Fehler-/Erfolgsläufen und Grenzen](docs/audits/CODEX-SECOND-FINAL-AUDIT.md). **Technisch bereit für die Studio-One-Abnahme – JA; keine V1-/endgültige GUI-Freigabe.** Studio One/ASIO nicht ausgeführt. Aktuelle Offline-F14-Messung p95 4.0995 ms, p99 4.4873 ms, Maximum 4.4938 ms bei 5.33333 ms Blockfrist ist keine garantierte Echtzeitfähigkeit. Die „aktuellen“ älteren Abschnitte unten sind historische Stände.
+
 ## Aktueller unabhängiger Funktionsaudit — 21.10.2026 (maßgeblich)
 
 **Windows-geprüfter Programm-/Teststand `826c6d8b0a3c0d038678061d7ad97092e37927e3`:** [Windows-QA #39676937642](https://github.com/challanger2000/125A-Drumator/actions/runs/39676937642) **SUCCESS**, **22/22 CTests**, darin **43 native Integrationsfälle ohne Fehler**, **47/47 Steinberg Validator**, paketierte Audio-/Editor-Hosttests erfolgreich. Sechs konkrete Fehler FA01–FA06 wurden korrigiert; T28/T29 und das Random-Velocity-Testorakel wurden verstärkt. [Vollständiger unabhängiger Bericht mit Quellen, Matrix und Beweisgrenzen](docs/audits/CODEX-FINAL-FUNCTIONAL-RECHECK-2026-10-21.md).
