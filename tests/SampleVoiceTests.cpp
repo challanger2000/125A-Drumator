@@ -373,6 +373,37 @@ static void testRatioPerformanceComparison() {
             <<"ms (offline CI, not realtime qualification)\\n";
  }
 }
+static void testUnityRateExactPCM() {
+ // At identical sample and output rates, no sinc convolution, windowing or
+ // boundary attenuation may alter the source samples.
+ std::array<float,512> sourceL{},sourceR{};
+ for(std::size_t i=0;i<sourceL.size();++i) {
+   sourceL[i]=static_cast<float>(static_cast<int>(i%37)-18)/32.f;
+   sourceR[i]=static_cast<float>(static_cast<int>(i%29)-14)/32.f;
+ }
+ SincKernel unity;require(unity.prepare(1.0),"P01 unity kernel");
+ SampleVoiceEngine e;require(e.setOutputRate(48000),"P01 rate");
+ RowSound row;row.sample={sourceL.data(),sourceR.data(),sourceL.size()};
+ row.kernel=&unity;row.pan=0;row.gain=1;
+ require(e.setRow(0,row),"P01 row");
+ std::array<float,256> l{},r{};
+ const Trigger hit{0,0,0,127,0};
+ require(e.render(&hit,1,l.data(),r.data(),256).accepted==1,"P01 trigger");
+ for(std::size_t i=0;i<256;++i)
+   require(l[i]==sourceL[i]&&r[i]==sourceR[i],
+           "P01 unity PCM differs, including first and last frame");
+ require(e.render(nullptr,0,l.data(),r.data(),256).status==RenderStatus::Ok,
+         "P01 continuation");
+ for(std::size_t i=0;i<256;++i)
+   require(l[i]==sourceL[i+256]&&r[i]==sourceR[i+256],
+           "P01 continuation PCM differs");
+ // Mono shares its input with both stereo output channels at unity rate.
+ e.reset();row.sample={sourceL.data(),nullptr,sourceL.size()};
+ require(e.setRow(0,row),"P01 mono row");
+ require(e.render(&hit,1,l.data(),r.data(),256).accepted==1,"P01 mono trigger");
+ for(std::size_t i=0;i<256;++i)
+   require(l[i]==sourceL[i]&&r[i]==sourceL[i],"P01 mono dual output differs");
+}
 static void testAssignableOutput() {
  std::array<float,1024> sample{};sample.fill(.5f);
  SincKernel kernel;require(kernel.prepare(1.),"output kernel");
@@ -474,7 +505,7 @@ int main() {
   }
   testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
-  testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
+  testUnityRateExactPCM();testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
   std::cout<<"::notice title=125A Drumator voice QA::Empty-instrument and 17 explicit sample-voice test groups PASS\n";
   return 0;
  } catch(const std::exception& ex) {

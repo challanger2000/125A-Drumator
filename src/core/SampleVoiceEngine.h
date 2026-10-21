@@ -202,11 +202,21 @@ public:
                 }
                 const double x=voice.position;
                 const auto base=static_cast<std::int64_t>(x);
+                double vl=0.0,vr=0.0;
+                // Bit-transparent unity-rate playback: no interpolation is
+                // necessary at integer source positions. Keep the existing
+                // voice envelope, gain, choke, and bus routing below.
+                if(voice.kernel->ratio()==1.0) {
+                    const auto at=static_cast<std::size_t>(base);
+                    vl=static_cast<double>(voice.sample.left[at]);
+                    vr=static_cast<double>(voice.sample.right?
+                                           voice.sample.right[at]:
+                                           voice.sample.left[at]);
+                }else {
                 const double fractional=x-static_cast<double>(base);
                 const auto phase=std::min<std::size_t>(
                     static_cast<std::size_t>(fractional*kSincPhases),kSincPhases-1);
                 const auto* coeff=voice.kernel->phase(phase);
-                double vl=0.0,vr=0.0;
                 const auto taps=voice.kernel->taps();
                 const auto first=base-static_cast<std::int64_t>(taps/2-1);
                 // Interior samples have no boundary padding. Hoist this
@@ -233,6 +243,7 @@ public:
                                                  voice.sample.right[at]:
                                                  voice.sample.left[at])*w;
                     }
+                }
                 }
                 double envelope=1.0;
                 if(voice.releaseLeft>0) {
