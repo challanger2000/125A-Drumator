@@ -207,17 +207,32 @@ public:
                     static_cast<std::size_t>(fractional*kSincPhases),kSincPhases-1);
                 const auto* coeff=voice.kernel->phase(phase);
                 double vl=0.0,vr=0.0;
-                for(std::size_t i=0;i<voice.kernel->taps();++i) {
-                    const auto index=base+static_cast<std::int64_t>(i)-
-                        static_cast<std::int64_t>(voice.kernel->taps()/2-1);
-                    if(index<0||static_cast<std::size_t>(index)>=voice.sample.frames)
-                        continue; // documented zero-padding at sample boundaries
-                    const auto w=static_cast<double>(coeff[i]);
-                    const auto at=static_cast<std::size_t>(index);
-                    vl+=static_cast<double>(voice.sample.left[at])*w;
-                    vr+=static_cast<double>(voice.sample.right?
-                                             voice.sample.right[at]:
-                                             voice.sample.left[at])*w;
+                const auto taps=voice.kernel->taps();
+                const auto first=base-static_cast<std::int64_t>(taps/2-1);
+                // Interior samples have no boundary padding. Hoist this
+                // condition out of the tap loop without changing tap order,
+                // coefficients, or the floating-point accumulation sequence.
+                if(first>=0&&static_cast<std::uint64_t>(first)+taps<=voice.sample.frames) {
+                    const auto* srcL=voice.sample.left+static_cast<std::size_t>(first);
+                    const auto* srcR=voice.sample.right?
+                        voice.sample.right+static_cast<std::size_t>(first):srcL;
+                    for(std::size_t i=0;i<taps;++i) {
+                        const auto w=static_cast<double>(coeff[i]);
+                        vl+=static_cast<double>(srcL[i])*w;
+                        vr+=static_cast<double>(srcR[i])*w;
+                    }
+                }else {
+                    for(std::size_t i=0;i<taps;++i) {
+                        const auto index=first+static_cast<std::int64_t>(i);
+                        if(index<0||static_cast<std::size_t>(index)>=voice.sample.frames)
+                            continue; // identical zero-padding at sample boundaries
+                        const auto w=static_cast<double>(coeff[i]);
+                        const auto at=static_cast<std::size_t>(index);
+                        vl+=static_cast<double>(voice.sample.left[at])*w;
+                        vr+=static_cast<double>(voice.sample.right?
+                                                 voice.sample.right[at]:
+                                                 voice.sample.left[at])*w;
+                    }
                 }
                 double envelope=1.0;
                 if(voice.releaseLeft>0) {
