@@ -1800,6 +1800,41 @@ int main(int argc,char** argv) {
    flushData.inputEvents=&noOutputEvents;
  }
  std::cout<<"F05b outputless MIDI sample order PASS\\n";
+ // T30: more than 256 MIDI program commands in one real Processor block.
+ // Previously a 256-entry collection overflow could discard the entire
+ // set. The final host point must win the MIDI tie at the final frame.
+ {
+   EventList denseMidi(320);
+   for(int n=0;n<300;++n) {
+     Event e{};
+     e.type=Event::kNoteOnEvent;
+     e.sampleOffset=std::min(n,255);
+     e.noteOn.pitch=static_cast<Steinberg::int16>(24+n%8);
+     e.noteOn.velocity=1.f;
+     require(denseMidi.addEvent(e)==kResultOk,"T30 dense MIDI creation");
+   }
+   ParameterChanges denseHost;
+   int32 denseQueueIndex=0;
+   auto* queue=denseHost.addParameterData(drumator::kPatternParam,denseQueueIndex);
+   require(queue!=nullptr,"T30 dense host queue");
+   int32 densePointIndex=0;
+   require(queue->addPoint(255,2.0/7.0,densePointIndex)==kResultOk,
+           "T30 host tie creation");
+   flushData.inputEvents=&denseMidi;
+   flushData.inputParameterChanges=&denseHost;
+   require(audio->process(flushData)==kResultOk,"T30 dense processor events");
+   Steinberg::ResizableMemoryIBStream denseState;
+   require(component->getState(&denseState)==kResultOk,"T30 state save");
+   drumator::KitState denseKit;
+   require(drumator::KitCodec::decode(
+       static_cast<const std::uint8_t*>(denseState.getData()),
+       denseState.getCursor(),denseKit)&&denseKit.selected==2,
+       "T30 dense host/MIDI arbitration lost final selection");
+   flushData.inputEvents=&noOutputEvents;
+   flushData.inputParameterChanges=nullptr;
+ }
+ std::cout<<"T30 >256 real MIDI events and final host tie PASS\\n";
+
  // T18: Song mode suppresses MIDI pattern selection even when there
  // are no output buses; the outputless path must not reject the block.
  {
