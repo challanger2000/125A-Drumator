@@ -1831,9 +1831,26 @@ int main(int argc,char** argv) {
        a->setBinary("Entries",entry.data(),2)==kResultOk&&
        processorPoint->notify(&song)==kResultOk,"T18 restore pattern mode");
  }
+ // T27: disable Song mode in an outputless block with no MIDI,
+ // then verify the following MIDI-only block once again selects A-H.
+ flushData.inputEvents=nullptr;
+ flushData.inputParameterChanges=nullptr;
+ require(audio->process(flushData)==kResultOk,
+         "T27 outputless Song disable without MIDI");
+ flushData.inputEvents=&noOutputEvents; // D (pitch 27)
+ require(audio->process(flushData)==kResultOk,
+         "T27 MIDI selection after Song disable");
+ Steinberg::ResizableMemoryIBStream t27Saved;
+ require(component->getState(&t27Saved)==kResultOk,"T27 state save");
+ drumator::KitState t27Kit;
+ require(drumator::KitCodec::decode(
+   static_cast<const std::uint8_t*>(t27Saved.getData()),
+   t27Saved.getCursor(),t27Kit)&&t27Kit.selected==3&&t27Kit.songEnabled==0,
+   "T27 MIDI selection remained suppressed after Song disabled");
  flushData.inputEvents=nullptr;
  flushData.inputParameterChanges=&flushChanges;
  flushData.numSamples=0;
+ std::cout<<"T27 outputless Song disable restores MIDI selection PASS\\n";
  std::cout<<"F05 outputless MIDI A-H and host tie arbitration PASS\\n";
  std::cout<<"T18 outputless Song mode MIDI suppression PASS\\n";
  // F08 integration: deactivate MAIN while a real auxiliary row stays active.
