@@ -1727,6 +1727,33 @@ int main(int argc,char** argv) {
    static_cast<const std::uint8_t*>(f05TieState.getData()),
    f05TieState.getCursor(),f05Kit)&&f05Kit.selected==6,
    "F05 host did not win same-offset MIDI event");
+ // F05b: two MIDI pattern changes in an outputless block must use
+ // sample order, not event insertion order or the previous selected pattern.
+ {
+   EventList orderedMidi(4);
+   Event early{};
+   early.type=Event::kNoteOnEvent;
+   early.sampleOffset=20;
+   early.noteOn.pitch=25; // B
+   early.noteOn.velocity=1.f;
+   require(orderedMidi.addEvent(early)==kResultOk,"F05b early MIDI");
+   Event late=early;
+   late.sampleOffset=150;
+   late.noteOn.pitch=30; // G
+   require(orderedMidi.addEvent(late)==kResultOk,"F05b late MIDI");
+   flushData.inputEvents=&orderedMidi;
+   flushData.inputParameterChanges=nullptr;
+   require(audio->process(flushData)==kResultOk,"F05b outputless ordered MIDI");
+   Steinberg::ResizableMemoryIBStream orderedState;
+   require(component->getState(&orderedState)==kResultOk,"F05b state save");
+   drumator::KitState orderedKit;
+   require(drumator::KitCodec::decode(
+       static_cast<const std::uint8_t*>(orderedState.getData()),
+       orderedState.getCursor(),orderedKit)&&orderedKit.selected==6,
+       "F05b later MIDI pattern did not win");
+   flushData.inputEvents=&noOutputEvents;
+ }
+ std::cout<<"F05b outputless MIDI sample order PASS\\n";
  // T18: Song mode suppresses MIDI pattern selection even when there
  // are no output buses; the outputless path must not reject the block.
  {
