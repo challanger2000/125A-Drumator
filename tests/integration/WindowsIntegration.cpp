@@ -235,7 +235,11 @@ void testPatternOverlap(){
  evidence("T03 PASS: 16 mid-write rejections, 16 interrupted-read rejections, 32 complete reads, 16 real torn-reader negatives");
 }
 void prepareAudio(Processor& p){
- SpeakerArrangement stereo=SpeakerArr::kStereo;check(p.setBusArrangements(nullptr,0,&stereo,1)==kResultOk,"audio buses");
+ std::array<SpeakerArrangement,kRows> allOutputs{};
+ allOutputs.fill(SpeakerArr::kStereo);
+ check(p.setBusArrangements(nullptr,0,allOutputs.data(),
+                             static_cast<Steinberg::int32>(allOutputs.size()))==kResultOk,
+       "16 fixed stereo output arrangements");
  ProcessSetup s{};s.sampleRate=48000;s.maxSamplesPerBlock=256;s.symbolicSampleSize=kSample32;s.processMode=kRealtime;
  check(p.setupProcessing(s)==kResultOk&&p.setActive(true)==kResultOk&&p.setProcessing(true)==kResultOk,"prepare actual audio");
 }

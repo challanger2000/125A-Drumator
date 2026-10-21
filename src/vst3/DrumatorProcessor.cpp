@@ -59,7 +59,11 @@ Steinberg::tresult PLUGIN_API Processor::setBusArrangements(
  Steinberg::Vst::SpeakerArrangement* inputs,Steinberg::int32 numIns,
  Steinberg::Vst::SpeakerArrangement* outputs,Steinberg::int32 numOuts) {
  (void)inputs;
- if(numIns!=0||numOuts<1||numOuts>static_cast<Steinberg::int32>(kRows)||
+ // Bus *activation* is independent of arrangement negotiation. We expose
+ // exactly 16 fixed stereo buses and do not implement bus-count resizing.
+ // Advertising success for a shorter array falsely tells a host that its
+ // requested I/O configuration is installed, although getBusCount stays 16.
+ if(numIns!=0||numOuts!=static_cast<Steinberg::int32>(kRows)||
     !outputs)return Steinberg::kResultFalse;
  for(Steinberg::int32 i=0;i<numOuts;++i)
    if(outputs[i]!=Steinberg::Vst::SpeakerArr::kStereo)

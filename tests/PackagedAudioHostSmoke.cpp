@@ -162,7 +162,23 @@ int main(int argc,char** argv) {
          "SO01 accepted mono arrangement for DRUM 16");
  require(audio->setBusArrangements(nullptr,0,sixteenStereo.data(),16)==kResultOk,
          "SO01 failed to recover from rejected output arrangement");
- std::cout<<"SO01 16 kMain stereo outputs, optional buses inactive PASS\\n";
+ // SO02: a shorter bus array is not a valid *arrangement* request for this
+ // fixed 16-bus plugin (optional activation does not remove any bus).
+ // SDK requires kResultTrue only when the requested configuration matches
+ // what getBusCount/getBusArrangement report afterwards.
+ SpeakerArrangement oneStereo=SpeakerArr::kStereo;
+ require(audio->setBusArrangements(nullptr,0,
+           &oneStereo,1)!=kResultOk,
+         "SO02 claimed successful negotiation for an unsupported 1-bus layout");
+ for(int bus=0;bus<16;++bus) {
+   SpeakerArrangement reported{};
+   require(audio->getBusArrangement(kOutput,bus,reported)==kResultOk&&
+           reported==SpeakerArr::kStereo,
+           "SO02 rejected I/O layout damaged one of the 16 reported buses");
+ }
+ require(audio->setBusArrangements(nullptr,0,sixteenStereo.data(),16)==kResultOk,
+         "SO02 full 16-bus layout failed after invalid negotiation");
+ std::cout<<"SO01/SO02 16 kMain stereo outputs, fixed bus negotiation and recovery PASS\\n";
  // F16: the host must see semantic A-H pattern names, not normalized decimals.
  for(int i=0;i<8;++i) {
    String128 label{};
@@ -202,8 +218,8 @@ int main(int argc,char** argv) {
  std::cout<<"F15 controller zoom preference project-state PASS\\n";
  require(controlPoint->connect(processorPoint)==kResultOk,"Controller connection");
  require(processorPoint->connect(controlPoint)==kResultOk,"Processor connection");
- SpeakerArrangement stereo=SpeakerArr::kStereo;
- require(audio->setBusArrangements(nullptr,0,&stereo,1)==kResultOk,"Stereo bus");
+ require(audio->setBusArrangements(nullptr,0,sixteenStereo.data(),16)==kResultOk,
+         "Complete 16-bus stereo arrangement");
  ProcessSetup setup{};
  setup.sampleRate=48000;setup.maxSamplesPerBlock=256;
  setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
@@ -512,7 +528,7 @@ int main(int argc,char** argv) {
  saved.rewind();
  require(restoredController->setComponentState(&saved)==kResultOk,
          "Second controller setComponentState with embedded kit");
- require(restoredAudio->setBusArrangements(nullptr,0,&stereo,1)==kResultOk,
+ require(restoredAudio->setBusArrangements(nullptr,0,sixteenStereo.data(),16)==kResultOk,
          "Second stereo bus");
  require(restoredAudio->setupProcessing(setup)==kResultOk,
          "Second setupProcessing must reprepare embedded WAV");
@@ -588,7 +604,7 @@ int main(int argc,char** argv) {
  require(kitCopy->initialize(&host)==kResultOk,"Full-kit initialize");
  fullState.rewind();
  require(kitCopy->setState(&fullState)==kResultOk,"Full-kit restore state");
- require(kitAudio->setBusArrangements(nullptr,0,&stereo,1)==kResultOk,
+ require(kitAudio->setBusArrangements(nullptr,0,sixteenStereo.data(),16)==kResultOk,
          "Full-kit stereo arrangement");
  require(kitAudio->setupProcessing(setup)==kResultOk,
          "Full-kit setupProcessing");
