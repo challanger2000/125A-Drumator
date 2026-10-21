@@ -718,6 +718,60 @@ void testRandomVelocityOneShot(){
  check(f.c->undoCurrentPattern()&&f.c->velocity(0,0,0)==before,"Button Undo failed");
  evidence("RANDOM one-shot occupied-only, 1T/2T, isolated row/pattern and Undo PASS");
 }
+void testFillActivePatternLength(){
+ // V17: all nine FILL variants, including CLEAR, modify only the visible
+ // musical bar in 1T while preserving stored bar-two notes for later 2T.
+ Fixture f;
+ KitState kit=namedKit('X',4);
+ kit.grid.fill(0);
+ kit.grid[kSteps+0]=90;kit.grid[kSteps+4]=100;
+ kit.grid[kSteps+19]=37;kit.grid[kSteps+30]=65;
+ kit.grid[0]=75; // other row, must be untouched
+ kit.grid[kRows*kSteps+kSteps+2]=61; // other pattern, untouched
+ const std::array<RowFill,9> modes{
+   RowFill::Every2,RowFill::Every4,RowFill::Every8,
+   RowFill::Snare24,RowFill::All,RowFill::Clear,RowFill::Offbeat8,
+   RowFill::Gallop,RowFill::SnareGhost
+ };
+ auto state=[&]{
+   ResizableMemoryIBStream stream;KitState saved;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                          static_cast<std::size_t>(stream.getCursor()),saved),
+         "V17 actual processor project snapshot");
+   return saved;
+ };
+ for(const auto active:{16u,32u}) {
+   kit.patternLengths[0]=static_cast<std::uint8_t>(active);
+   for(const auto mode:modes) {
+     f.kit(kit);
+     check(f.c->patternLength(0)==active,"V17 incorrect 1T/2T restore");
+     check(f.c->fillRow(1,mode),"V17 actual controller FILL rejected");
+     const auto saved=state();
+     const auto expected=filledRow(mode);
+     for(std::size_t index=0;index<kit.grid.size();++index){
+       const auto row=index%(kRows*kSteps)/kSteps;
+       const auto step=index%kSteps;
+       const auto wanted=index<kRows*kSteps&&row==1&&step<active?
+            expected[step]:kit.grid[index];
+       check(saved.grid[index]==wanted,
+             "V17 FILL/CLEAR modified hidden bar, other row or pattern");
+     }
+     check(f.c->canUndoCurrentPattern()&&f.c->undoCurrentPattern()&&
+           state().grid==kit.grid,
+           "V17 FILL/CLEAR Undo failed to restore complete original pattern");
+   }
+ }
+ // Switch from 1T to 2T without clearing the stored second-bar material.
+ kit.patternLengths[0]=16;
+ f.kit(kit);
+ check(f.c->fillRow(1,RowFill::Clear),"V17 1T CLEAR rejected");
+ check(f.c->togglePatternLength(0)&&f.c->patternLength(0)==32,
+       "V17 cannot restore 2T after FILL/CLEAR");
+ check(f.c->velocity(0,1,19)==37&&f.c->velocity(0,1,30)==65,
+       "V17 1T FILL/CLEAR destroyed previously hidden bar two");
+ evidence("V17 nine row FILL/CLEAR variants preserve inactive steps, Undo and 2T return PASS");
+}
 void testVelocityInactiveBarProtection(){
  // V16: 1T editing operations must never change stored steps 17-32.
  // These steps must reappear at their original velocities on returning to 2T.
@@ -1131,6 +1185,7 @@ int main(int argc,char** argv){
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("VELO 100 reset existing notes",testVelocityResetPattern);
  run("V16 1T hidden velocity preservation",testVelocityInactiveBarProtection);
+ run("V17 1T row FILL/CLEAR hidden-step protection",testFillActivePatternLength);
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
  run("UX paged Song board",testPagedSongEditor);
  run("UX compact Song viewport",testSongCompactViewport);

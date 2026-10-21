@@ -490,9 +490,11 @@ bool Controller::resetPatternVelocity(){
 bool Controller::fillRow(std::size_t row,RowFill mode){
  if(row>=visibleRows_)return false;
  const auto p=currentPattern();
+ const auto active=static_cast<std::size_t>(patternLength(p));
+ if(active!=16&&active!=32)return false;
  PatternSteps data{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,data.size(),data.begin());
- return replacePattern(p,fillInstrument(data,row,mode));
+ return replacePattern(p,fillInstrument(data,row,mode,active));
 }
 bool Controller::canHideLast() const noexcept {
  if(visibleRows_<=1||visibleRows_>kRows)return false;

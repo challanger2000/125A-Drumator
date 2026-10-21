@@ -400,6 +400,20 @@ int main(){
           observed[0].sampleOffset==0&&observed[0].velocity==120,
           "S06 negative-PPQ song position dropped or corrupted a hit");
   }
+     // Full-length semantics remain backward-compatible; partial row fills
+     // cannot touch stored inactive notes from a hidden second bar.
+     PatternSteps oneBar{};
+     oneBar[7*kSteps+20]=91;
+     oneBar[6*kSteps+0]=52;
+     auto shortFill=fillInstrument(oneBar,7,RowFill::All,16);
+     check(shortFill[7*kSteps+15]==127&&shortFill[7*kSteps+16]==0&&
+           shortFill[7*kSteps+20]==91&&shortFill[6*kSteps]==52,
+           "FILL 1T modified second bar or another row");
+     shortFill=fillInstrument(oneBar,7,RowFill::Clear,16);
+     check(shortFill[7*kSteps+0]==0&&shortFill[7*kSteps+20]==91,
+           "CLEAR 1T erased hidden stored notes");
+     check(fillInstrument(oneBar,7,RowFill::All,15)==oneBar,
+           "FILL accepted invalid musical pattern length");
   // Per-instrument FILL must change exactly one row, and never touch the
   // other instruments, even for ghost/galopp and clearing operations.
   {

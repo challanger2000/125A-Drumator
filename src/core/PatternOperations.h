@@ -19,10 +19,14 @@ std::size_t nextEmptyPattern(std::size_t source,ReadPattern&& read) {
  return kPatterns;
 }
 
-constexpr PatternSteps fillInstrument(PatternSteps p,std::size_t row,RowFill mode) noexcept {
- if(row>=kRows)return p;
- auto values=filledRow(mode);
- for(std::size_t s=0;s<kSteps;++s)p[row*kSteps+s]=values[s];
+// The full PatternSteps backing store is always 32 steps, but row FILL/CLEAR
+// actions operate only within the *active* 1T or 2T pattern length.
+// All inactive second-bar values stay intact for a later return to 2T.
+constexpr PatternSteps fillInstrument(PatternSteps p,std::size_t row,RowFill mode,
+                                     std::size_t activeSteps=kSteps) noexcept {
+ if(row>=kRows||(activeSteps!=16&&activeSteps!=kSteps))return p;
+ const auto values=filledRow(mode);
+ for(std::size_t s=0;s<activeSteps;++s)p[row*kSteps+s]=values[s];
  return p;
 }
 constexpr PatternSteps shiftInstrument(PatternSteps p,std::size_t row,bool right) noexcept {
