@@ -51,6 +51,7 @@ int main() {
     original.displayNames[3]="Closed Hat";
     original.displayNames[6]="Buehne";
     original.wav[0]=wav16();
+    original.sampleEdits[0]={0,1,0,0,.5f};
     original.names[2]="HiHat_Closed.wav";
     original.wav[2]=wav16();
     std::vector<std::uint8_t> encoded;
@@ -87,6 +88,8 @@ int main() {
           !validRowLabel(std::string("Bad\nLine")),
           "DM14 label validation");
     check(copy.wav==original.wav,"Source WAV bytes not identical");
+    check(copy.sampleEdits[0].start==0&&copy.sampleEdits[0].end==1&&
+          copy.sampleEdits[0].gain==.5f,"DM16 sample edit roundtrip lost");
     std::vector<std::uint8_t> again;
     check(KitCodec::encode(copy,again)&&encoded==again,
           "Roundtrip must produce deterministic DMR4");
