@@ -547,6 +547,33 @@ static void testSimultaneousStereoStems() {
  near(mainL[120],.5,.001,"disabled stem should sum into main");
  near(stem1L[120],.25,.001,"other stem must remain isolated");
 }
+static void testNondestructiveSampleEdits() {
+ std::array<float,16> source{};source.fill(1.f);
+ SincKernel kernel;require(kernel.prepare(1.),"editor unity kernel");
+ SampleVoiceEngine engine;require(engine.setOutputRate(48000),"editor rate");
+ RowSound row;row.sample={source.data(),nullptr,source.size()};
+ row.kernel=&kernel;row.pan=-1.f;
+ row.edit={4,12,2,2,.5f};
+ require(engine.setRow(0,row),"valid edit row");
+ std::array<float,16> l{},r{};
+ const Trigger hit{0,0,0,127,0};
+ require(engine.render(&hit,1,l.data(),r.data(),16).accepted==1,
+         "edited sample trigger");
+ near(l[0],0,0.00001,"fade-in first source frame");
+ near(l[1],.25,0.00001,"fade-in ramp");
+ near(l[2],.5,0.00001,"trimmed audio unity region");
+ near(l[6],.25,0.00001,"fade-out ramp");
+ near(l[7],0,0.00001,"fade-out last source frame");
+ near(l[8],0,0.00001,"trim end did not stop voice");
+ require(engine.active()==0,"trimmed voice never retired");
+ row.edit={4,12,6,6,1.f};
+ require(!engine.setRow(0,row),"invalid overlapping fades accepted");
+ row.edit={0,0,0,0,1.f};
+ require(engine.setRow(0,row),"legacy sample edit rejected");
+ require(engine.render(&hit,1,l.data(),r.data(),16).accepted==1,
+         "legacy trigger");
+ near(l[0],1,0.00001,"legacy full sample changed");
+}
 int main() {
  try {
   {
@@ -563,7 +590,7 @@ int main() {
     for(std::size_t i=0;i<left.size();++i)
       require(left[i]==0.f&&right[i]==0.f,"empty sampler produced sound");
   }
-  testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
+  testNondestructiveSampleEdits();testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testChokeSplitBlockEquivalence();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
   testUnityRateExactPCM();testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
   std::cout<<"::notice title=125A Drumator voice QA::Sample-voice test sequence completed PASS\n";

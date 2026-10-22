@@ -3,6 +3,7 @@
 // This module is NOT the VST3 adapter or a file decoder.
 #pragma once
 #include "SequencerCore.h"
+#include "SampleEdit.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -86,6 +87,7 @@ private:
 
 struct RowSound {
     SampleView sample{};
+    SampleEdit edit{}; // end==0: legacy full-sample playback
     const SincKernel* kernel{nullptr};
     float gain{1.f}; // linear amplitude, 1 = 0 dB.
     float pan{0.f};  // -1 left, 0 center, +1 right.
@@ -123,6 +125,9 @@ public:
            !std::isfinite(sound.pan)||sound.pan< -1.f||sound.pan>1.f)
             return false;
         if(sound.sample.frames!=0) {
+            if(sound.sample.frames>std::numeric_limits<std::uint32_t>::max()||
+               (sound.edit.end!=0&&!sound.edit.valid(static_cast<std::uint32_t>(sound.sample.frames))))
+                return false;
             if(!sound.sample.left||!sound.kernel||!sound.kernel->ready()||
                 sound.sample.frames>static_cast<std::size_t>(
                     std::numeric_limits<std::int64_t>::max()-64))
@@ -205,7 +210,7 @@ public:
             double l=0.0,r=0.0;
             for(auto& voice:voices_) {
                 if(!voice.active)continue;
-                if(voice.position>=static_cast<double>(voice.sample.frames)) {
+                if(voice.position>=static_cast<double>(voice.edit.end)) {
                     voice.active=false;
                     continue;
                 }
@@ -260,8 +265,10 @@ public:
                              static_cast<double>(voice.releaseTotal);
                     --voice.releaseLeft;
                 }
-                const auto a=static_cast<float>(vl*voice.gainL*envelope);
-                const auto b=static_cast<float>(vr*voice.gainR*envelope);
+                const auto editGain=static_cast<double>(voice.edit.amplitude(
+                    static_cast<std::uint32_t>(base)));
+                const auto a=static_cast<float>(vl*voice.gainL*envelope*editGain);
+                const auto b=static_cast<float>(vr*voice.gainR*envelope*editGain);
                 if(stemLeft&&stemRight&&voice.outputBus>0&&
                    stemLeft[voice.outputBus]&&stemRight[voice.outputBus]) {
                    stemLeft[voice.outputBus][f]+=a;
@@ -271,7 +278,7 @@ public:
                 }
                 voice.position+=voice.kernel->ratio();
                 if((voice.releaseTotal>0&&voice.releaseLeft==0)||
-                   voice.position>=static_cast<double>(voice.sample.frames))
+                   voice.position>=static_cast<double>(voice.edit.end))
                     voice.active=false;
             }
             if(left) {
@@ -285,6 +292,7 @@ public:
 private:
     struct Voice {
         SampleView sample{};
+        SampleEdit edit{};
         const SincKernel* kernel{nullptr};
         double position{0.0};
         double gainL{0.0},gainR{0.0};
@@ -316,8 +324,11 @@ private:
             const double pan=static_cast<double>(row.pan);
             const double velocity=static_cast<double>(event.velocity)/127.0;
             v.sample=row.sample;
+            v.edit=row.edit.end==0
+                ?SampleEdit::reset(static_cast<std::uint32_t>(row.sample.frames))
+                :row.edit;
             v.kernel=row.kernel;
-            v.position=0;
+            v.position=static_cast<double>(v.edit.start);
             // Center pan=0: unity WAV sample amplitude on each channel.
             // This is a transparent stereo BALANCE law, not a +dB booster:
             // left falls smoothly to 0 when panned right, and vice versa.
