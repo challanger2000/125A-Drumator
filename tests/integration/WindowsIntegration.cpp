@@ -1539,19 +1539,27 @@ void testNativeName(){
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
 void testTransportSequenceTorture(){
- Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);kit.grid[0]=100;
+ Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);
  kit.names[0]="transport.wav";kit.wav[0]=constantStereo(.25f,-.5f);
  f.kit(kit);prepareAudio(*f.p);
  AuditAudioBlock block;
  constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|
                         ProcessContext::kProjectTimeMusicValid;
- unsigned stale=0,incorrect=0;
+ EventList notes;Event hit{};hit.type=Event::kNoteOnEvent;
+ hit.noteOn.pitch=36;hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+ check(notes.addEvent(hit)==kResultOk,"TORTURE MIDI trigger fixture");
+ unsigned stale=0,wrongSilence=0,missingHits=0;
  for(unsigned cycle=0;cycle<96;++cycle){
-   // Consecutive restarts across forward/backward locate and a loop boundary.
-   block.data.numSamples=256;block.data.inputEvents=nullptr;
+   // Empty pattern: every sound MUST originate from this explicit MIDI hit.
+   // This detects a missed hit separately from a stale voice or double hit.
+   block.data.numSamples=256;
    block.clock.state=playing;
    block.clock.projectTimeMusic=(cycle%2?4.:8.);
-   check(f.p->process(block.data)==kResultOk,"TORTURE initial playing block");
+   block.data.inputEvents=&notes;
+   check(f.p->process(block.data)==kResultOk,"TORTURE MIDI trigger block");
+   if(std::abs(block.left[80]-.25f)>1e-6f||
+      std::abs(block.right[80]+.5f)>1e-6f)++missingHits;
+   block.data.inputEvents=nullptr;
    block.data.numSamples=(cycle%3==0?0:256);
    block.clock.state=0;
    check(f.p->process(block.data)==kResultOk,"TORTURE stopped callback");
@@ -1559,13 +1567,18 @@ void testTransportSequenceTorture(){
    block.data.numSamples=256;block.clock.state=playing;
    block.clock.projectTimeMusic=(cycle%4==0?4.:8.);
    check(f.p->process(block.data)==kResultOk,"TORTURE restart block");
-   for(std::size_t i=0;i<256;++i)
-     if(!std::isfinite(block.left[i])||!std::isfinite(block.right[i]))++incorrect;
+   if(block.left[80]!=0.f||block.right[80]!=0.f)++wrongSilence;
+   // Moving the host clock while playing must never resurrect old voices.
+   block.clock.projectTimeMusic=(cycle%2?8.:4.);
+   check(f.p->process(block.data)==kResultOk,"TORTURE locate/loop block");
+   if(block.left[80]!=0.f||block.right[80]!=0.f)++wrongSilence;
  }
- qa::workflowNotice("TORTURE 96 stop/restart/seek sequences; stale-voice="+
-                    std::to_string(stale)+" nonfinite="+std::to_string(incorrect));
+ qa::workflowNotice("TORTURE 96 MIDI/stop/restart/loop sequences: stale="+
+   std::to_string(stale)+" missing-or-doubled-hits="+std::to_string(missingHits)+
+   " unexpected-PCM="+std::to_string(wrongSilence));
  f.p->setProcessing(false);f.p->setActive(false);
- check(stale==0&&incorrect==0,"TORTURE stale voice or nonfinite audio");
+ check(stale==0&&missingHits==0&&wrongSilence==0,
+       "TORTURE missed/doubled trigger, stale voice or unexpected output");
 }
 void testPacedSampleSwapContinuity(){
  using Clock=std::chrono::steady_clock;
