@@ -142,6 +142,47 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  }
  // The commit is prepared off the audio thread. Active voices retain the
  // old immutable PreparedSample via SampleExchange retirement.
+
+ if(std::strcmp(id,"Drumator.EditorPreviewStop")==0){
+   auditionStart_.store(false,std::memory_order_release);
+   auditionStop_.store(true,std::memory_order_release);
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.EditorPreview")==0){
+   auto* a=msg->getAttributes();
+   Steinberg::int64 row=-1,start=-1,end=-1,fi=-1,fo=-1,bits=-1;
+   if(!a||a->getInt("Row",row)!=Steinberg::kResultOk||
+      a->getInt("Start",start)!=Steinberg::kResultOk||
+      a->getInt("End",end)!=Steinberg::kResultOk||
+      a->getInt("FadeIn",fi)!=Steinberg::kResultOk||
+      a->getInt("FadeOut",fo)!=Steinberg::kResultOk||
+      a->getInt("GainBits",bits)!=Steinberg::kResultOk||
+      row<0||row>=static_cast<Steinberg::int64>(kRows)||
+      start<0||end<=0||fi<0||fo<0||bits<0||
+      start>UINT32_MAX||end>UINT32_MAX||fi>UINT32_MAX||
+      fo>UINT32_MAX||bits>UINT32_MAX)return Steinberg::kInvalidArgument;
+   SampleEdit edit{static_cast<std::uint32_t>(start),
+      static_cast<std::uint32_t>(end),static_cast<std::uint32_t>(fi),
+      static_cast<std::uint32_t>(fo),1.f};
+   const auto gainBits=static_cast<std::uint32_t>(bits);
+   std::memcpy(&edit.gain,&gainBits,sizeof(gainBits));
+   std::lock_guard<std::mutex> lock(kitMutex_);
+   const auto& wav=kit_.wav[static_cast<std::size_t>(row)];
+   if(wav.empty())return Steinberg::kResultFalse;
+   const auto rate=outputRate_.load(std::memory_order_acquire);
+   if(!(rate>0.)||!std::isfinite(rate))return Steinberg::kResultFalse;
+   std::unique_ptr<PreparedSample> prepared;
+   if(PreparedSample::fromWav(wav.data(),wav.size(),rate,
+      static_cast<double>(static_cast<int>(kit_.pitch[static_cast<std::size_t>(row)])-24),
+      1.f,0.f,0,false,prepared,edit)!=PrepareStatus::Ok)
+       return Steinberg::kInvalidArgument;
+   for(;;){auto old=auditionExchange_.pollReclaim();if(!old)break;}
+   auto stale=auditionExchange_.withdraw(0);
+   (void)stale;
+   if(!auditionExchange_.publish(0,prepared))return Steinberg::kResultFalse;
+   auditionStart_.store(true,std::memory_order_release);
+   return Steinberg::kResultOk;
+ }
  if(std::strcmp(id,"Drumator.SampleEditorCommit")==0) {
    auto* attrs=msg->getAttributes();
    Steinberg::int64 index=-1,start=-1,end=-1,fadeIn=-1,fadeOut=-1,gainBits=-1;
@@ -191,7 +232,9 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    return Steinberg::kResultOk;
  }
 
- if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
+ if(std::strcmp(id,"Drumator.EditorPreview")!=0&&
+    std::strcmp(id,"Drumator.EditorPreviewStop")!=0&&
+    std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
     std::strcmp(id,"Drumator.StepEdit")!=0&&
     std::strcmp(id,"Drumator.PatternReplace")!=0&&
     std::strcmp(id,"Drumator.VisibleRows")!=0&&
@@ -555,6 +598,11 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  for(std::size_t row=0;row<kRows;++row)voices_.setRow(row,RowSound{});
  // Deliberately silent until a real user sample was actually accepted.
  // No hidden synthesized kick to confuse failed import with working audio.
+ if(!auditionVoices_.setOutputRate(setup.sampleRate))return Steinberg::kResultFalse;
+ try {auditionLeft_.resize(static_cast<std::size_t>(setup.maxSamplesPerBlock));
+      auditionRight_.resize(static_cast<std::size_t>(setup.maxSamplesPerBlock));}
+ catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+ auditionVoices_.reset();auditionStart_.store(false);auditionStop_.store(false);
  if(!voices_.setOutputRate(setup.sampleRate)||
     !masterRamp_.prepare(setup.sampleRate))return Steinberg::kResultFalse;
  masterRamp_.reset(masterVolume_.load(std::memory_order_relaxed)/100.f);
@@ -789,6 +837,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  }
  // Adopt only complete prepared assets, without deleting on audio.
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
+ auditionExchange_.audioAdopt(auditionVoices_,processSetup.sampleRate);
  triggers_.clear();
  // Collect MIDI A-H and host automation before scheduling. Fixed storage
  // avoids allocations in the audio callback; equal-offset host wins.
@@ -1022,6 +1071,17 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                                    stemsL.data(),stemsR.data());
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
+ if(auditionStop_.exchange(false,std::memory_order_acq_rel))auditionVoices_.reset();
+ const bool fire=auditionStart_.exchange(false,std::memory_order_acq_rel);
+ Trigger one{};one.row=0;one.velocity=127;
+ const auto audition=auditionVoices_.render(fire?&one:nullptr,fire?1:0,
+    auditionLeft_.data(),auditionRight_.data(),static_cast<std::uint32_t>(data.numSamples));
+ auditionExchange_.audioCollect(auditionVoices_);
+ if(audition.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
+ if(left&&right)for(Steinberg::int32 i=0;i<data.numSamples;++i){
+   left[i]+=auditionLeft_[static_cast<std::size_t>(i)];
+   right[i]+=auditionRight_[static_cast<std::size_t>(i)];
+ }
  const float master=static_cast<float>(masterVolume_.load(std::memory_order_relaxed))/100.f;
  masterRamp_.request(master);
  // MAIN and every active stem share one sample envelope, regardless of bus

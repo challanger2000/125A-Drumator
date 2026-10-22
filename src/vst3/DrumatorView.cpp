@@ -990,9 +990,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(y>=535&&y<578) {
      if(x>=570&&x<708){
        // The existing processor preview is a committed-state preview.
-       if(!controller_.previewSample(sampleEditorRow_))
+       if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_))
          status_="VORHOEREN FEHLGESCHLAGEN";
      }else if(x>=716&&x<855){
+       controller_.stopSampleEditPreview();
        sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
      }else if(x>=862&&x<1000){
        if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_)){
