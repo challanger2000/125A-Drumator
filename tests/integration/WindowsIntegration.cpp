@@ -1538,6 +1538,69 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+void testPacedSampleSwapContinuity(){
+ using Clock=std::chrono::steady_clock;
+ Fixture active,baseline;
+ KitState kit;kit.grid.fill(0);kit.visible=2;
+ kit.names[1]="reference.wav";kit.wav[1]=constantStereo(.25f,-.5f);
+ active.kit(kit);baseline.kit(kit);
+ prepareAudio(*active.p);prepareAudio(*baseline.p);
+ const auto folder=std::filesystem::current_path()/"125A-paced-import-QA";
+ std::filesystem::create_directories(folder);
+ const auto fileA=folder/"swapA.wav",fileB=folder/"swapB.wav";
+ for(const auto& [path,left,right]:std::array<std::tuple<std::filesystem::path,float,float>,2>{
+       std::tuple{fileA,.125f,-.25f},std::tuple{fileB,-.375f,.125f}}){
+   const auto wav=constantStereo(left,right);
+   std::ofstream output(path,std::ios::binary|std::ios::trunc);
+   output.write(reinterpret_cast<const char*>(wav.data()),
+                static_cast<std::streamsize>(wav.size()));
+   check(output.good(),"PACING fixture write");
+ }
+ std::atomic<unsigned> blocks{0},badPcm{0},errors{0},misses{0};
+ std::atomic<double> maximumMs{0.};
+ std::jthread actor([&](std::stop_token stop){
+   AuditAudioBlock tested,reference;
+   EventList events;Event note{};note.type=Event::kNoteOnEvent;
+   note.noteOn.pitch=37;note.noteOn.velocity=1.f;note.noteOn.noteId=-1;
+   if(events.addEvent(note)!=kResultOk){++errors;return;}
+   tested.data.inputEvents=&events;reference.data.inputEvents=&events;
+   auto target=Clock::now();
+   for(unsigned n=0;n<500&&!stop.stop_requested();++n){
+     const auto begin=Clock::now();
+     const auto ok=active.p->process(tested.data);
+     const auto end=Clock::now();
+     const double ms=std::chrono::duration<double,std::milli>(end-begin).count();
+     if(ms>256./48000.*1000.)++misses;
+     auto peak=maximumMs.load();
+     while(ms>peak&&!maximumMs.compare_exchange_weak(peak,ms)){}
+     if(ok!=kResultOk||baseline.p->process(reference.data)!=kResultOk)++errors;
+     for(std::size_t i=0;i<256;++i)
+       if(tested.left[i]!=reference.left[i]||tested.right[i]!=reference.right[i])
+         ++badPcm;
+     ++blocks;
+     target+=std::chrono::duration_cast<Clock::duration>(
+                  std::chrono::duration<double>(256./48000.));
+     std::this_thread::sleep_until(target);
+   }
+ });
+ while(blocks.load()<4&&errors.load()==0)std::this_thread::yield();
+ for(unsigned i=0;i<12;++i){
+   const auto path=(i&1)?fileA:fileB;
+   if(active.c->loadWav(0,pathToUtf8(path))!=Controller::LoadStatus::Accepted)
+     ++errors;
+ }
+ actor.join();
+ qa::workflowNotice("PACING 48k/256 blocks="+std::to_string(blocks.load())+
+   " unchanged-row PCM mismatches="+std::to_string(badPcm.load())+
+   " deadline-misses="+std::to_string(misses.load())+
+   " max-callback-ms="+std::to_string(maximumMs.load())+
+   "; synthetic host pacing, not Studio One or ASIO");
+ std::error_code ec;std::filesystem::remove_all(folder,ec);
+ active.p->setProcessing(false);active.p->setActive(false);
+ baseline.p->setProcessing(false);baseline.p->setActive(false);
+ check(blocks.load()==500&&badPcm.load()==0&&errors.load()==0,
+       "PACING actual-controller sample swaps disrupted unchanged audio");
+}
 void testComponentOnlySameBasenameRejectsStaleOrigin(){
  Fixture f;
  KitState initial;initial.grid.fill(0);initial.visible=1;
@@ -1670,6 +1733,7 @@ int main(int argc,char** argv){
  run("SOR03Z zero-frame stop retires old voices",testZeroFrameStopRetiresVoice);
  run("V1A03 peer edit survives velocity cancel",testPeerVelocityCancelPreservesCommittedStep);
  run("V1A04 component-only same-name origin safety",testComponentOnlySameBasenameRejectsStaleOrigin);
+ run("PACING long running sample swap audio continuity",testPacedSampleSwapContinuity);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("SOR01 new Step Velocity 100",testNewStepDefault100);
  run("VELO 100 reset existing notes",testVelocityResetPattern);
