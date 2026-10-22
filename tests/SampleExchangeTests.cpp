@@ -123,6 +123,41 @@ static void exerciseRejectAndWithdraw() {
     require(std::abs(l[60]-.25f)<0.002,"PCM16 amplitude altered");
     require(std::abs(r[60])<0.0001,"hard pan unexpectedly stereo");
 }
+static void exerciseLiveSwapKeepsOtherRowAudible() {
+    const auto steady=pcm16(8192,8192);
+    const auto replacement=pcm16(-8192,8192);
+    SampleExchange exchanger;
+    SampleVoiceEngine voices;
+    require(voices.setOutputRate(48000),"SOR04 output rate");
+    auto first=makeAsset(steady);
+    auto second=makeAsset(steady);
+    require(exchanger.publish(0,first)&&exchanger.publish(1,second),
+            "SOR04 initial assets publish");
+    require(exchanger.audioAdopt(voices,48000).adopted==2,
+            "SOR04 initial assets adopt");
+    std::array<float,128> left{},right{};
+    const Trigger sustained{0,1,0,127,0};
+    require(voices.render(&sustained,1,left.data(),right.data(),128).accepted==1,
+            "SOR04 unaffected row did not start");
+    // Replace row 0 repeatedly while row 1 is sounding, across block
+    // boundaries. The unchanged row must not be reset or drop a frame.
+    for(int pass=0;pass<10;++pass) {
+        auto candidate=makeAsset(pass%2?steady:replacement);
+        require(exchanger.publish(0,candidate),"SOR04 replacement publish");
+        require(exchanger.audioAdopt(voices,48000).adopted==1,
+                "SOR04 replacement adoption");
+        require(voices.render(nullptr,0,left.data(),right.data(),128).status==
+                RenderStatus::Ok,"SOR04 render after replacement");
+        for(float sample:left)
+            require(std::abs(sample-8192.f/32768.f)<0.002f,
+                    "SOR04 unaffected instrument dropped out on replacement");
+        exchanger.audioCollect(voices);
+        for(;;) {
+            auto old=exchanger.pollReclaim();
+            if(!old)break;
+        }
+    }
+}
 static void exerciseFailedPreparationIsTransactional() {
     const auto wav=pcm16(12345);
     auto previous=makeAsset(wav);
@@ -145,6 +180,7 @@ static void exerciseFailedPreparationIsTransactional() {
 int main() {
     try {
         exerciseTransferAndOwnership();
+        exerciseLiveSwapKeepsOtherRowAudible();
         exerciseRejectAndWithdraw();
         // M32: reject a sequence of defective replacements without touching
         // the last successfully prepared sound or its ownership.
