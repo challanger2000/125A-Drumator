@@ -1538,6 +1538,36 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+void testTransportSequenceTorture(){
+ Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);kit.grid[0]=100;
+ kit.names[0]="transport.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock block;
+ constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|
+                        ProcessContext::kProjectTimeMusicValid;
+ constexpr double increment=256./24000.;
+ unsigned stale=0,incorrect=0;
+ for(unsigned cycle=0;cycle<96;++cycle){
+   // Consecutive restarts across forward/backward locate and a loop boundary.
+   block.data.numSamples=256;block.data.inputEvents=nullptr;
+   block.clock.state=playing;
+   block.clock.projectTimeMusic=(cycle%2?4.:8.);
+   check(f.p->process(block.data)==kResultOk,"TORTURE initial playing block");
+   block.data.numSamples=(cycle%3==0?0:256);
+   block.clock.state=0;
+   check(f.p->process(block.data)==kResultOk,"TORTURE stopped callback");
+   if(IntegrationAccess::activeAudioVoices(*f.p)!=0)++stale;
+   block.data.numSamples=256;block.clock.state=playing;
+   block.clock.projectTimeMusic=(cycle%4==0?4.:8.);
+   check(f.p->process(block.data)==kResultOk,"TORTURE restart block");
+   for(std::size_t i=0;i<256;++i)
+     if(!std::isfinite(block.left[i])||!std::isfinite(block.right[i]))++incorrect;
+ }
+ qa::workflowNotice("TORTURE 96 stop/restart/seek sequences; stale-voice="+
+                    std::to_string(stale)+" nonfinite="+std::to_string(incorrect));
+ f.p->setProcessing(false);f.p->setActive(false);
+ check(stale==0&&incorrect==0,"TORTURE stale voice or nonfinite audio");
+}
 void testPacedSampleSwapContinuity(){
  using Clock=std::chrono::steady_clock;
  Fixture active,baseline;
@@ -1734,6 +1764,7 @@ int main(int argc,char** argv){
  run("V1A03 peer edit survives velocity cancel",testPeerVelocityCancelPreservesCommittedStep);
  run("V1A04 component-only same-name origin safety",testComponentOnlySameBasenameRejectsStaleOrigin);
  run("PACING long running sample swap audio continuity",testPacedSampleSwapContinuity);
+ run("TORTURE 96 transport stop and locate sequences",testTransportSequenceTorture);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("SOR01 new Step Velocity 100",testNewStepDefault100);
  run("VELO 100 reset existing notes",testVelocityResetPattern);
