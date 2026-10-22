@@ -1001,6 +1001,11 @@ void testPatternDurationClipboard(){
  // Check other direction: 2T copied over an existing 1T pattern.
  KitState reverse=kit;reverse.patternLengths[0]=32;reverse.patternLengths[1]=16;
  f.kit(reverse);
+ // Selecting A explicitly is required: the preceding host-selected C can
+ // legitimately survive Component recall (RE07). The clipboard source
+ // must not depend on the host's prior active pattern.
+ check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk&&
+       f.c->currentPattern()==0,"P19 explicitly select source A after kit recall");
  check(f.c->copyCurrentPattern()&&
        f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&
        f.c->pasteCurrentPattern(),"P19 2T->1T paste");
@@ -1017,6 +1022,8 @@ void testPatternDurationClipboard(){
  matching.grid[kRows*kSteps]=matching.grid[0];
  matching.grid[kRows*kSteps+20]=matching.grid[20];
  f.kit(matching);
+ check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk&&
+       f.c->currentPattern()==0,"P19 explicitly select matching source A");
  check(f.c->copyCurrentPattern()&&
        f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&
        f.c->pasteCurrentPattern(),"P19 length-only paste rejected");
