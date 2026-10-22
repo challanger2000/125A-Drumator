@@ -969,7 +969,18 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      sampleEditorDrag_=3;scrollEditorWave(x);return VSTGUI::kMouseEventHandled;
    }
    if(x>=284&&x<=994&&y>=175&&y<=382){
-     sampleEditorDrag_=(buttons&VSTGUI::kShift)?2:1;
+     const auto visible=static_cast<double>(sampleEditorLast_-sampleEditorFirst_);
+     const auto startX=284.+710.*(static_cast<double>(sampleEditorEdit_.start)-sampleEditorFirst_)/visible;
+     const auto endX=284.+710.*(static_cast<double>(sampleEditorEdit_.end)-sampleEditorFirst_)/visible;
+     const auto startDistance=std::abs(x-startX);
+     const auto endDistance=std::abs(x-endX);
+     // Grab either line directly. When neither is near, Shift explicitly
+     // selects END; ordinary empty-space clicks continue to position START.
+     constexpr double grabRadius=12.;
+     if(endDistance<=grabRadius&&(endDistance<=startDistance||startDistance>grabRadius))
+       sampleEditorDrag_=2;
+     else if(startDistance<=grabRadius)sampleEditorDrag_=1;
+     else sampleEditorDrag_=(buttons&VSTGUI::kShift)?2:1;
      moveSampleMarker(x,sampleEditorDrag_==2);
      return VSTGUI::kMouseEventHandled;
    }
