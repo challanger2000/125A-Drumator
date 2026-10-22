@@ -367,7 +367,7 @@ void testReauditLoadedSwap(){
  std::exception_ptr audioException;
  std::jthread actor([&](std::stop_token stop){
   try {
-   AuditAudioBlock audio;EventList notes;reaudit64Notes(notes,2);
+   AuditAudioBlock audio;EventList notes(64);reaudit64Notes(notes,2);
    audio.data.numSamples=64;
    constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
    double ppq=0.;auto target=Clock::now();
@@ -448,7 +448,7 @@ void testReauditDeadlineMatrix(){
      std::array<float,512> left{},right{};float* channels[2]{left.data(),right.data()};
      AudioBusBuffers output{};output.numChannels=2;output.channelBuffers32=channels;
      ProcessData data{};data.symbolicSampleSize=kSample32;data.numSamples=frames;data.numOutputs=1;data.outputs=&output;
-     EventList notes;reaudit64Notes(notes,16);
+     EventList notes(64);reaudit64Notes(notes,16);
      std::vector<double> times;times.reserve(32);unsigned badPcm=0,allocations=0;
      for(unsigned block=0;block<32;++block){
        data.inputEvents=block==0?&notes:nullptr;
