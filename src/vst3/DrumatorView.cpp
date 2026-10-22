@@ -320,9 +320,12 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
         x<UiCompactLayout::sample.right;
 }
 DrumatorView::~DrumatorView() {
+ if(sampleEditorOpen_)controller_.stopSampleEditPreview();
  controller_.unregisterView(this);
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
+ if(sampleEditorOpen_){controller_.stopSampleEditPreview();sampleEditorOpen_=false;
+   sampleEditorRow_=kRows;sampleEditorDrag_=0;}
  if(laneDragActive_){controller_.endVelocityStroke(false,this);laneDragActive_=false;}
  detailDragControl_=-1;detailDragRow_=kRows;
  activeKnob_=-1;knobRow_=kRows;
@@ -401,6 +404,8 @@ void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
  invalid();
 }
 void DrumatorView::discardTransientEditsForRecall() noexcept {
+ if(sampleEditorOpen_)controller_.stopSampleEditPreview();
+ sampleEditorOpen_=false;sampleEditorRow_=kRows;sampleEditorDrag_=0;
  // Nothrow logical invalidation before the new kit commit. Do not call
  // VSTGUI/Win32 here: closing an EDIT HWND may invoke allocating callbacks.
  laneDragActive_=false;
@@ -989,7 +994,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
    if(y>=535&&y<578) {
      if(x>=570&&x<708){
-       // The existing processor preview is a committed-state preview.
+       // Preview the provisional edit without modifying the saved kit.
        if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_))
          status_="VORHOEREN FEHLGESCHLAGEN";
      }else if(x>=716&&x<855){
@@ -997,6 +1002,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
      }else if(x>=862&&x<1000){
        if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_)){
+         controller_.stopSampleEditPreview();
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
        }else status_="WAV EDIT: PROZESSOR HAT AENDERUNG ABGELEHNT";
      }
