@@ -1621,6 +1621,7 @@ int main(int argc,char** argv){
  run("VFA02 pattern length and grid audio transaction",testFinalAuditPatternLengthRace);
  run("VFA03 peer edit survives velocity cancel",testFinalAuditPeerCancel);
  run("VFA04 complete live sample import",testFinalAuditLiveImport);
+ run("VFA05 zero-frame Stop then continuous-PPQ restart",testFinalAuditZeroFrameStop);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::workflowNotice(qaCaseSummary);

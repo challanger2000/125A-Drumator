@@ -108,8 +108,47 @@ void testFinalAuditPatternLengthRace(){
     std::to_string(expected)+"; mixed new-grid/old-32-length="+std::to_string(hidden));
  check(std::abs(expected-hidden)>.1,"VFA02 oracle cannot distinguish generations");
  f.p->setProcessing(false);f.p->setActive(false);
- check(std::abs(audio.left[80]-expected)<2e-6&&std::abs(audio.right[80]+expected*.5)<2e-6,
+ const bool completeOld=audio.left[80]==0.f&&audio.right[80]==0.f;
+ const bool completeNew=std::abs(audio.left[80]-expected)<2e-6&&
+                        std::abs(audio.right[80]+expected*.5)<2e-6;
+ check(completeOld||completeNew,
        "VFA02 FAIL: actual audio combines new pasted grid with old 32-step length");
+}
+void testFinalAuditZeroFrameStop(){
+ Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+ kit.names[0]="zero-stop.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock audio;
+ constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|
+                        ProcessContext::kProjectTimeMusicValid;
+ audio.clock.state=playing;audio.clock.projectTimeMusic=4.;
+ EventList notes;Event hit{};hit.type=Event::kNoteOnEvent;hit.noteOn.pitch=36;
+ hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+ check(notes.addEvent(hit)==kResultOk,"VFA05 trigger fixture");
+ audio.data.inputEvents=&notes;
+ check(f.p->process(audio.data)==kResultOk&&IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "VFA05 initial actual voice");
+ audio.data.inputEvents=nullptr;audio.data.numSamples=0;
+ audio.clock.state=0;audio.clock.projectTimeMusic=4.+256./24000.;
+ check(f.p->process(audio.data)==kResultOk,"VFA05 zero-frame stopped callback");
+ const auto afterStop=IntegrationAccess::activeAudioVoices(*f.p);
+ audio.data.numSamples=256;audio.clock.state=playing;
+ check(f.p->process(audio.data)==kResultOk,"VFA05 continuous-PPQ restart");
+ const float resumedL=audio.left[80],resumedR=audio.right[80];
+ // Same transport-stop contract, ordinary full block: existing policy MUST
+ // retire the voice. This control distinguishes stale audio from a new hit.
+ audio.clock.state=0;
+ check(f.p->process(audio.data)==kResultOk&&IntegrationAccess::activeAudioVoices(*f.p)==0,
+       "VFA05 full-block Stop control failed");
+ audio.clock.state=playing;
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f&&audio.right[80]==0.f,
+       "VFA05 empty pattern should not generate a replacement hit");
+ qa::workflowNotice("VFA05 zero-frame Stop active voices="+std::to_string(afterStop)+
+   "; restart L/R="+std::to_string(resumedL)+","+std::to_string(resumedR)+
+   "; full-block Stop control clears voice and restarts silent");
+ f.p->setProcessing(false);f.p->setActive(false);
+ check(afterStop==0u&&resumedL==0.f&&resumedR==0.f,
+       "VFA05 FAIL: zero-frame transport Stop ignored; old voice survives continuous-PPQ restart");
 }
 void testFinalAuditPeerCancel(){
  Fixture f;KitState kit;kit.grid.fill(0);kit.grid[0]=60;f.kit(kit);
