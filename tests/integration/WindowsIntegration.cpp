@@ -34,6 +34,8 @@
 #include "vstgui/lib/coffscreencontext.h"
 #include "vstgui/lib/idatapackage.h"
 #include <filesystem>
+#include <algorithm>
+#include <chrono>
 #include <array>
 #include <limits>
 #include <atomic>
@@ -85,6 +87,9 @@ void operator delete(void* p,std::size_t) noexcept{std::free(p);}
 void operator delete[](void* p,std::size_t) noexcept{std::free(p);}
 namespace drumator::qa {
 thread_local bool legacyTriggerOrdering=false;
+std::atomic<AuditMutation> auditMutation{AuditMutation::none};
+std::atomic<const void*> auditImportTarget{nullptr};
+std::atomic<unsigned> auditImportCalls{0},auditDelayCalls{0};
 void probe(Point p) noexcept {
  if(stopPoint.load(std::memory_order_acquire)!=p)return;
  SetEvent(entered);
@@ -123,7 +128,8 @@ struct IntegrationAccess {
      c.muted_,c.solo_,c.gain_,c.pan_,c.pitch_,c.choke_,c.output_,c.visibleRows_,
      c.swingPercent_,c.humanizePercent_,c.masterVolume_,c.randomVelocity_,c.songEnabled_,
      c.clipboard_,c.clipboardLength_,c.clipboardValid_,c.strokeBefore_,c.strokePattern_,c.strokeGeneration_,
-     c.editGeneration(),available,undo,undoLengths,chain,c.songChain_.count(),c.velocityVariation_,c.preferredZoom_,c.getParamNormalized(kPatternParam)};
+     c.editGeneration(),available,undo,undoLengths,chain,c.songChain_.count(),c.velocityVariation_,c.preferredZoom_,c.getParamNormalized(kPatternParam),
+     c.originIdentity_,c.originIdentityValid_,c.pathsRestoredBeforeComponent_,c.strokeOwner_};
  }
  static auto viewSnapshot(DrumatorView& v) {
    VSTGUI::IPlatformTextEdit* platform=nullptr;
@@ -1739,15 +1745,26 @@ void testTransportJumpRetiresOldVoices(){
  f.p->setProcessing(false);f.p->setActive(false);
  evidence("SOR03 native processor timeline jump retires old voice without stopped callback PASS");
 }
+#include "ReauditCases.inl"
 }
 int main(int argc,char** argv){
- if(argc!=2)return 2;
+ if(argc!=2&&argc!=3)return 2;
+ SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
  CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
  moduleHandle=GetModuleHandleW(nullptr);VSTGUI::init(static_cast<HINSTANCE>(moduleHandle));
  auto* platform=VSTGUI::getPlatformFactory().asWin32Factory();
  if(!platform)return 3;platform->setResourceBasePath(VSTGUI::UTF8String(argv[1]));
  entered=CreateEventW(nullptr,TRUE,FALSE,nullptr);resume=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+ if(argc==3){
+   const bool warm=std::strcmp(argv[2],"--reaudit-song-warm")==0;
+   if(!warm&&std::strcmp(argv[2],"--reaudit-song-cold")!=0)return 2;
+   int childResult=0;
+   try{testReauditSongCold(warm);}catch(const std::exception& ex){std::cerr<<ex.what()<<'\n';childResult=3;}
+   CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return childResult;
+ }
+
  int failures=0;
+ std::string auditDiagnostics;drumator::qa::collectedNotices=&auditDiagnostics;
  std::string qaCaseSummary="Executed native integration cases:\n";
  auto run=[&](const std::string& name,const auto& test){
    try{test();const auto line=name+" PASS";evidence(line);qaCaseSummary+=line+'\n';}
@@ -1800,8 +1817,33 @@ int main(int argc,char** argv){
  run("FA06 minimum-height host refusal menus",testAuditMinimumHeightMenus);
  run("SA01 two-view native invalidation after row and global edits",testSecondAuditViewInvalidation);
  run("SA02 actual sequencer/MIDI choke partition",testSecondAuditTriggerPartition);
+ run("RE01 original deterministic VFA02",testReauditPatternLength);
+ run("RE02 original fresh DZM3 matrix",testFinalAuditDzm3);
+ run("RE03 paired duration fallback in Pattern and Song",testReauditDurationFallback);
+ run("RE04 peer FILL survives late Cancel",testReauditPeerFill);
+ run("RE05 component-first recall does not arm next kit",testReauditOriginOrder);
+ run("RE06 reentrant setDirty captures consistent streams",testReauditDirtySave);
+ run("RE07 host pattern feedback before component recall",testReauditHostMirror);
+ run("RE08 independent complete PCM timeline",testReauditPcmTimeline);
+ run("RE09 64 voices live swap locate Stop",testReauditLoadedSwap);
+ run("RE10 actual Processor deadline matrix",testReauditDeadlineMatrix);
+ run("RE11 cold Song overlap cannot divide by zero",[&]{testReauditSongColdChild(argv[1]);});
+ run("RM01 zero Stop repair mutation",[]{expectMutationKilled(qa::AuditMutation::suppressZeroStop,"zero Stop",testZeroFrameStopRetiresVoice);});
+ run("RM02 paired duration repair mutation",[]{expectMutationKilled(qa::AuditMutation::staleDuration,"paired duration",testReauditPatternLength);});
+ run("RM03 peer owner repair mutation",[]{expectMutationKilled(qa::AuditMutation::skipPeerCommit,"peer commit",testPeerVelocityCancelPreservesCommittedStep);});
+ run("RM04 asset identity repair mutation",[]{expectMutationKilled(qa::AuditMutation::basenameOnly,"asset identity",testComponentOnlySameBasenameRejectsStaleOrigin);});
+ run("RM05 TORTURE missing MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::dropMidi,"TORTURE missing MIDI",testTransportSequenceTorture);});
+ run("RM06 TORTURE duplicate MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::doubleMidi,"TORTURE doubled MIDI",testTransportSequenceTorture);});
+ run("RM07 TORTURE one-sample delay mutation",[]{expectMutationKilled(qa::AuditMutation::delayMidiOne,"TORTURE one-sample delay",testTransportSequenceTorture);});
+ run("RM08 TORTURE missing prefix mutation",[]{expectMutationKilled(qa::AuditMutation::zeroPrefix,"TORTURE zero first32",testTransportSequenceTorture);});
+ run("RM09 PACING accepted import no-op mutation",[]{expectMutationKilled(qa::AuditMutation::skipImport,"PACING import no-op",testPacedSampleSwapContinuity);});
+ run("RM10 PACING active dropout mutation",[]{expectMutationKilled(qa::AuditMutation::muteImportedProcessor,"PACING active-only dropout",testPacedSampleSwapContinuity);});
+ run("RM11 independent PCM detects offset and gaps",testReauditPcmNegatives);
+ run("RM12 PACING deadline diagnostic injection",testReauditDeadlineDiagnostic);
+ run("RM13 loaded swap detects ignored replacement",[]{expectMutationKilled(qa::AuditMutation::skipImport,"64 voice audible replacement",testReauditLoadedSwap);});
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
- drumator::qa::workflowNotice(qaCaseSummary);
+ drumator::qa::collectedNotices=nullptr;
+ drumator::qa::workflowNotice(qaCaseSummary+"\nDetailed audit diagnostics:\n"+auditDiagnostics);
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
 }
