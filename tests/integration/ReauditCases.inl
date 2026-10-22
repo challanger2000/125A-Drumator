@@ -364,7 +364,9 @@ void testReauditLoadedSwap(){
  std::atomic<unsigned> blocks{0},errors{0},badPcm{0},allocations{0},duringImport{0};
  std::atomic<bool> loading{false},ready{false};
  std::vector<double> times;times.reserve(500);
+ std::exception_ptr audioException;
  std::jthread actor([&](std::stop_token stop){
+  try {
    AuditAudioBlock audio;EventList notes;reaudit64Notes(notes,2);
    audio.data.numSamples=64;
    constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
@@ -403,6 +405,11 @@ void testReauditLoadedSwap(){
      target+=std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(64./48000.));
      std::this_thread::sleep_until(target);
    }
+  }catch(...) {
+    audioException=std::current_exception();
+    ++errors;
+    ready.store(true,std::memory_order_release);
+  }
  });
  while(blocks.load()<4&&errors.load()==0)std::this_thread::yield();
  for(unsigned swap=0;swap<12;++swap){
@@ -411,6 +418,11 @@ void testReauditLoadedSwap(){
    loading=false;
  }
  ready=true;actor.join();
+ if(audioException) {
+   try {std::rethrow_exception(audioException);}
+   catch(const std::exception& ex) {throw std::runtime_error(std::string("RE09 audio-thread exception: ")+ex.what());}
+   catch(...) {throw std::runtime_error("RE09 audio-thread nonstandard exception");}
+ }
  reauditTiming("RE09 48k/64, 64 voices ratio4, 12 actual 2.4MB imports",times,64./48000.*1000.);
  qa::workflowNotice("RE09 blocks="+std::to_string(blocks.load())+" callbacks-during-import="+
     std::to_string(duringImport.load())+" PCM-errors="+std::to_string(badPcm.load())+
