@@ -52,9 +52,9 @@ public:
  bool isRowSolo(std::size_t row) const noexcept {return row<kRows&&solo_[row];}
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
- bool setStepVelocity(std::size_t pattern,std::size_t row,std::size_t step,std::uint8_t velocity);
- void beginVelocityStroke(std::size_t p);
- void endVelocityStroke(bool commit);
+ bool setStepVelocity(std::size_t pattern,std::size_t row,std::size_t step,std::uint8_t velocity,const void* owner=nullptr);
+ void beginVelocityStroke(std::size_t p,const void* owner=nullptr);
+ void endVelocityStroke(bool commit,const void* owner=nullptr);
  bool changePattern(std::size_t pattern);
  bool togglePatternLength(std::size_t pattern);
  std::uint8_t patternLength(std::size_t p) const noexcept {return p<kPatterns?patternLengths_[p]:32;}
@@ -128,6 +128,7 @@ private:
  KitEditGeneration editGeneration_{};
  KitEditGeneration::Token strokeGeneration_{0};
  std::size_t strokePattern_{kPatterns};
+ const void* strokeOwner_{nullptr};
  bool clipboardValid_{false};
  bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true,
                      std::uint8_t requestedLength=0);
