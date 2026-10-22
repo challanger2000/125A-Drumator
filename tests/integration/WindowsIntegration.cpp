@@ -1432,6 +1432,26 @@ void testRealSampleFolderStepping(){
        IntegrationAccess::paths(*f.c)[0]==aPath&&
        snapshot().wav[0]==wavA,
        "N12 next did not wrap after invalid final file");
+ // SOR02: restore both VST3 state streams and retain the original folder.
+ ResizableMemoryIBStream componentState;
+ ResizableMemoryIBStream controllerState;
+ check(f.p->getState(&componentState)==kResultOk&&
+       f.c->getState(&controllerState)==kResultOk,
+       "SOR02 could not capture host project state");
+ componentState.seek(0,IBStream::kIBSeekSet,nullptr);
+ controllerState.seek(0,IBStream::kIBSeekSet,nullptr);
+ check(f.c->setComponentState(&componentState)==kResultOk&&
+       IntegrationAccess::paths(*f.c)[0].empty(),
+       "SOR02 kit recall must clear old session path");
+ check(f.c->setState(&controllerState)==kResultOk&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 controller state did not restore browsing origin");
+ check(f.c->stepSample(0,+1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==cPath,
+       "SOR02 next sample failed after two-stream project recall");
+ check(f.c->stepSample(0,-1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 previous sample failed after project recall");
  const auto previous=snapshot();
  check(f.c->stepSample(0,0)==Controller::LoadStatus::Rejected&&
        f.c->stepSample(1,+1)==Controller::LoadStatus::NotFound&&
