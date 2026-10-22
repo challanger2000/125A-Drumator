@@ -140,9 +140,10 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  if(target&&!target->applyZoomFromState(requested))return Steinberg::kResultFalse;
  preferredZoom_=requested;
  samplePaths_.swap(candidatePaths);
- // This controller stream may precede its matching component stream.
- // The next component commit may retain these explicit saved origins.
- pathsRestoredBeforeComponent_=true;
+ // A component restored immediately before this controller stream completes
+ // the other legal host order. Never leave a one-shot origin permission armed.
+ pathsRestoredBeforeComponent_=!componentStatePendingController_;
+ componentStatePendingController_=false;
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
@@ -211,7 +212,12 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
       originIdentity_[row]=identity;
       originIdentityValid_[row]=!path.empty();
     }
-    pathsRestoredBeforeComponent_=false;
+    if(pathsRestoredBeforeComponent_) {
+      pathsRestoredBeforeComponent_=false;
+      componentStatePendingController_=false;
+    }else {
+      componentStatePendingController_=true;
+    }
     visibleRows_=candidate.visible;
     swingPercent_=candidate.swing;
     humanizePercent_=candidate.humanize;
@@ -951,6 +957,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  originIdentity_[row]=wavIdentity(data);
  originIdentityValid_[row]=true;
  pathsRestoredBeforeComponent_=false;
+ componentStatePendingController_=false;
  notifyViews(false);
  return LoadStatus::Accepted;
  }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
