@@ -136,6 +136,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       (steps!=16&&steps!=32))return Steinberg::kInvalidArgument;
    const auto i=static_cast<std::size_t>(index);
    {std::lock_guard<std::mutex> guard(kitMutex_);
+    if(!patterns_.setLength(i,static_cast<std::uint8_t>(steps)))return Steinberg::kResultFalse;
     kit_.patternLengths[i]=static_cast<std::uint8_t>(steps);
     patternLengths_[i].store(static_cast<std::uint8_t>(steps),std::memory_order_release);
    }
@@ -358,7 +359,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    const auto index=static_cast<std::size_t>(target);
    // The exporter holds kitMutex_ before the pattern-bank write lock.
    std::lock_guard<std::mutex> guard(kitMutex_);
-   if(!patterns_.replacePattern(index,values,count))return Steinberg::kResultFalse;
+   if(!patterns_.replacePattern(index,values,count,
+        updateLength?static_cast<std::uint8_t>(desiredLength):0))return Steinberg::kResultFalse;
    if(updateLength) {
       const auto length=static_cast<std::uint8_t>(desiredLength);
       patternLengths_[index].store(length,std::memory_order_release);
@@ -774,15 +776,17 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    std::uint32_t activePattern=selected_.load(std::memory_order_relaxed);
    std::array<std::uint8_t,kPatterns> lengths{};
    for(std::size_t i=0;i<kPatterns;++i)
-     lengths[i]=patternLengths_[i].load(std::memory_order_acquire);
+     lengths[i]=audioPatternValid_[i]?audioPatternLengthCache_[i]:32;
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
      if(finish<=cursor)return;
      // Read exactly one generation; a concurrently replaced pattern is
      // deferred to a later block rather than rendered in a mixed state.
      std::array<std::uint8_t,kRows*kSteps> consistent{};
-     if(patterns_.coherentPattern(activePattern,consistent)) {
+     std::uint8_t coherentLength=32;
+     if(patterns_.coherentPattern(activePattern,consistent,coherentLength)) {
        audioPatternCache_[activePattern]=consistent;
+       audioPatternLengthCache_[activePattern]=coherentLength;
        audioPatternValid_[activePattern]=true;
      }else if(audioPatternValid_[activePattern]) {
        // A controller-side edit must not mute an otherwise valid audio block.
@@ -791,6 +795,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        // No previously validated generation exists; never render a partial edit.
        cursor=finish;return;
      }
+     lengths[activePattern]=audioPatternLengthCache_[activePattern];
      struct CoherentView {
        const std::array<std::uint8_t,kRows*kSteps>& values;
        std::uint8_t program;
@@ -826,12 +831,16 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      if(audioSongEnabled_) {
        for(std::size_t program=0;program<kPatterns;++program){
          std::array<std::uint8_t,kRows*kSteps> coherent{};
-         if(patterns_.coherentPattern(program,coherent)){
+         std::uint8_t coherentSongLength=32;
+         if(patterns_.coherentPattern(program,coherent,coherentSongLength)){
            audioPatternCache_[program]=coherent;
+           audioPatternLengthCache_[program]=coherentSongLength;
            audioPatternValid_[program]=true;
          }
-         if(audioPatternValid_[program])
+         if(audioPatternValid_[program]) {
            songPrograms[program]=audioPatternCache_[program];
+           lengths[program]=audioPatternLengthCache_[program];
+         }
        }
      }
      auto emitTrigger=[&](Trigger hit){
@@ -1071,7 +1080,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     // scheduler must never observe a half-restored pattern.
     for(std::size_t p=0;p<kPatterns;++p)
       if(!patterns_.replacePattern(p,
-             kit_.grid.data()+p*kRows*kSteps,kRows*kSteps))
+             kit_.grid.data()+p*kRows*kSteps,kRows*kSteps,kit_.patternLengths[p]))
         return Steinberg::kResultFalse;
     selected_.restoreIfUnchanged(selectionAtStart,kit_.selected);
     patterns_.select(kit_.selected);
