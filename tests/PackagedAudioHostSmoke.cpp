@@ -204,7 +204,8 @@ int main(int argc,char** argv) {
  // F15: host-owned controller state persists the user zoom preference.
  Steinberg::ResizableMemoryIBStream controllerZoom;
  require(ctrl->getState(&controllerZoom)==kResultOk&&
-         controllerZoom.getCursor()==5,"F15 initial zoom preference state");
+         controllerZoom.getCursor()==5+2*drumator::kRows,
+         "F15 initial DZM3 zoom preference state");
  std::array<std::uint8_t,5> zoom150State{{0x44,0x5a,0x4d,0x31,1}};
  Steinberg::ResizableMemoryIBStream zoomRecall;
  Steinberg::int32 zoomBytes=0;
@@ -213,9 +214,12 @@ int main(int argc,char** argv) {
  zoomRecall.rewind();
  require(ctrl->setState(&zoomRecall)==kResultOk,"F15 restore 150 percent zoom");
  Steinberg::ResizableMemoryIBStream zoomSaved;
- require(ctrl->getState(&zoomSaved)==kResultOk&&zoomSaved.getCursor()==5&&
-         std::memcmp(zoomSaved.getData(),zoom150State.data(),5)==0,
-         "F15 zoom preference failed roundtrip");
+ require(ctrl->getState(&zoomSaved)==kResultOk&&
+         zoomSaved.getCursor()==5+2*drumator::kRows,
+         "F15 DZM3 zoom preference failed roundtrip size");
+ const auto* z=static_cast<const std::uint8_t*>(zoomSaved.getData());
+ require(z[0]=='D'&&z[1]=='Z'&&z[2]=='M'&&z[3]=='3'&&z[4]==1,
+         "F15 legacy DZM1 zoom recall was not upgraded to DZM3");
  std::cout<<"F15 controller zoom preference project-state PASS\\n";
  require(controlPoint->connect(processorPoint)==kResultOk,"Controller connection");
  require(processorPoint->connect(controlPoint)==kResultOk,"Processor connection");
