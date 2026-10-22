@@ -807,10 +807,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(panel);c->drawRect({284,175,994,382},VSTGUI::kDrawFilled);
    c->setFrameColor(border);c->drawLine({284,278},{994,278});
    for(std::size_t i=0;i<sampleEditorWave_.size();++i) {
-     const auto& range=sampleEditorWave_[i];
+     const auto& wavePeak=sampleEditorWave_[i];
      const double x=284.+710.*static_cast<double>(i)/sampleEditorWave_.size();
      c->setFrameColor(accent);
-     c->drawLine({x,278.-range.maximum*96.},{x,278.-range.minimum*96.});
+     c->drawLine({x,278.-wavePeak.maximum*96.},{x,278.-wavePeak.minimum*96.});
    }
    const auto sx=284.+710.*sampleEditorEdit_.start/sampleEditorFrames_;
    const auto ex=284.+710.*sampleEditorEdit_.end/sampleEditorFrames_;
@@ -928,7 +928,6 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
 
  if(sampleEditorOpen_) {
-   const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
    if(x>=284&&x<=994&&y>=175&&y<=382){
      sampleEditorDrag_=(buttons&VSTGUI::kShift)?2:1;
      moveSampleMarker(x,sampleEditorDrag_==2);
