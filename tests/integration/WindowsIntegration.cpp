@@ -1538,6 +1538,24 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+void testPeerVelocityCancelPreservesCommittedStep(){
+ Fixture f;KitState kit;kit.grid.fill(0);kit.grid[0]=60;f.kit(kit);
+ f.open();f.open();
+ auto* first=IntegrationAccess::view(*f.c,0);
+ auto* peer=IntegrationAccess::view(*f.c,1);
+ click(*first,1248.,168.);
+ click(*first,630.,214.);
+ check(std::get<0>(IntegrationAccess::viewSnapshot(*first)),
+       "V1A03 first view gesture absent");
+ click(*peer,630.,108.+94.+60.);
+ check(f.c->velocity(0,1,0)==100,
+       "V1A03 peer step was not committed");
+ first->onMouseCancel();
+ check(f.c->velocity(0,1,0)==100,
+       "V1A03 late Cancel erased second view step");
+ check(f.c->velocity(0,0,0)==60,
+       "V1A03 peer commit left unexpected own-step value");
+}
 void testZeroFrameStopRetiresVoice(){
  Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
  kit.names[0]="zero-stop.wav";kit.wav[0]=constantStereo(.25f,-.5f);
@@ -1616,6 +1634,7 @@ int main(int argc,char** argv){
  run("T28 rate-switch transport clock reset",testRateChangeTransportReset);
  run("SOR03 host timeline jump voice cleanup",testTransportJumpRetiresOldVoices);
  run("SOR03Z zero-frame stop retires old voices",testZeroFrameStopRetiresVoice);
+ run("V1A03 peer edit survives velocity cancel",testPeerVelocityCancelPreservesCommittedStep);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("SOR01 new Step Velocity 100",testNewStepDefault100);
  run("VELO 100 reset existing notes",testVelocityResetPattern);
