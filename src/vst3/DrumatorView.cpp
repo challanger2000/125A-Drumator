@@ -292,7 +292,7 @@ void DrumatorView::closeTransientMenus() noexcept {
 }
 bool DrumatorView::toggleRowVelocity(std::size_t row) {
  if(row>=controller_.visibleRows())return false;
- if(laneDragActive_){controller_.endVelocityStroke(false);laneDragActive_=false;}
+ if(laneDragActive_){controller_.endVelocityStroke(false,this);laneDragActive_=false;}
  const auto previous=velocityExpanded_[row];
  velocityExpanded_[row]=!previous;
  if(!adjustEditorHeight()){
@@ -322,7 +322,7 @@ DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
- if(laneDragActive_){controller_.endVelocityStroke(false);laneDragActive_=false;}
+ if(laneDragActive_){controller_.endVelocityStroke(false,this);laneDragActive_=false;}
  detailDragControl_=-1;detailDragRow_=kRows;
  activeKnob_=-1;knobRow_=kRows;
  closeTransientMenus();
@@ -1118,10 +1118,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         }
         laneDragPattern_=controller_.currentPattern();
         laneDragGeneration_=controller_.editGeneration();
-        controller_.beginVelocityStroke(laneDragPattern_);
+        controller_.beginVelocityStroke(laneDragPattern_,this);
         laneDragActive_=true;laneErase_=(buttons&VSTGUI::kControl)!=0;
         if(!controller_.setStepVelocity(laneDragPattern_,row,velocityStep_,
-               UiCompactLayout::velocityAt(y,top,laneErase_)))
+               UiCompactLayout::velocityAt(y,top,laneErase_),this))
           status_="VELOCITY NICHT UEBERNOMMEN";
         invalid();return VSTGUI::kMouseEventHandled;
       }
@@ -1240,13 +1240,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
  if(laneDragGeneration_!=controller_.editGeneration()||
     laneDragPattern_!=controller_.currentPattern()){
    if(laneDragGeneration_==controller_.editGeneration())
-     controller_.endVelocityStroke(false);
+     controller_.endVelocityStroke(false,this);
    laneDragActive_=false;laneDragGeneration_=0;
    return VSTGUI::kMouseEventHandled;
  }
  if(!(buttons&VSTGUI::kLButton)){
    laneDragActive_=false;laneDragGeneration_=0;
-   controller_.endVelocityStroke(true);
+   controller_.endVelocityStroke(true,this);
    return VSTGUI::kMouseEventHandled;
  }
  const auto step=UiCompactLayout::stepAt(pos.x);
@@ -1260,7 +1260,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
  if(controller_.velocity(laneDragPattern_,velocityRow_,velocityStep_)==0)
    return VSTGUI::kMouseEventHandled;
  const auto value=UiCompactLayout::velocityAt(pos.y,rowTopOnPage(idx),laneErase_);
- if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,velocityStep_,value))
+ if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,velocityStep_,value,this))
    status_="VELOCITY-ZIEHEN NICHT UEBERNOMMEN";
  invalid();return VSTGUI::kMouseEventHandled;
 }
@@ -1274,8 +1274,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
  const bool generationValid=laneDragGeneration_==controller_.editGeneration();
  const bool fresh=generationValid&&laneDragPattern_==controller_.currentPattern();
  laneDragActive_=false;laneDragGeneration_=0;
- if(fresh)controller_.endVelocityStroke(true);
- else if(generationValid)controller_.endVelocityStroke(false);
+ if(fresh)controller_.endVelocityStroke(true,this);
+ else if(generationValid)controller_.endVelocityStroke(false,this);
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
@@ -1284,7 +1284,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
  const bool fresh=laneDragActive_&&
                   laneDragGeneration_==controller_.editGeneration();
  laneDragActive_=false;laneDragGeneration_=0;
- if(fresh)controller_.endVelocityStroke(false);
+ if(fresh)controller_.endVelocityStroke(false,this);
  invalid();return VSTGUI::kMouseEventHandled;
 }
 
