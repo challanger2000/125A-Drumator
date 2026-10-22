@@ -322,8 +322,35 @@ void testWavEditorPreviewAndRecall(){
  check(f.c->sampleEditorSnapshot(0,observed,frames,peaks)&&
        observed.start==64&&observed.end==512&&observed.gain==.5f,
        "WE01 recalled editor state differs");
+ // Repeat native editor attach/detach while snapshots and previews are active.
+ for(unsigned cycle=0;cycle<3;++cycle){
+   f.open();
+   check(f.c->sampleEditorSnapshot(0,observed,frames,peaks),
+         "WE02 editor re-open lost WAV snapshot");
+   check(f.c->previewSampleEdit(0,candidate),"WE02 repeated preview rejected");
+   check(f.p->process(block)==kResultOk,"WE02 repeated preview render");
+   f.closeLast();
+   f.c->stopSampleEditPreview();
+   check(f.p->process(block)==kResultOk,"WE02 stopped preview after detach");
+   check(std::abs(left[100])<1e-6f,"WE02 orphaned preview after editor close");
+ }
+ // Valid host transport clock must not suppress a provisional audition.
+ ProcessContext clock{};clock.tempo=120.;clock.projectTimeMusic=0.;
+ clock.state=ProcessContext::kPlaying|ProcessContext::kTempoValid|
+             ProcessContext::kProjectTimeMusicValid;
+ block.processContext=&clock;
+ check(f.c->previewSampleEdit(0,candidate),"WE03 transport preview rejected");
+ check(f.p->process(block)==kResultOk,"WE03 transport preview render");
+ check(std::abs(left[100]-.25f)<.005f&&
+       std::abs(right[100]+.125f)<.005f,
+       "WE03 running transport provisional output wrong");
+ check(getKit().sampleEdits[0].start==64,"WE03 preview changed saved kit");
+ f.c->stopSampleEditPreview();clock.projectTimeMusic+=256./48000.;
+ check(f.p->process(block)==kResultOk,"WE03 transport preview stop");
+ check(std::abs(left[100])<1e-6f,"WE03 stopped preview still audible");
+ block.processContext=nullptr;
  f.p->setProcessing(false);f.p->setActive(false);
- evidence("WE01 stopped audition, cancel, state neutrality, OK and DM16 recall PASS");
+ evidence("WE01-03 provisional audition stopped/running transport, 3 view cycles and DM16 recall PASS");
 }
 void testArbitration(bool zero,bool busy,const std::vector<unsigned>& points){
  Fixture f;auto old=namedKit('X');old.selected=2;f.kit(old);prepareAudio(*f.p);
