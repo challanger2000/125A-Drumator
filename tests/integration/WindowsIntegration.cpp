@@ -48,6 +48,7 @@
 #include <tuple>
 #include <vector>
 #include <cmath>
+#include <chrono>
 
 void* moduleHandle=nullptr; // SDK moduleinit platform handle, EXE fixture only.
 namespace {
@@ -1538,6 +1539,7 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+#include "FinalIndependentAuditCases.inl"
 void testTransportJumpRetiresOldVoices(){
  Fixture f;
  KitState kit;kit.visible=1;kit.grid.fill(0);kit.grid[0]=100;
@@ -1615,6 +1617,10 @@ int main(int argc,char** argv){
  run("FA06 minimum-height host refusal menus",testAuditMinimumHeightMenus);
  run("SA01 two-view native invalidation after row and global edits",testSecondAuditViewInvalidation);
  run("SA02 actual sequencer/MIDI choke partition",testSecondAuditTriggerPartition);
+ run("VFA01 fresh DZM3 two-stream recall",testFinalAuditDzm3);
+ run("VFA02 pattern length and grid audio transaction",testFinalAuditPatternLengthRace);
+ run("VFA03 peer edit survives velocity cancel",testFinalAuditPeerCancel);
+ run("VFA04 complete live sample import",testFinalAuditLiveImport);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::workflowNotice(qaCaseSummary);

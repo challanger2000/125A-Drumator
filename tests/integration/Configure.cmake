@@ -27,6 +27,8 @@ foreach(_name DrumatorController DrumatorView DrumatorProcessor)
   file(WRITE "${_qa}/vst3/${_name}.h" "${_header}")
   file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/vst3/${_name}.cpp" _source)
   if(_name STREQUAL "DrumatorProcessor")
+    qa_replace(_source "std::int32_t cursor=0;"
+      "std::int32_t cursor=0;\n   drumator::qa::probe(drumator::qa::auditAfterLengthRead);")
     qa_replace(_source "const auto selectionAtStart=selected_.snapshot();"
       "const auto selectionAtStart=selected_.snapshot();\n    drumator::qa::probe(drumator::qa::restoreSnapshot);")
     qa_replace(_source "previewPending_.store(0,std::memory_order_release);\n    kit_=std::move(candidate);"
