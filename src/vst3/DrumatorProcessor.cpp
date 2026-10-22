@@ -576,6 +576,17 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    }
    return Steinberg::kResultOk;
  }
+ // A valid zero-frame callback can itself be the host's only Stop edge.
+ // Observe the explicit transport transition before the parameter-only
+ // fast path; otherwise old voices survive a continuous-PPQ restart.
+ // Never interpret a missing optional ProcessContext as an explicit Stop.
+ if(data.numSamples==0&&data.processContext&&wasPlaying_&&
+    (data.processContext->state&Steinberg::Vst::ProcessContext::kPlaying)==0) {
+   voices_.reset();
+   wasPlaying_=false;
+   haveExpectedPpq_=false;
+   previewPending_.store(0,std::memory_order_release);
+ }
  // Hosts may flush discrete automation without providing any audio buffers.
  if(data.numSamples==0||data.numOutputs==0) {
    // A nonzero block without output buses still carries genuine host and
