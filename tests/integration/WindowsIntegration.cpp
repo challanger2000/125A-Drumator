@@ -1538,6 +1538,30 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+void testComponentOnlySameBasenameRejectsStaleOrigin(){
+ Fixture f;
+ const auto directory=std::filesystem::current_path()/"125A-v1a04-source";
+ std::filesystem::create_directories(directory);
+ const auto source=directory/"kick.wav";
+ {
+   const auto bytes=constantStereo(.25f,-.5f);
+   std::ofstream out(source,std::ios::binary);
+   out.write(reinterpret_cast<const char*>(bytes.data()),
+             static_cast<std::streamsize>(bytes.size()));
+   check(out.good(),"V1A04 write source WAV");
+ }
+ check(f.c->loadWav(0,pathToUtf8(source))==Controller::LoadStatus::Accepted,
+       "V1A04 load source via real controller");
+ check(!IntegrationAccess::paths(*f.c)[0].empty(),
+       "V1A04 expected original navigation path");
+ KitState other;other.grid.fill(0);other.visible=1;
+ other.names[0]="kick.wav";other.wav[0]=constantStereo(-.125f,.375f);
+ const auto state=Fixture::encode(other);
+ check(f.recall(state)==kResultOk,"V1A04 component-only different kit recall");
+ check(IntegrationAccess::paths(*f.c)[0].empty(),
+       "V1A04 component-only recall retained stale same-basename origin");
+ std::error_code ec;std::filesystem::remove_all(directory,ec);
+}
 void testPeerVelocityCancelPreservesCommittedStep(){
  Fixture f;KitState kit;kit.grid.fill(0);kit.grid[0]=60;f.kit(kit);
  f.open();f.open();
@@ -1638,6 +1662,7 @@ int main(int argc,char** argv){
  run("SOR03 host timeline jump voice cleanup",testTransportJumpRetiresOldVoices);
  run("SOR03Z zero-frame stop retires old voices",testZeroFrameStopRetiresVoice);
  run("V1A03 peer edit survives velocity cancel",testPeerVelocityCancelPreservesCommittedStep);
+ run("V1A04 component-only same-name origin safety",testComponentOnlySameBasenameRejectsStaleOrigin);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("SOR01 new Step Velocity 100",testNewStepDefault100);
  run("VELO 100 reset existing notes",testVelocityResetPattern);

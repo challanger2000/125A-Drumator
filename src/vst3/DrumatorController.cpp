@@ -25,6 +25,12 @@
 #include <vector>
 
 namespace drumator {
+// FNV-1a used only for control-side asset identity (not a security hash).
+static std::uint64_t wavIdentity(const std::vector<std::uint8_t>& data) noexcept {
+ std::uint64_t h=14695981039346656037ull;
+ for(const auto byte:data){h^=byte;h*=1099511628211ull;}
+ return h;
+}
 // Maintain pre-existing saved host automation thresholds while exposing
 // coherent A-H text and normalized-to-plain mapping.
 class LegacyPatternParameter final : public Steinberg::Vst::StringListParameter {
@@ -132,6 +138,9 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  if(target&&!target->applyZoomFromState(requested))return Steinberg::kResultFalse;
  preferredZoom_=requested;
  samplePaths_.swap(candidatePaths);
+ // This controller stream may precede its matching component stream.
+ // The next component commit may retain these explicit saved origins.
+ pathsRestoredBeforeComponent_=true;
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
@@ -184,17 +193,23 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     stagedNames.commit(customNames_,labels_);
     undo_.reset();
     clipboardValid_=false;
-    // Hosts may restore Controller::setState before setComponentState or vice versa.
-    // Retain a browsing origin only when its basename matches the embedded kit.
-    // This is pure string validation, without filesystem I/O during state commit.
+    // Component-only recall MUST NOT inherit a stale same-named sample origin.
+    // Paired Controller-before-Component recall is explicitly allowed once;
+    // otherwise only an identical previously observed asset can retain origin.
     for(std::size_t row=0;row<kRows;++row) {
       auto& path=samplePaths_[row];
-      const auto last=path.find_last_of("/\\");
-      const auto start=last==std::string::npos?0:last+1;
-      if(candidate.names[row].empty()||
-         path.compare(start,std::string::npos,candidate.names[row])!=0)
+      const auto last=path.find_last_of("/\\\\");
+      const auto begin=last==std::string::npos?0:last+1;
+      const auto identity=wavIdentity(candidate.wav[row]);
+      const bool sameName=!candidate.names[row].empty()&&
+          path.compare(begin,std::string::npos,candidate.names[row])==0;
+      if(!sameName||(!pathsRestoredBeforeComponent_&&
+                     (!originIdentityValid_[row]||originIdentity_[row]!=identity)))
         path.clear();
+      originIdentity_[row]=identity;
+      originIdentityValid_[row]=!path.empty();
     }
+    pathsRestoredBeforeComponent_=false;
     visibleRows_=candidate.visible;
     swingPercent_=candidate.swing;
     humanizePercent_=candidate.humanize;
@@ -931,6 +946,9 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  // next audio block; no claim is made that the buffer has already rendered.
  labels_[row].swap(name);
  samplePaths_[row].swap(stagedPath);
+ originIdentity_[row]=wavIdentity(data);
+ originIdentityValid_[row]=true;
+ pathsRestoredBeforeComponent_=false;
  notifyViews(false);
  return LoadStatus::Accepted;
  }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
