@@ -218,7 +218,7 @@ int main(int argc,char** argv) {
          zoomSaved.getCursor()==5+2*drumator::kRows,
          "F15 DZM3 zoom preference failed roundtrip size");
  const auto* z=static_cast<const std::uint8_t*>(zoomSaved.getData());
- require(z[0]=='D'&&z[1]=='Z'&&z[2]=='M'&&z[3]=='3'&&z[4]==1,
+ require(z[0]=='D'&&z[1]=='Z'&&z[2]=='M'&&z[3]=='3'&&z[4]==3,
          "F15 legacy DZM1 zoom recall was not upgraded to DZM3");
  std::cout<<"F15 controller zoom preference project-state PASS\\n";
  require(controlPoint->connect(processorPoint)==kResultOk,"Controller connection");
