@@ -892,6 +892,25 @@ void testVelocityInactiveBarProtection(){
        "V16 2T undo did not recover hidden velocities");
  evidence("V16 active 1T VELO VARIIEREN/100 preserves second bar; 2T and Undo PASS");
 }
+void testNewStepDefault100(){
+ Fixture f;
+ auto kit=namedKit('X',4);
+ kit.grid.fill(0);
+ f.kit(kit);f.open();
+ check(f.c->velocity(0,0,2)==0,"default step fixture not empty");
+ check(f.c->toggleStep(0,0,2),"new step toggle rejected");
+ check(f.c->velocity(0,0,2)==100,"new step did not receive Velocity 100");
+ check(f.c->toggleStep(0,0,2)&&f.c->velocity(0,0,2)==0,
+       "second step click must disable note");
+ check(f.c->setStepVelocity(0,0,2,37),"setup explicit Velocity 37 failed");
+ check(f.c->toggleStep(0,0,2)&&f.c->velocity(0,0,2)==0,
+       "click on existing non-default Velocity must disable note");
+ check(f.c->toggleStep(0,0,2)&&f.c->velocity(0,0,2)==100,
+       "recreated step must use default Velocity 100");
+ check(f.c->velocity(0,1,2)==0&&f.c->velocity(1,0,2)==0,
+       "toggle changed another row or pattern");
+ evidence("SOR01 real Controller toggles 0 -> 100 -> 0; previous non-default 37 -> 0 -> 100 PASS");
+}
 void testVelocityResetPattern(){
  Fixture f;
  auto kit=namedKit('X',4);
@@ -1514,7 +1533,8 @@ int main(int argc,char** argv){
  run("P19 1T/2T copy-paste-duplicate duration",testPatternDurationClipboard);
  run("T28 rate-switch transport clock reset",testRateChangeTransportReset);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
-  run("VELO 100 reset existing notes",testVelocityResetPattern);
+  run("SOR01 new Step Velocity 100",testNewStepDefault100);
+ run("VELO 100 reset existing notes",testVelocityResetPattern);
  run("V16 1T hidden velocity preservation",testVelocityInactiveBarProtection);
  run("V17 1T row FILL/CLEAR hidden-step protection",testFillActivePatternLength);
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
