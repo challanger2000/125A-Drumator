@@ -825,15 +825,24 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawLine({sx,175},{sx,382});
    c->setFrameColor(letters);c->drawLine({ex,175},{ex,382});
    c->setLineWidth(1.);
+   // Scrollbar is proportional to the visible source-frame interval.
+   constexpr double scrollX=284.,scrollWidth=710.;
+   c->setFillColor(off);c->drawRect({scrollX,387,scrollX+scrollWidth,402},VSTGUI::kDrawFilled);
+   const double thumbWidth=scrollWidth*
+       static_cast<double>(sampleEditorLast_-sampleEditorFirst_)/sampleEditorFrames_;
+   const double thumbX=scrollX+scrollWidth*
+       static_cast<double>(sampleEditorFirst_)/sampleEditorFrames_;
+   c->setFillColor(accent);
+   c->drawRect({thumbX,387,thumbX+thumbWidth,402},VSTGUI::kDrawFilled);
    char info[180]{};
    std::snprintf(info,sizeof(info),"START %u   ENDE %u   FADE IN %u   FADE OUT %u   GAIN %u%%",
         sampleEditorEdit_.start,sampleEditorEdit_.end,
         sampleEditorEdit_.fadeIn,sampleEditorEdit_.fadeOut,
         static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   c->drawString(info,{270,391,1020,420});
+   c->drawString(info,{270,406,1020,430});
    c->drawString("WELLENFORM: KLICK START, SHIFT+KLICK ENDE; MARKER ZIEHEN",
-                 {275,423,1020,446});
+                 {275,430,1020,451});
    const char* editButtons[]={"FADE IN -","FADE IN +","FADE OUT -","FADE OUT +",
                               "GAIN -","GAIN +","RESET"};
    for(int i=0;i<7;++i)drawControl(c,{265.+i*108.,458,369.+i*108.,493},editButtons[i]);
@@ -932,6 +941,23 @@ void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  invalid();
 }
 
+bool DrumatorView::scrollEditorWave(double x) {
+ if(!sampleEditorOpen_||!sampleEditorFrames_)return false;
+ const auto span=sampleEditorLast_-sampleEditorFirst_;
+ if(span>=sampleEditorFrames_)return true;
+ const double fraction=std::clamp((x-284.)/710.,0.,1.);
+ const auto center=static_cast<std::uint32_t>(
+     std::llround(static_cast<double>(sampleEditorFrames_)*fraction));
+ const auto start=center>span/2?center-span/2:0u;
+ const auto next=std::min(start,sampleEditorFrames_-span);
+ if(next==sampleEditorFirst_)return true;
+ auto wave=sampleEditorWave_;
+ SampleEdit ignored;std::uint32_t count=0;
+ if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,count,wave,next,next+span)||
+    count!=sampleEditorFrames_){status_="SCROLL: WAVEFORM NICHT LESBAR";return false;}
+ sampleEditorFirst_=next;sampleEditorLast_=next+span;sampleEditorWave_=wave;
+ invalid();return true;
+}
 VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  const double x=pos.x,y=pos.y;
@@ -939,6 +965,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
 
  if(sampleEditorOpen_) {
+   if(x>=284&&x<=994&&y>=385&&y<=405){
+     sampleEditorDrag_=3;scrollEditorWave(x);return VSTGUI::kMouseEventHandled;
+   }
    if(x>=284&&x<=994&&y>=175&&y<=382){
      sampleEditorDrag_=(buttons&VSTGUI::kShift)?2:1;
      moveSampleMarker(x,sampleEditorDrag_==2);
@@ -1376,7 +1405,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  if(sampleEditorOpen_){
-   if(sampleEditorDrag_&&buttons&VSTGUI::kLButton)
+   if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_==3)scrollEditorWave(pos.x);
+   else if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_)
      moveSampleMarker(pos.x,sampleEditorDrag_==2);
    return VSTGUI::kMouseEventHandled;
  }

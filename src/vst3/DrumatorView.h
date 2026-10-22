@@ -69,7 +69,8 @@ private:
  std::uint32_t sampleEditorFrames_{0};
  std::uint32_t sampleEditorFirst_{0},sampleEditorLast_{0};
  std::array<WaveformRange,256> sampleEditorWave_{};
- int sampleEditorDrag_{0}; // 1=start, 2=end
+ int sampleEditorDrag_{0}; // 1=start, 2=end, 3=horizontal scroll
+ bool scrollEditorWave(double x);
  std::size_t popupRow_{kRows};
  int activeKnob_{-1}; // 0..3 row, 4=Swing,5=Humanize,6=Master
  std::size_t knobRow_{kRows};
