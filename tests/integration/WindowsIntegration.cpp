@@ -1755,6 +1755,7 @@ int main(int argc,char** argv){
  if(!platform)return 3;platform->setResourceBasePath(VSTGUI::UTF8String(argv[1]));
  entered=CreateEventW(nullptr,TRUE,FALSE,nullptr);resume=CreateEventW(nullptr,TRUE,FALSE,nullptr);
  int failures=0;
+ std::string auditDiagnostics;drumator::qa::collectedNotices=&auditDiagnostics;
  std::string qaCaseSummary="Executed native integration cases:\n";
  auto run=[&](const std::string& name,const auto& test){
    try{test();const auto line=name+" PASS";evidence(line);qaCaseSummary+=line+'\n';}
@@ -1832,6 +1833,7 @@ int main(int argc,char** argv){
  run("RM13 loaded swap detects ignored replacement",[]{expectMutationKilled(qa::AuditMutation::skipImport,"64 voice audible replacement",testReauditLoadedSwap);});
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
- drumator::qa::workflowNotice(qaCaseSummary);
+ drumator::qa::collectedNotices=nullptr;
+ drumator::qa::workflowNotice(qaCaseSummary+"\nDetailed audit diagnostics:\n"+auditDiagnostics);
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
 }

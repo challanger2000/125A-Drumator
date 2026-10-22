@@ -7,7 +7,11 @@ namespace drumator::qa {
 // Official Actions workflow-command escaping. Publish actual test outcomes
 // through the Checks annotations API as well as the downloadable job log.
 // Called only by test/reporting actors, never inside product process().
+// Audit fixture may aggregate notices to avoid the per-step GitHub annotation cap.
+// Set/read on its UI thread only; packaged-host defaults remain unchanged.
+inline std::string* collectedNotices=nullptr;
 inline void workflowNotice(const std::string& message){
+ if(collectedNotices){*collectedNotices+=message;*collectedNotices+='\n';return;}
  std::string escaped;
  escaped.reserve(message.size());
  for(char ch:message){

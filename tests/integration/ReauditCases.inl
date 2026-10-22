@@ -252,15 +252,23 @@ void testReauditHostMirror(){
    kit.names[0]="host-choice.wav";kit.wav[0]=constantStereo(.5f,-.25f);
    for(std::size_t p=0;p<kPatterns;++p)kit.grid[p*kRows*kSteps]=static_cast<std::uint8_t>(10+p*15);
    const auto bytes=Fixture::encode(kit);arm(qa::restoreMidCommit);
-   tresult loaded=kResultFalse;
-   std::jthread loader([&]{qa::ByteStream input(bytes.data(),bytes.size());loaded=f.p->setState(&input);});
-   waitEntered();ParameterChanges changes;int32 index=0;
-   changes.addParameterData(kPatternParam,index)->addPoint(0,1./7.,index);
-   ProcessData flush{};flush.inputParameterChanges=&changes;
-   const auto processed=f.p->process(flush);
+   // All Component/Controller calls stay serialized on the real fixture UI
+   // thread. Only process() runs on the audio actor, as required by the SDK.
+   tresult processed=kResultFalse;bool reached=false;
+   std::jthread audioActor([&]{
+     reached=WaitForSingleObject(entered,10000)==WAIT_OBJECT_0;
+     if(reached){
+       ParameterChanges changes;int32 index=0;
+       changes.addParameterData(kPatternParam,index)->addPoint(0,1./7.,index);
+       ProcessData flush{};flush.inputParameterChanges=&changes;
+       processed=f.p->process(flush);
+     }
+     releaseProbe();
+   });
+   qa::ByteStream input(bytes.data(),bytes.size());const auto loaded=f.p->setState(&input);
+   audioActor.join();
+   check(reached&&loaded==kResultOk&&processed==kResultOk&&!probeTimeout,"RE07 host ordering fixture");
    if(!feedbackAfter)f.c->setParamNormalized(kPatternParam,1./7.);
-   releaseProbe();loader.join();
-   check(loaded==kResultOk&&processed==kResultOk&&!probeTimeout,"RE07 host ordering fixture");
    check(f.recall(bytes)==kResultOk,"RE07 original incoming Component state to Controller");
    if(feedbackAfter)f.c->setParamNormalized(kPatternParam,1./7.);
    const auto actual=auditReturnedKit(*f.p);AuditAudioBlock audio;
