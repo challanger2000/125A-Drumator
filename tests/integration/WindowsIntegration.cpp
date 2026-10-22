@@ -1441,8 +1441,8 @@ void testRealSampleFolderStepping(){
  componentState.seek(0,IBStream::kIBSeekSet,nullptr);
  controllerState.seek(0,IBStream::kIBSeekSet,nullptr);
  check(f.c->setComponentState(&componentState)==kResultOk&&
-       IntegrationAccess::paths(*f.c)[0].empty(),
-       "SOR02 kit recall must clear old session path");
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 matching kit recall discarded valid browsing origin");
  check(f.c->setState(&controllerState)==kResultOk&&
        IntegrationAccess::paths(*f.c)[0]==aPath,
        "SOR02 controller state did not restore browsing origin");
