@@ -740,7 +740,13 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    // Normal continuous blocks keep the same origin; switching A-H does not reset it.
    const double rateForClock=processSetup.sampleRate;
    const double expectedTolerance=std::max(1e-7,4.0*context->tempo/(60.0*rateForClock));
-   if(!haveExpectedPpq_||std::abs(initialPpq-expectedNextPpq_)>expectedTolerance) {
+   const bool transportJump=haveExpectedPpq_&&
+       std::abs(initialPpq-expectedNextPpq_)>expectedTolerance;
+   // Some hosts stop invoking process() while stopped. A subsequent backward
+   // locate/restart must not carry old sample voices into the new timeline.
+   // Ordinary continuous blocks and the first playing block are unaffected.
+   if(transportJump)voices_.reset();
+   if(!haveExpectedPpq_||transportJump) {
       const double initialStep=std::floor(initialPpq*4.0+1e-8);
       phaseOriginStep_=std::isfinite(initialStep)&&
          initialStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
