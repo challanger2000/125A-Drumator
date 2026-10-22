@@ -111,7 +111,7 @@ int main() {
     auto old15=encoded;
     old15.erase(old15.end()-static_cast<std::ptrdiff_t>(4+kRows*kSampleEditBytes),old15.end()-4);
     for(int i=0;i<4;++i)
-      old15[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV15>>(8*i);
+      old15[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV15>>(8*i));
     const auto old15Size=static_cast<std::uint32_t>(old15.size()-8);
     for(int i=0;i<4;++i)
       old15[4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(old15Size>>(8*i));
