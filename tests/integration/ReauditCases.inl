@@ -457,3 +457,54 @@ void testReauditDeadlineMatrix(){
    f.p->setActive(false);
  }
 }
+// Run in a child process: the unmodified cold Song path may raise native
+// EXCEPTION_INT_DIVIDE_BY_ZERO. Do not replace or guard the product modulo.
+void testReauditSongCold(bool warm){
+ Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+ kit.names[0]="cold.wav";kit.wav[0]=constantStereo(.5f,-.25f);
+ kit.patternLengths[0]=16;kit.patternLengths[1]=32;
+ kit.grid[0]=100;kit.grid[kRows*kSteps]=70;
+ kit.songEnabled=1;kit.chain.setCount(1);kit.chain.configure(0,0,32);
+ f.kit(kit);prepareAudio(*f.p);
+ check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&f.c->copyCurrentPattern()&&
+       f.c->setParamNormalized(kPatternParam,0.)==kResultOk,"RE11 source clipboard");
+ AuditAudioBlock audio;
+ audio.clock.state=ProcessContext::kPlaying|ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ if(warm)for(unsigned block=0;block<375;++block){
+   audio.clock.projectTimeMusic=static_cast<double>(block*256u)/24000.;
+   check(f.p->process(audio.data)==kResultOk,"RE11 warm control");
+ }
+ audio.clock.projectTimeMusic=4.;arm(qa::patternMidWrite);
+ bool reached=false;tresult result=kResultFalse;
+ std::jthread reader([&]{
+   reached=WaitForSingleObject(entered,10000)==WAIT_OBJECT_0;
+   if(reached)result=f.p->process(audio.data);
+   releaseProbe();
+ });
+ const bool pasted=f.c->pasteCurrentPattern();reader.join();
+ check(reached&&pasted&&result==kResultOk&&!probeTimeout,"RE11 first Song concurrent paste failed");
+ f.p->setProcessing(false);f.p->setActive(false);
+}
+void testReauditSongColdChild(const char* resource){
+ auto child=[&](bool warm){
+   std::array<wchar_t,32768> executable{};
+   const auto length=GetModuleFileNameW(nullptr,executable.data(),static_cast<DWORD>(executable.size()));
+   check(length>0&&length<executable.size(),"RE11 executable path");
+   std::wstring command=L"\""+std::wstring(executable.data(),length)+L"\" \""+
+       pathFromUtf8(resource).wstring()+L"\" "+(warm?L"--reaudit-song-warm":L"--reaudit-song-cold");
+   std::vector<wchar_t> arguments(command.begin(),command.end());arguments.push_back(0);
+   STARTUPINFOW startup{};startup.cb=static_cast<DWORD>(sizeof(startup));PROCESS_INFORMATION process{};
+   check(CreateProcessW(nullptr,arguments.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,
+                        nullptr,nullptr,&startup,&process)!=FALSE,"RE11 child creation");
+   const auto waited=WaitForSingleObject(process.hProcess,30000);DWORD result=0;
+   if(waited!=WAIT_OBJECT_0)TerminateProcess(process.hProcess,2);
+   const bool got=GetExitCodeProcess(process.hProcess,&result)!=FALSE;
+   CloseHandle(process.hThread);CloseHandle(process.hProcess);
+   check(waited==WAIT_OBJECT_0&&got,"RE11 child timeout/status failure");
+   qa::workflowNotice(std::string("RE11 ")+(warm?"WARM":"COLD")+" Song/paste child exit="+
+       std::to_string(result)+(result==EXCEPTION_INT_DIVIDE_BY_ZERO?" (EXCEPTION_INT_DIVIDE_BY_ZERO)":""));
+   return result;
+ };
+ check(child(true)==0u,"RE11 warm child failed; cold inference invalid");
+ check(child(false)==0u,"RE11 first Song callback crashes during concurrent PatternReplace");
+}

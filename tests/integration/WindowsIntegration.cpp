@@ -1748,12 +1748,21 @@ void testTransportJumpRetiresOldVoices(){
 #include "ReauditCases.inl"
 }
 int main(int argc,char** argv){
- if(argc!=2)return 2;
+ if(argc!=2&&argc!=3)return 2;
+ SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
  CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
  moduleHandle=GetModuleHandleW(nullptr);VSTGUI::init(static_cast<HINSTANCE>(moduleHandle));
  auto* platform=VSTGUI::getPlatformFactory().asWin32Factory();
  if(!platform)return 3;platform->setResourceBasePath(VSTGUI::UTF8String(argv[1]));
  entered=CreateEventW(nullptr,TRUE,FALSE,nullptr);resume=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+ if(argc==3){
+   const bool warm=std::strcmp(argv[2],"--reaudit-song-warm")==0;
+   if(!warm&&std::strcmp(argv[2],"--reaudit-song-cold")!=0)return 2;
+   int childResult=0;
+   try{testReauditSongCold(warm);}catch(const std::exception& ex){std::cerr<<ex.what()<<'\n';childResult=3;}
+   CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return childResult;
+ }
+
  int failures=0;
  std::string auditDiagnostics;drumator::qa::collectedNotices=&auditDiagnostics;
  std::string qaCaseSummary="Executed native integration cases:\n";
@@ -1818,6 +1827,7 @@ int main(int argc,char** argv){
  run("RE08 independent complete PCM timeline",testReauditPcmTimeline);
  run("RE09 64 voices live swap locate Stop",testReauditLoadedSwap);
  run("RE10 actual Processor deadline matrix",testReauditDeadlineMatrix);
+ run("RE11 cold Song overlap cannot divide by zero",[&]{testReauditSongColdChild(argv[1]);});
  run("RM01 zero Stop repair mutation",[]{expectMutationKilled(qa::AuditMutation::suppressZeroStop,"zero Stop",testZeroFrameStopRetiresVoice);});
  run("RM02 paired duration repair mutation",[]{expectMutationKilled(qa::AuditMutation::staleDuration,"paired duration",testReauditPatternLength);});
  run("RM03 peer owner repair mutation",[]{expectMutationKilled(qa::AuditMutation::skipPeerCommit,"peer commit",testPeerVelocityCancelPreservesCommittedStep);});
