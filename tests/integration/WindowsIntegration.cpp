@@ -1545,7 +1545,6 @@ void testTransportSequenceTorture(){
  AuditAudioBlock block;
  constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|
                         ProcessContext::kProjectTimeMusicValid;
- constexpr double increment=256./24000.;
  unsigned stale=0,incorrect=0;
  for(unsigned cycle=0;cycle<96;++cycle){
    // Consecutive restarts across forward/backward locate and a loop boundary.
