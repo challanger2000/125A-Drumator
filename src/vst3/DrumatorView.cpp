@@ -925,6 +925,18 @@ void DrumatorView::load(std::size_t row) {
 }
 
 bool DrumatorView::openSampleEditor(std::size_t row) {
+ // The modal WAV editor requires 605 logical pixels, whereas the compact
+ // drum grid may have resized the plug-in window to only 370 pixels.
+ const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
+ constexpr double editorHeight=620.;
+ if(getViewSize().getHeight()<editorHeight){
+   if(!editor_.requestResize({1280.*scale,editorHeight*scale})){
+     status_="WAV-EDITOR: HOST HAT FENSTERHOEHE ABGELEHNT";
+     invalid();return false;
+   }
+   if(auto* parent=getParentView())parent->setViewSize({0,0,1280,editorHeight});
+   setViewSize({0,0,1280,editorHeight});
+ }
  SampleEdit edit;std::uint32_t frames=0;
  std::array<WaveformRange,256> wave{};
  if(!controller_.sampleEditorSnapshot(row,edit,frames,wave)){
@@ -1077,10 +1089,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      }else if(x>=716&&x<855){
        controller_.stopSampleEditPreview();
        sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
+       (void)adjustEditorHeight();
      }else if(x>=862&&x<1000){
        if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_)){
          controller_.stopSampleEditPreview();
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
+         (void)adjustEditorHeight();
        }else status_="WAV EDIT: PROZESSOR HAT AENDERUNG ABGELEHNT";
      }
      invalid();return done;
