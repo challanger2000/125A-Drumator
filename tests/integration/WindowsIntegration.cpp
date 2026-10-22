@@ -1540,6 +1540,8 @@ void testNativeName(){
 #include "SecondAuditCases.inl"
 void testComponentOnlySameBasenameRejectsStaleOrigin(){
  Fixture f;
+ KitState initial;initial.grid.fill(0);initial.visible=1;
+ f.kit(initial);prepareAudio(*f.p);
  const auto directory=std::filesystem::current_path()/"125A-v1a04-source";
  std::filesystem::create_directories(directory);
  const auto source=directory/"kick.wav";
