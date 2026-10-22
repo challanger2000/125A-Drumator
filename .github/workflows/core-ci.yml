@@ -35,7 +35,7 @@ jobs:
       - name: Run deterministic regressions
         shell: pwsh
         run: |
-          ctest --test-dir build -C Release --output-on-failure --output-log build/ctest-functional.log
+          ctest --test-dir build -C Release --output-on-failure --test-output-size-failed 1000000 --output-log build/ctest-functional.log
           $testExit = $LASTEXITCODE
           # CTest normally hides passing-test stdout. Preserve actual case
           # results and measured timings in the Checks API as well as logs.
@@ -45,7 +45,11 @@ jobs:
           Get-Content build/ctest-functional.log | Where-Object {
             $_ -match 'tests passed, .*tests failed out of'
           } | ForEach-Object { Write-Output "::notice title=125A Drumator CTest summary::$_" }
-          if ($testExit -ne 0) { exit $testExit }
+          if ($testExit -ne 0) {
+            Write-Output '=== Full native failure tail ==='
+            Get-Content build/Testing/Temporary/LastTest.log | Select-Object -Last 180 | Write-Output
+            exit $testExit
+          }
       - name: Assemble standard Windows VST3 bundle and validate
         shell: pwsh
         run: |
