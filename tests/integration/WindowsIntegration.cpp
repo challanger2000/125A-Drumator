@@ -447,16 +447,17 @@ void testZoom(){
    drumator::qa::ByteStream in(v2.data(),v2.size());
    check(f.c->setState(&in)==kResultOk&&v->zoomMatches(entry.first),"Z02 DZM2 intermediate zoom recall");
    ResizableMemoryIBStream written;
-   check(f.c->getState(&written)==kResultOk&&written.getCursor()==5,
-         "Z02 DZM2 state length");
+   check(f.c->getState(&written)==kResultOk&&written.getCursor()==5+2*kRows,
+         "Z02 DZM3 state length with empty sample paths");
    const auto* b=static_cast<const std::uint8_t*>(written.getData());
-   check(b[0]=='D'&&b[1]=='Z'&&b[2]=='M'&&b[3]=='2'&&b[4]==entry.second,
-         "Z02 intermediate zoom not persisted");
+   check(b[0]=='D'&&b[1]=='Z'&&b[2]=='M'&&b[3]=='3'&&b[4]==entry.second,
+         "Z02 intermediate zoom not persisted in DZM3");
  }
  check(zoom(*f.c,true)==kResultOk,"Z02 saved preference set");
  ResizableMemoryIBStream saved;
- check(f.c->getState(&saved)==kResultOk&&saved.getCursor()==5&&
-   static_cast<const std::uint8_t*>(saved.getData())[4]==1,"Z02 saved zoom bytes disagree");
+ check(f.c->getState(&saved)==kResultOk&&saved.getCursor()==5+2*kRows&&
+   static_cast<const std::uint8_t*>(saved.getData())[4]==3,
+   "Z02 saved DZM3 zoom bytes disagree");
  f.closeLast();
  auto& reopened=f.open();check(std::abs(reopened.getZoomFactor()-1.5)<.001,"Z02 reopen lost preference");
  // Both views need a change: policy must reject before any native host request.
