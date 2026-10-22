@@ -141,15 +141,18 @@ static void exerciseLiveSwapKeepsOtherRowAudible() {
             "SOR04 unaffected row did not start");
     // Replace row 0 repeatedly while row 1 is sounding, across block
     // boundaries. The unchanged row must not be reset or drop a frame.
-    for(int pass=0;pass<10;++pass) {
+    for(int pass=0;pass<40;++pass) {
         auto candidate=makeAsset(pass%2?steady:replacement);
         require(exchanger.publish(0,candidate),"SOR04 replacement publish");
         require(exchanger.audioAdopt(voices,48000).adopted==1,
                 "SOR04 replacement adoption");
-        require(voices.render(nullptr,0,left.data(),right.data(),128).status==
+        // Alternate 64/128-frame host callbacks; the remaining voice must
+        // not restart, fade or disappear at either buffer size.
+        const std::uint32_t frames=pass%2?64u:128u;
+        require(voices.render(nullptr,0,left.data(),right.data(),frames).status==
                 RenderStatus::Ok,"SOR04 render after replacement");
-        for(float sample:left)
-            require(std::abs(sample-8192.f/32768.f)<0.002f,
+        for(std::size_t i=0;i<frames;++i)
+            require(std::abs(left[i]-8192.f/32768.f)<0.002f,
                     "SOR04 unaffected instrument dropped out on replacement");
         exchanger.audioCollect(voices);
         for(;;) {
