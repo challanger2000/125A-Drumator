@@ -54,6 +54,10 @@ void Controller::unregisterView(DrumatorView* view) {
  views_.erase(std::remove(views_.begin(),views_.end(),view),views_.end());
 }
 void Controller::notifyViews(bool relayout) {
+ if(dirtyPending_) {
+   dirtyPending_=false;
+   if(componentHandler2)componentHandler2->setDirty(true);
+ }
  for(auto* view:views_)if(view)view->refreshFromHost(relayout);
 }
 void Controller::invalidateTransientEditsForRecall() noexcept {
@@ -70,9 +74,7 @@ Steinberg::tresult PLUGIN_API Controller::setParamNormalized(
 }
 Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
  const auto result=sendMessage(message);
- markSuccessfulHostEdit(result==Steinberg::kResultOk,[&](){
-   if(componentHandler2)componentHandler2->setDirty(true);
- });
+ if(result==Steinberg::kResultOk)dirtyPending_=true;
  return result;
 }
 namespace {
@@ -429,7 +431,7 @@ bool Controller::replacePattern(std::size_t p,const PatternSteps& data,bool reme
                                 std::uint8_t requestedLength) {
  if(p>=kPatterns||(requestedLength!=0&&requestedLength!=16&&requestedLength!=32))
    return false;
- const auto oldLength=patternLengths_[p];
+ if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);\n const auto oldLength=patternLengths_[p];
  const auto nextLength=requestedLength==0?oldLength:requestedLength;
  PatternSteps old{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,old.size(),old.begin());

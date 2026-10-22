@@ -140,6 +140,7 @@ private:
  std::array<std::uint64_t,kRows> originIdentity_{};
  std::array<bool,kRows> originIdentityValid_{};
  bool pathsRestoredBeforeComponent_{false};
+ bool dirtyPending_{false};
  std::array<bool,kRows> muted_{};
  std::array<bool,kRows> solo_{};
  std::array<std::uint8_t,kRows> gain_{};
