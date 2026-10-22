@@ -184,7 +184,16 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     stagedNames.commit(customNames_,labels_);
     undo_.reset();
     clipboardValid_=false;
-    for(auto& path:samplePaths_)path.clear();
+    // Hosts may restore Controller::setState before setComponentState or vice versa.
+    // Retain a browsing origin only when its basename matches the embedded kit.
+    // This is pure string validation, without filesystem I/O during state commit.
+    for(std::size_t row=0;row<kRows;++row) {
+      auto& path=samplePaths_[row];
+      const auto last=path.find_last_of("/\\");
+      const auto basename=last==std::string::npos?path:path.substr(last+1);
+      if(candidate.names[row].empty()||basename!=candidate.names[row])
+        path.clear();
+    }
     visibleRows_=candidate.visible;
     swingPercent_=candidate.swing;
     humanizePercent_=candidate.humanize;
