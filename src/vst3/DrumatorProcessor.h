@@ -101,6 +101,7 @@ private:
  AtomicPatternBank patterns_;
  // Last coherent patterns, read/written only in the audio callback.
  std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> audioPatternCache_{};
+ std::array<std::uint8_t,kPatterns> audioPatternLengthCache_{};
  std::array<bool,kPatterns> audioPatternValid_{};
  SampleVoiceEngine voices_;
 
