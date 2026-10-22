@@ -105,6 +105,9 @@ struct IntegrationAccess {
  static bool clockReset(const Processor& p) {
    return !p.haveExpectedPpq_&&p.expectedNextPpq_==0.0&&p.phaseOriginStep_==0;
  }
+ static std::uint32_t activeAudioVoices(const Processor& p) {
+   return p.voices_.active();
+ }
  static auto snapshot(Controller& c) {
    std::array<PatternSteps,kPatterns> undo{};
    std::array<bool,kPatterns> available{};
@@ -1534,6 +1537,27 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+void testTransportJumpRetiresOldVoices(){
+ Fixture f;
+ KitState kit;kit.visible=1;kit.grid.fill(0);kit.grid[0]=100;
+ kit.names[0]="restart.wav";kit.wav[0]=constantStereo(.25f,.25f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock block;
+ block.clock.state=ProcessContext::kPlaying|
+       ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ block.clock.projectTimeMusic=4.0;
+ check(f.p->process(block.data)==kResultOk,"SOR03 first transport block");
+ check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "SOR03 first voice absent");
+ // Simulate a host which delivers no stopped transport process callback.
+ // It locates to bar three, preserving playing=true on both observed blocks.
+ block.clock.projectTimeMusic=8.0;
+ check(f.p->process(block.data)==kResultOk,"SOR03 host jump process");
+ check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "SOR03 stale previous-run voice survived host locate");
+ f.p->setProcessing(false);f.p->setActive(false);
+ evidence("SOR03 native processor timeline jump retires old voice without stopped callback PASS");
+}
 }
 int main(int argc,char** argv){
  if(argc!=2)return 2;
@@ -1566,6 +1590,7 @@ int main(int argc,char** argv){
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
  run("P19 1T/2T copy-paste-duplicate duration",testPatternDurationClipboard);
  run("T28 rate-switch transport clock reset",testRateChangeTransportReset);
+ run("SOR03 host timeline jump voice cleanup",testTransportJumpRetiresOldVoices);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("SOR01 new Step Velocity 100",testNewStepDefault100);
  run("VELO 100 reset existing notes",testVelocityResetPattern);
