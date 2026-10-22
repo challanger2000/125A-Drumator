@@ -437,7 +437,8 @@ bool Controller::replacePattern(std::size_t p,const PatternSteps& data,bool reme
                                 std::uint8_t requestedLength) {
  if(p>=kPatterns||(requestedLength!=0&&requestedLength!=16&&requestedLength!=32))
    return false;
- if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);\n const auto oldLength=patternLengths_[p];
+ if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);
+ const auto oldLength=patternLengths_[p];
  const auto nextLength=requestedLength==0?oldLength:requestedLength;
  PatternSteps old{};
  std::copy_n(grid_.begin()+p*kRows*kSteps,old.size(),old.begin());
