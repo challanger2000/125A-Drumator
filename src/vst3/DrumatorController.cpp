@@ -614,17 +614,19 @@ bool Controller::hideLastEmptyRow() {
  if(good){--visibleRows_;notifyViews(false);}
  return good;
 }
-void Controller::beginVelocityStroke(std::size_t p) {
+void Controller::beginVelocityStroke(std::size_t p,const void* owner) {
  if(p>=kPatterns)return;
- if(strokePattern_<kPatterns)endVelocityStroke(true);
+ if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);
+ strokeOwner_=owner;
  strokePattern_=p;
  strokeGeneration_=editGeneration_.current();
  std::copy_n(grid_.begin()+p*kRows*kSteps,strokeBefore_.size(),strokeBefore_.begin());
 }
-void Controller::endVelocityStroke(bool commit) {
- if(strokePattern_>=kPatterns)return;
+void Controller::endVelocityStroke(bool commit,const void* owner) {
+ if(strokePattern_>=kPatterns||owner!=strokeOwner_)return;
  const auto p=strokePattern_;
  strokePattern_=kPatterns;
+ strokeOwner_=nullptr;
  if(!editGeneration_.matches(strokeGeneration_))return;
  strokeGeneration_=0;
  PatternSteps after{};
@@ -639,8 +641,12 @@ void Controller::rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std:
  auto changed=old;changed[r*kSteps+s]=next;
  undo_.capture(p,old,changed);
 }
-bool Controller::setStepVelocity(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next){
+bool Controller::setStepVelocity(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next,const void* owner){
  if(p>=kPatterns||r>=kRows||s>=kSteps||next>127)return false;
+ // Peer edits must commit the previous owner's gesture before mutation.
+ // Late Cancel from that owner is then inert; no stale whole-grid restore.
+ if(strokePattern_<kPatterns&&strokeOwner_!=owner)
+   endVelocityStroke(true,strokeOwner_);
  if(velocity(p,r,s)==next)return true;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.StepEdit");
