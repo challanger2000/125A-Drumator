@@ -364,6 +364,13 @@ static void testHighRatio64VoiceStress() {
    }
    require(engine.active()==0,"16x voice pool not reclaimed");
  }
+ // Record deadline misses explicitly. This is an uncontrolled offline CI
+ // diagnostic, not a pass/fail realtime certification on the user's ASIO host.
+ constexpr double kBlockDeadlineMs=256.0/48000.0*1000.0;
+ const auto deadlineMisses=std::count_if(blockMillis.begin(),blockMillis.end(),
+     [](double ms){return ms>kBlockDeadlineMs;});
+ const auto missRate=100.0*static_cast<double>(deadlineMisses)/
+                     static_cast<double>(blockMillis.size());
  const auto elapsed=std::chrono::duration<double>(
      std::chrono::steady_clock::now()-started).count();
  std::sort(blockMillis.begin(),blockMillis.end());
@@ -372,12 +379,13 @@ static void testHighRatio64VoiceStress() {
        blockMillis.size()-1,(blockMillis.size()*percent+99)/100-1);
    return blockMillis[position];
  };
- constexpr double kBlockDeadlineMs=256.0/48000.0*1000.0;
  std::cout<<"::notice title=125A Drumator offline performance::F14 64-voice 16x offline block times: p95="
           <<atPercentile(95)<<"ms p99="<<atPercentile(99)
           <<"ms max="<<blockMillis.back()
           <<"ms; 48k/256 deadline="<<kBlockDeadlineMs
-          <<"ms (CI runner, NOT Studio One real-time evidence)\n";
+          <<"ms; deadline misses="<<deadlineMisses<<"/"<<blockMillis.size()
+          <<" ("<<missRate<<"%)"
+          <<" (CI runner, NOT Studio One real-time evidence)\n";
  std::cout<<"F14 high-ratio 64-voice stress elapsed "<<elapsed<<" s\n";
  // A deliberately generous CI hang/regression ceiling; NOT a real-time CPU
  // qualification. Host-specific scheduling must be measured in Studio One.

@@ -1626,6 +1626,11 @@ void testTransportJumpRetiresOldVoices(){
  check(f.p->process(block.data)==kResultOk,"SOR03 host jump process");
  check(IntegrationAccess::activeAudioVoices(*f.p)==1,
        "SOR03 stale previous-run voice survived host locate");
+ // Render the full callback, not only a voice counter. A loop discontinuity
+ // must produce a valid finite new hit; stale voices must not double the PCM.
+ check(std::isfinite(block.left[80])&&std::isfinite(block.right[80])&&
+       std::abs(block.left[80])<=.25f&&std::abs(block.right[80])<=.25f,
+       "SOR03 loop jump produced doubled or nonfinite sample audio");
  f.p->setProcessing(false);f.p->setActive(false);
  evidence("SOR03 native processor timeline jump retires old voice without stopped callback PASS");
 }
