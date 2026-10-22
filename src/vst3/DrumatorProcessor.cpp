@@ -115,6 +115,82 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
        ? Steinberg::kResultOk : Steinberg::kResultFalse;
  }
 
+
+ // UI/control-thread-only query: read the *embedded* sample so the editor
+ // works after project recall even without the original filesystem path.
+ if(std::strcmp(id,"Drumator.SampleEditorQuery")==0) {
+   auto* attrs=msg->getAttributes();
+   Steinberg::int64 index=-1;
+   if(!attrs||attrs->getInt("Row",index)!=Steinberg::kResultOk||
+      index<0||index>=static_cast<Steinberg::int64>(kRows))
+     return Steinberg::kInvalidArgument;
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   const auto row=static_cast<std::size_t>(index);
+   const auto& wav=kit_.wav[row];
+   if(wav.empty()||wav.size()>kMaxSingleWav)return Steinberg::kResultFalse;
+   const auto& edit=kit_.sampleEdits[row];
+   Steinberg::uint32 gainBits=0;
+   static_assert(sizeof(gainBits)==sizeof(edit.gain));
+   std::memcpy(&gainBits,&edit.gain,sizeof(gainBits));
+   return attrs->setBinary("Wave",wav.data(),static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk&&
+          attrs->setInt("Start",edit.start)==Steinberg::kResultOk&&
+          attrs->setInt("End",edit.end)==Steinberg::kResultOk&&
+          attrs->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
+          attrs->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
+          attrs->setInt("GainBits",gainBits)==Steinberg::kResultOk
+          ?Steinberg::kResultOk:Steinberg::kResultFalse;
+ }
+ // The commit is prepared off the audio thread. Active voices retain the
+ // old immutable PreparedSample via SampleExchange retirement.
+ if(std::strcmp(id,"Drumator.SampleEditorCommit")==0) {
+   auto* attrs=msg->getAttributes();
+   Steinberg::int64 index=-1,start=-1,end=-1,fadeIn=-1,fadeOut=-1,gainBits=-1;
+   if(!attrs||attrs->getInt("Row",index)!=Steinberg::kResultOk||
+      attrs->getInt("Start",start)!=Steinberg::kResultOk||
+      attrs->getInt("End",end)!=Steinberg::kResultOk||
+      attrs->getInt("FadeIn",fadeIn)!=Steinberg::kResultOk||
+      attrs->getInt("FadeOut",fadeOut)!=Steinberg::kResultOk||
+      attrs->getInt("GainBits",gainBits)!=Steinberg::kResultOk||
+      index<0||index>=static_cast<Steinberg::int64>(kRows)||
+      start<0||end<0||fadeIn<0||fadeOut<0||
+      start>UINT32_MAX||end>UINT32_MAX||fadeIn>UINT32_MAX||
+      fadeOut>UINT32_MAX||gainBits<0||gainBits>UINT32_MAX)
+     return Steinberg::kInvalidArgument;
+   SampleEdit edit;
+   edit.start=static_cast<std::uint32_t>(start);
+   edit.end=static_cast<std::uint32_t>(end);
+   edit.fadeIn=static_cast<std::uint32_t>(fadeIn);
+   edit.fadeOut=static_cast<std::uint32_t>(fadeOut);
+   const auto bits=static_cast<std::uint32_t>(gainBits);
+   std::memcpy(&edit.gain,&bits,sizeof(bits));
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   const auto row=static_cast<std::size_t>(index);
+   if(kit_.wav[row].empty())return Steinberg::kResultFalse;
+   DecodedWav decoded;
+   const auto& wav=kit_.wav[row];
+   if(WavPcm16Decoder::decode(wav.data(),wav.size(),decoded)!=WavError::Ok||
+      decoded.left.size()>UINT32_MAX||
+      !edit.valid(static_cast<std::uint32_t>(decoded.left.size())))
+      return Steinberg::kInvalidArgument;
+   if(kit_.sampleEdits[row].start==edit.start&&kit_.sampleEdits[row].end==edit.end&&
+      kit_.sampleEdits[row].fadeIn==edit.fadeIn&&
+      kit_.sampleEdits[row].fadeOut==edit.fadeOut&&
+      kit_.sampleEdits[row].gain==edit.gain)return Steinberg::kResultOk;
+   const auto rate=outputRate_.load(std::memory_order_acquire);
+   if(!(rate>0.)||!std::isfinite(rate))return Steinberg::kResultFalse;
+   std::unique_ptr<PreparedSample> prepared;
+   if(PreparedSample::fromWav(wav.data(),wav.size(),rate,
+       static_cast<double>(static_cast<int>(kit_.pitch[row])-24),
+       1.f,0.f,0,false,prepared,edit)!=PrepareStatus::Ok)
+     return Steinberg::kResultFalse;
+   for(;;){auto unused=exchange_.pollReclaim();if(!unused)break;}
+   auto previous=exchange_.withdraw(row);
+   (void)previous;
+   if(!exchange_.publish(row,prepared))return Steinberg::kResultFalse;
+   kit_.sampleEdits[row]=edit;
+   return Steinberg::kResultOk;
+ }
+
  if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
     std::strcmp(id,"Drumator.StepEdit")!=0&&
     std::strcmp(id,"Drumator.PatternReplace")!=0&&

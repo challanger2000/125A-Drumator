@@ -2,6 +2,7 @@
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "core/SequencerCore.h"
+#include "core/SampleEdit.h"
 #include "core/PatternOperations.h"
 #include "core/PatternUndo.h"
 #include "core/KitEditGeneration.h"
@@ -36,6 +37,9 @@ public:
 
  bool clearSample(std::size_t row);
  bool previewSample(std::size_t row);
+ bool sampleEditorSnapshot(std::size_t row,SampleEdit& edit,std::uint32_t& frames,
+                           std::array<WaveformRange,256>& envelope);
+ bool commitSampleEdit(std::size_t row,const SampleEdit& edit);
  bool toggleRowGate(std::size_t row,bool solo);
  bool cycleRowChoke(std::size_t row,int direction=1);
  bool setRowChoke(std::size_t row,unsigned group);

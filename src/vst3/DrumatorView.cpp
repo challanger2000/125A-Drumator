@@ -784,9 +784,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                  controller_.rowOutput(popupRow_)==i);
    }
  }else if(popup_==5&&popupRow_<controller_.visibleRows()) {
-   const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,100.);
-   const char* options[]={"SAMPLE LADEN","INSTRUMENT UMBENENNEN","SAMPLE ENTFERNEN"};
-   for(int i=0;i<3;++i)
+   const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,130.);
+   const char* options[]={"SAMPLE LADEN","WAV EDITOR","INSTRUMENT UMBENENNEN","SAMPLE ENTFERNEN"};
+   for(int i=0;i<4;++i)
       drawControl(c,{78,top+i*30.,304,top+i*30.+29.},options[i]);
  }else if(popup_==4&&popupRow_<controller_.visibleRows()) {
    const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,145.);
@@ -796,6 +796,43 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      drawControl(c,{515,top+i*27.,615,top+i*27.+26.},z,
                  controller_.rowChoke(popupRow_)==i);
    }
+ }
+
+ if(sampleEditorOpen_) {
+   // Modal overlay, fully inside the existing 1280-wide view at 100% zoom.
+   c->setFillColor(background);c->drawRect({230,100,1050,605},VSTGUI::kDrawFilled);
+   c->setFrameColor(accent);c->drawRect({230,100,1050,605},VSTGUI::kDrawStroked);
+   c->setFont(VSTGUI::kNormalFont,18);c->setFontColor(letters);
+   c->drawString("WAV EDITOR - SAMPLE BEARBEITEN",{260,114,1000,148});
+   c->setFillColor(panel);c->drawRect({284,175,994,382},VSTGUI::kDrawFilled);
+   c->setFrameColor(border);c->drawLine({284,278},{994,278});
+   for(std::size_t i=0;i<sampleEditorWave_.size();++i) {
+     const auto& range=sampleEditorWave_[i];
+     const double x=284.+710.*static_cast<double>(i)/sampleEditorWave_.size();
+     c->setFrameColor(accent);
+     c->drawLine({x,278.-range.maximum*96.},{x,278.-range.minimum*96.});
+   }
+   const auto sx=284.+710.*sampleEditorEdit_.start/sampleEditorFrames_;
+   const auto ex=284.+710.*sampleEditorEdit_.end/sampleEditorFrames_;
+   c->setFrameColor(on);c->setLineWidth(2.);
+   c->drawLine({sx,175},{sx,382});
+   c->setFrameColor(letters);c->drawLine({ex,175},{ex,382});
+   c->setLineWidth(1.);
+   char info[180]{};
+   std::snprintf(info,sizeof(info),"START %u   ENDE %u   FADE IN %u   FADE OUT %u   GAIN %u%%",
+        sampleEditorEdit_.start,sampleEditorEdit_.end,
+        sampleEditorEdit_.fadeIn,sampleEditorEdit_.fadeOut,
+        static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
+   c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
+   c->drawString(info,{270,391,1020,420});
+   c->drawString("WELLENFORM: KLICK START, SHIFT+KLICK ENDE; MARKER ZIEHEN",
+                 {275,423,1020,446});
+   const char* editButtons[]={"FADE IN -","FADE IN +","FADE OUT -","FADE OUT +",
+                              "GAIN -","GAIN +","RESET"};
+   for(int i=0;i<7;++i)drawControl(c,{265.+i*108.,458,369.+i*108.,493},editButtons[i]);
+   drawControl(c,{570,535,708,578},"VORHOEREN");
+   drawControl(c,{716,535,855,578},"ABBRECHEN");
+   drawControl(c,{862,535,1000,578},"OK");
  }
  setDirty(false);
 }
@@ -860,11 +897,76 @@ void DrumatorView::load(std::size_t row) {
  picker->forget();
  invalid();
 }
+
+bool DrumatorView::openSampleEditor(std::size_t row) {
+ SampleEdit edit;std::uint32_t frames=0;
+ std::array<WaveformRange,256> wave{};
+ if(!controller_.sampleEditorSnapshot(row,edit,frames,wave)){
+   status_="WAV-EDITOR: KEIN GUELTIGES SAMPLE";return false;
+ }
+ sampleEditorEdit_=edit;sampleEditorFrames_=frames;sampleEditorWave_=wave;
+ sampleEditorRow_=row;sampleEditorDrag_=0;sampleEditorOpen_=true;
+ invalid();return true;
+}
+void DrumatorView::moveSampleMarker(double x,bool endMarker) {
+ if(!sampleEditorOpen_||sampleEditorFrames_<2)return;
+ const auto frame=waveformFrameAt(x-284.,710.,0,sampleEditorFrames_);
+ if(endMarker)sampleEditorEdit_.end=std::clamp(frame,
+                             sampleEditorEdit_.start+1,sampleEditorFrames_);
+ else sampleEditorEdit_.start=std::min(frame,sampleEditorEdit_.end-1);
+ const auto span=sampleEditorEdit_.end-sampleEditorEdit_.start;
+ sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,span);
+ sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
+                                   span-sampleEditorEdit_.fadeIn);
+ invalid();
+}
+
 VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  const double x=pos.x,y=pos.y;
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+
+ if(sampleEditorOpen_) {
+   const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+   if(x>=284&&x<=994&&y>=175&&y<=382){
+     sampleEditorDrag_=(buttons&VSTGUI::kShift)?2:1;
+     moveSampleMarker(x,sampleEditorDrag_==2);
+     return VSTGUI::kMouseEventHandled;
+   }
+   if(x>=265&&x<1021&&y>=458&&y<493) {
+     const int i=static_cast<int>((x-265)/108.);
+     const auto span=sampleEditorEdit_.length();
+     const auto increment=std::max<std::uint32_t>(1,sampleEditorFrames_/100);
+     if(i==0)sampleEditorEdit_.fadeIn=sampleEditorEdit_.fadeIn>increment?
+          sampleEditorEdit_.fadeIn-increment:0;
+     if(i==1)sampleEditorEdit_.fadeIn=std::min(
+          sampleEditorEdit_.fadeIn+increment,span-sampleEditorEdit_.fadeOut);
+     if(i==2)sampleEditorEdit_.fadeOut=sampleEditorEdit_.fadeOut>increment?
+          sampleEditorEdit_.fadeOut-increment:0;
+     if(i==3)sampleEditorEdit_.fadeOut=std::min(
+          sampleEditorEdit_.fadeOut+increment,span-sampleEditorEdit_.fadeIn);
+     if(i==4)sampleEditorEdit_.gain=std::max(0.f,sampleEditorEdit_.gain-.1f);
+     if(i==5)sampleEditorEdit_.gain=std::min(4.f,sampleEditorEdit_.gain+.1f);
+     if(i==6)sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);
+     invalid();return done;
+   }
+   if(y>=535&&y<578) {
+     if(x>=570&&x<708){
+       // The existing processor preview is a committed-state preview.
+       if(!controller_.previewSample(sampleEditorRow_))
+         status_="VORHOEREN FEHLGESCHLAGEN";
+     }else if(x>=716&&x<855){
+       sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
+     }else if(x>=862&&x<1000){
+       if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_)){
+         sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
+       }else status_="WAV EDIT: PROZESSOR HAT AENDERUNG ABGELEHNT";
+     }
+     invalid();return done;
+   }
+   return done;
+ }
  // Popups are modal: clicking outside dismisses them without changing a step.
  if(popup_!=0){
    const int kind=popup_;
@@ -912,12 +1014,13 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         }
       }
    }else if(kind==5&&target<controller_.visibleRows()){
-     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),100.);
-     if(x>=78&&x<304&&y>=top&&y<top+90.){
+     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),130.);
+     if(x>=78&&x<304&&y>=top&&y<top+120.){
        const auto option=static_cast<int>((y-top)/30.);
-       if(option>=0&&option<3&&y<top+option*30.+29.){
+       if(option>=0&&option<4&&y<top+option*30.+29.){
          if(option==0)load(target);
-         else if(option==1)editName(target);
+         else if(option==1)ok=openSampleEditor(target);
+         else if(option==2)editName(target);
          else if(!controller_.clearSample(target))ok=false;
          acted=true;
        }
@@ -1225,6 +1328,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
+ if(sampleEditorOpen_){
+   if(sampleEditorDrag_&&buttons&VSTGUI::kLButton)
+     moveSampleMarker(pos.x,sampleEditorDrag_==2);
+   return VSTGUI::kMouseEventHandled;
+ }
  if(activeKnob_>=0){
    if(knobGeneration_!=controller_.editGeneration()||!(buttons&VSTGUI::kLButton)){
      activeKnob_=-1;knobRow_=kRows;invalid();
@@ -1266,6 +1374,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
     VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
+ if(sampleEditorOpen_){sampleEditorDrag_=0;return VSTGUI::kMouseEventHandled;}
  if(activeKnob_>=0){
    activeKnob_=-1;knobRow_=kRows;
    invalid();return VSTGUI::kMouseEventHandled;
@@ -1279,6 +1388,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
+ sampleEditorDrag_=0;
  activeKnob_=-1;knobRow_=kRows;
  detailDragControl_=-1;detailDragRow_=kRows;
  const bool fresh=laneDragActive_&&

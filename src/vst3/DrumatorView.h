@@ -7,6 +7,8 @@
 #include <string>
 #include <array>
 #include "core/SequencerCore.h"
+#include "core/SampleEdit.h"
+#include <cstdint>
 namespace VSTGUI {class CTextEdit;}
 namespace drumator {
 class Controller;
@@ -61,6 +63,12 @@ private:
  std::array<bool,kRows> velocityExpanded_{};
  // 0=no popup, 1=Zoom, 2=Pattern actions, 3=Output, 4=Choke, 5=Sample actions.
  int popup_{0};
+ bool sampleEditorOpen_{false};
+ std::size_t sampleEditorRow_{kRows};
+ SampleEdit sampleEditorEdit_{};
+ std::uint32_t sampleEditorFrames_{0};
+ std::array<WaveformRange,256> sampleEditorWave_{};
+ int sampleEditorDrag_{0}; // 1=start, 2=end
  std::size_t popupRow_{kRows};
  int activeKnob_{-1}; // 0..3 row, 4=Swing,5=Humanize,6=Master
  std::size_t knobRow_{kRows};
@@ -86,6 +94,8 @@ private:
 
  std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
  void load(std::size_t row);
+ bool openSampleEditor(std::size_t row);
+ void moveSampleMarker(double x,bool endMarker);
  bool adjustEditorHeight();
  bool loadPath(std::size_t row,const std::string& path);
 };
