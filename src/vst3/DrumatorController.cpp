@@ -76,37 +76,62 @@ constexpr Steinberg::uint32 kOldState=0x31524D44u;
 constexpr Steinberg::uint32 kNewState=0x32524D44u;
 constexpr auto kRowsState=kStateMagicV3;
 }
+// DZM3 extends controller-only zoom state with optional sample-folder origins.
+// Embedded PCM remains in the Processor kit and never depends on these paths.
 Steinberg::tresult PLUGIN_API Controller::getState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
- const bool intermediate=preferredZoom_>1.05&&preferredZoom_<1.45;
- const Steinberg::uint8 code=preferredZoom_>1.45?3:
+ constexpr Steinberg::uint32 kPathState=0x334D5A44u; // DZM3
+ const Steinberg::uint8 zoom=preferredZoom_>1.45?3:
        preferredZoom_>1.25?2:preferredZoom_>1.05?1:0;
- return stream.writeInt32u(intermediate?kZoomControllerStateV2:kZoomControllerState)&&
-        stream.writeInt8u(intermediate?code:(code==3?1:0))
-     ? Steinberg::kResultOk : Steinberg::kResultFalse;
+ if(!stream.writeInt32u(kPathState)||!stream.writeInt8u(zoom))
+   return Steinberg::kResultFalse;
+ for(const auto& path:samplePaths_) {
+   if(path.size()>4096)return Steinberg::kResultFalse;
+   if(!stream.writeInt16u(static_cast<Steinberg::uint16>(path.size())))
+     return Steinberg::kResultFalse;
+   if(!path.empty()&&stream.writeRaw(path.data(),static_cast<Steinberg::TSize>(path.size()))!=
+                      static_cast<Steinberg::TSize>(path.size()))
+     return Steinberg::kResultFalse;
+ }
+ return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
+ constexpr Steinberg::uint32 kPathState=0x334D5A44u; // DZM3
  Steinberg::uint32 magic=0;
  Steinberg::uint8 zoom=0;
  if(!stream.readInt32u(magic)||!stream.readInt8u(zoom))
    return Steinberg::kResultFalse;
  if((magic==kZoomControllerState&&zoom>1)||
-    (magic==kZoomControllerStateV2&&zoom>3)||
-    (magic!=kZoomControllerState&&magic!=kZoomControllerStateV2))
+    ((magic==kZoomControllerStateV2||magic==kPathState)&&zoom>3)||
+    (magic!=kZoomControllerState&&magic!=kZoomControllerStateV2&&magic!=kPathState))
    return Steinberg::kResultFalse;
+ std::array<std::string,kRows> candidatePaths{};
+ if(magic==kPathState) {
+   try {
+     for(auto& path:candidatePaths) {
+       Steinberg::uint16 length=0;
+       if(!stream.readInt16u(length)||length>4096)return Steinberg::kResultFalse;
+       if(length) {
+         path.resize(length);
+         if(stream.readRaw(path.data(),length)!=length||
+            path.find('\\0')!=std::string::npos)
+           return Steinberg::kResultFalse;
+       }
+     }
+   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+ }
  const double requested=magic==kZoomControllerState?(zoom?1.5:1.0):
      (zoom==0?1.0:zoom==1?1.2:zoom==2?1.3:1.5);
- // The host may reject both forward resize and rollback. Do not begin
- // multiple independent native view zooms as a non-atomic state change.
  std::size_t needed=0;
  DrumatorView* target=nullptr;
  for(auto* view:views_)if(view&&!view->zoomMatches(requested)){++needed;target=view;}
  if(!zoomRecallIsAtomic(needed))return Steinberg::kResultFalse;
  if(target&&!target->applyZoomFromState(requested))return Steinberg::kResultFalse;
  preferredZoom_=requested;
+ samplePaths_.swap(candidatePaths);
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
