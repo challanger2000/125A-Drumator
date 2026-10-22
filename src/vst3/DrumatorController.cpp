@@ -771,7 +771,8 @@ bool Controller::adjustSwing(int delta) {
 
 bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
                                      std::uint32_t& frames,
-                                     std::array<WaveformRange,256>& envelope) {
+                                     std::array<WaveformRange,256>& envelope,
+                                     std::uint32_t first,std::uint32_t last) {
  if(row>=kRows)return false;
  auto* msg=allocateMessage();
  if(!msg)return false;
@@ -804,14 +805,18 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
        const auto count=static_cast<std::uint32_t>(decoded.left.size());
        if(candidate.end==0)candidate=SampleEdit::reset(count);
        if(candidate.valid(count)) {
+         if(last==0)last=count;
+         if(first>=last||last>count){msg->release();return false;}
          for(std::size_t i=0;i<envelope.size();++i) {
-           const auto first=static_cast<std::size_t>(count)*i/envelope.size();
-           const auto last=static_cast<std::size_t>(count)*(i+1)/envelope.size();
+           const auto binFirst=static_cast<std::size_t>(first)+
+                         (static_cast<std::size_t>(last-first)*i)/envelope.size();
+           const auto binLast=static_cast<std::size_t>(first)+
+                         (static_cast<std::size_t>(last-first)*(i+1))/envelope.size();
            auto bounds=waveformRange(decoded.left.data(),decoded.left.size(),
-                      first,std::max(first+std::size_t{1},last));
+                      binFirst,std::max(binFirst+std::size_t{1},binLast));
            if(decoded.channels==2) {
              const auto other=waveformRange(decoded.right.data(),decoded.right.size(),
-                          first,std::max(first+std::size_t{1},last));
+                          binFirst,std::max(binFirst+std::size_t{1},binLast));
              bounds.minimum=std::min(bounds.minimum,other.minimum);
              bounds.maximum=std::max(bounds.maximum,other.maximum);
            }

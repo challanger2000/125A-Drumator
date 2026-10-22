@@ -27,6 +27,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cstdio>
+#include <cmath>
 #include <string>
 #include <string_view>
 #include <filesystem>
@@ -812,8 +813,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      c->setFrameColor(accent);
      c->drawLine({x,278.-wavePeak.maximum*96.},{x,278.-wavePeak.minimum*96.});
    }
-   const auto sx=284.+710.*sampleEditorEdit_.start/sampleEditorFrames_;
-   const auto ex=284.+710.*sampleEditorEdit_.end/sampleEditorFrames_;
+   const auto visible=static_cast<double>(sampleEditorLast_-sampleEditorFirst_);
+   const auto sx=284.+710.*(static_cast<double>(sampleEditorEdit_.start)-sampleEditorFirst_)/visible;
+   const auto ex=284.+710.*(static_cast<double>(sampleEditorEdit_.end)-sampleEditorFirst_)/visible;
    c->setFrameColor(on);c->setLineWidth(2.);
    c->drawLine({sx,175},{sx,382});
    c->setFrameColor(letters);c->drawLine({ex,175},{ex,382});
@@ -830,6 +832,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const char* editButtons[]={"FADE IN -","FADE IN +","FADE OUT -","FADE OUT +",
                               "GAIN -","GAIN +","RESET"};
    for(int i=0;i<7;++i)drawControl(c,{265.+i*108.,458,369.+i*108.,493},editButtons[i]);
+   drawControl(c,{265,503,375,532},"AUTO START");
+   drawControl(c,{382,503,492,532},"ZOOM +");
+   drawControl(c,{499,503,609,532},"ZOOM -");
    drawControl(c,{570,535,708,578},"VORHOEREN");
    drawControl(c,{716,535,855,578},"ABBRECHEN");
    drawControl(c,{862,535,1000,578},"OK");
@@ -905,12 +910,13 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
    status_="WAV-EDITOR: KEIN GUELTIGES SAMPLE";return false;
  }
  sampleEditorEdit_=edit;sampleEditorFrames_=frames;sampleEditorWave_=wave;
- sampleEditorRow_=row;sampleEditorDrag_=0;sampleEditorOpen_=true;
+ sampleEditorRow_=row;sampleEditorFirst_=0;sampleEditorLast_=frames;
+ sampleEditorDrag_=0;sampleEditorOpen_=true;
  invalid();return true;
 }
 void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  if(!sampleEditorOpen_||sampleEditorFrames_<2)return;
- const auto frame=waveformFrameAt(x-284.,710.,0,sampleEditorFrames_);
+ const auto frame=waveformFrameAt(x-284.,710.,sampleEditorFirst_,sampleEditorLast_);
  if(endMarker)sampleEditorEdit_.end=std::clamp(frame,
                              sampleEditorEdit_.start+1,sampleEditorFrames_);
  else sampleEditorEdit_.start=std::min(frame,sampleEditorEdit_.end-1);
@@ -948,6 +954,37 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      if(i==4)sampleEditorEdit_.gain=std::max(0.f,sampleEditorEdit_.gain-.1f);
      if(i==5)sampleEditorEdit_.gain=std::min(4.f,sampleEditorEdit_.gain+.1f);
      if(i==6)sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);
+     invalid();return done;
+   }
+   if(y>=503&&y<532){
+     if(x>=265&&x<375){
+       // The first waveform bin exceeding -48 dBFS marks the rough onset.
+       // A precise sample scan is exposed through a separate control query.
+       const auto threshold=0.0039810717f;
+       std::size_t first=0;
+       while(first<sampleEditorWave_.size()&&
+             std::max(std::abs(sampleEditorWave_[first].minimum),
+                      std::abs(sampleEditorWave_[first].maximum))<threshold)++first;
+       if(first<sampleEditorWave_.size()){
+         sampleEditorEdit_.start=sampleEditorFirst_+
+           static_cast<std::uint32_t>((static_cast<std::uint64_t>(sampleEditorLast_-sampleEditorFirst_)*first)/sampleEditorWave_.size());
+         if(sampleEditorEdit_.start>=sampleEditorEdit_.end)sampleEditorEdit_.start=sampleEditorEdit_.end-1;
+       }
+     }else if((x>=382&&x<492)||(x>=499&&x<609)){
+       const auto span=sampleEditorLast_-sampleEditorFirst_;
+       std::uint32_t nextSpan=span;
+       if(x<492)nextSpan=std::max<std::uint32_t>(256,span/2);
+       else nextSpan=std::min(sampleEditorFrames_,span>sampleEditorFrames_/2?sampleEditorFrames_:span*2);
+       nextSpan=std::min(nextSpan,sampleEditorFrames_);
+       const auto center=sampleEditorFirst_+span/2;
+       const auto first=center>nextSpan/2?center-nextSpan/2:0;
+       sampleEditorFirst_=std::min(first,sampleEditorFrames_-nextSpan);
+       sampleEditorLast_=sampleEditorFirst_+nextSpan;
+       SampleEdit unused;std::uint32_t frames=0;
+       if(!controller_.sampleEditorSnapshot(sampleEditorRow_,unused,frames,sampleEditorWave_,
+                                            sampleEditorFirst_,sampleEditorLast_))
+          status_="ZOOM: WAVEFORM NICHT LESBAR";
+     }
      invalid();return done;
    }
    if(y>=535&&y<578) {
