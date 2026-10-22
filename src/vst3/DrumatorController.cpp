@@ -785,7 +785,7 @@ bool Controller::toggleRowGate(std::size_t row,bool solo) {
 }
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
- return setStepVelocity(p,r,s,velocity(p,r,s)>0?0:127);
+ return setStepVelocity(p,r,s,velocity(p,r,s)>0?0:100);
 }
 Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
  if(row>=kRows)return LoadStatus::InvalidRow;
