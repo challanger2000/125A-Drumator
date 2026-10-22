@@ -48,6 +48,10 @@ static void testKernel() {
  SincKernel kernel;
  require(!kernel.prepare(0.0)&&!kernel.prepare(-1.0),"invalid ratio accepted");
  require(kernel.prepare(1.0)&&kernel.ready(),"kernel 1x failed");
+ // SOR04: unity-rate imports bypass sinc preparation but must retain exact
+ // sample playback and remain reusable at other ratios.
+ require(kernel.ratio()==1.0&&kernel.taps()==32,
+         "SOR04 unity-rate fast preparation changed render contract");
  std::array<float,512> constant{};
  constant.fill(1.f);
  SampleVoiceEngine engine;
