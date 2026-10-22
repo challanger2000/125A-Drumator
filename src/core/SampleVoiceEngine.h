@@ -35,6 +35,15 @@ public:
     bool prepare(double playbackRatio) noexcept {
         if (!std::isfinite(playbackRatio) || playbackRatio<=0.0) return false;
         constexpr double pi=3.141592653589793238462643383279502884;
+        // The renderer copies integer-position samples directly at unity.
+        // Preparing 1024 sinc phases here only stalls the UI/host control
+        // thread when a WAV is replaced during playback; no render uses them.
+        if(playbackRatio==1.0) {
+            ratio_=1.0;
+            taps_=32;
+            ready_=true;
+            return true;
+        }
         const double cutoff=std::min(1.0,1.0/playbackRatio);
         taps_=playbackRatio>=8.0?256:(playbackRatio>=4.0?128:(playbackRatio>=2.0?64:32));
         // Allocate on the control thread, not on the stack or audio thread.
