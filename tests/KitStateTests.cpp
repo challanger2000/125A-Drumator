@@ -322,6 +322,9 @@ int main() {
     original.names[0]="../bad.wav";
     check(!KitCodec::encode(original,again),"Path traversal name accepted");
     original.names[0]="Kick_01.wav";
+    // The raw-invalid-WAV fixture must not also retain a DM16 edit:
+    // edited samples are intentionally decoded during encode validation.
+    original.sampleEdits[0]=SampleEdit{};
     original.wav[0][0]='X'; // invalid WAV, checksum would be recomputed
     check(KitCodec::encode(original,again),"Raw invalid fixture creation");
     check(!KitCodec::decode(again.data(),again.size(),copy),
