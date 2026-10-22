@@ -1563,8 +1563,11 @@ void testTransportSequenceTorture(){
    block.clock.projectTimeMusic=(cycle%2?4.:8.);
    block.data.inputEvents=&notes;
    check(f.p->process(block.data)==kResultOk,"TORTURE MIDI trigger block");
-   if(std::abs(block.left[80]-.25f)>1e-6f||
-      std::abs(block.right[80]+.5f)>1e-6f)++missingHits;
+   // Verify sample-exact onset and prefix, not only an interior sample.
+   // A delayed MIDI event or missing initial PCM must fail mutation QA.
+   for(std::size_t sample=0;sample<128;++sample)
+     if(std::abs(block.left[sample]-.25f)>1e-6f||
+        std::abs(block.right[sample]+.5f)>1e-6f)++missingHits;
    block.data.inputEvents=nullptr;
    block.data.numSamples=(cycle%3==0?0:256);
    block.clock.state=0;
@@ -1638,6 +1641,16 @@ void testPacedSampleSwapContinuity(){
      ++errors;
  }
  actor.join();
+ // Assert that accepted controller imports actually reach the processor kit.
+ // Unchanged-row PCM alone cannot distinguish an ignored import from success.
+ ResizableMemoryIBStream importedState;
+ KitState importedKit;
+ check(active.p->getState(&importedState)==kResultOk&&
+       KitCodec::decode(static_cast<const std::uint8_t*>(importedState.getData()),
+                        static_cast<std::size_t>(importedState.getCursor()),importedKit),
+       "PACING imported kit state decode");
+ check(importedKit.wav[0]==constantStereo(.125f,-.25f),
+       "PACING accepted sample import did not update processor asset");
  qa::workflowNotice("PACING 48k/256 blocks="+std::to_string(blocks.load())+
    " unchanged-row PCM mismatches="+std::to_string(badPcm.load())+
    " deadline-misses="+std::to_string(misses.load())+
