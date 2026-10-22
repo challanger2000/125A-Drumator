@@ -189,7 +189,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV15||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     KitState candidate;

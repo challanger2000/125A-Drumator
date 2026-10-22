@@ -56,6 +56,9 @@ int main() {
     std::vector<std::uint8_t> encoded;
     check(KitCodec::encode(original,encoded),"Unable to encode kit");
     check(KitCodec::u32(encoded.data())==kKitMagic,"DMR4 format ID");
+     // DM16 sample edits must be serialized losslessly; old DM15 projects
+     // will default to unedited samples after migration.
+     check(encoded.size()>=kRows*kSampleEditBytes+4,"DM16 edit tail missing");
     KitState copy{};
     check(KitCodec::decode(encoded.data(),encoded.size(),copy),"Unable to decode");
     check(copy.muted==0x8001&&copy.solo==0x0006&&copy.swing==35&&copy.humanize==70,
