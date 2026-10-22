@@ -106,6 +106,10 @@ private:
  SampleVoiceEngine voices_;
 
  SampleExchange exchange_{};
+ SampleExchange auditionExchange_{};
+ SampleVoiceEngine auditionVoices_{};
+ std::atomic<bool> auditionStart_{false},auditionStop_{false};
+ std::vector<float> auditionLeft_{},auditionRight_{};
  TriggerBatch triggers_{};
  PatternEventTimeline patternTimeline_{};
  // One-shot previews from GUI; one pending request per row, not persisted.
