@@ -824,6 +824,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFrameColor(on);c->setLineWidth(2.);
    c->drawLine({sx,175},{sx,382});
    c->setFrameColor(letters);c->drawLine({ex,175},{ex,382});
+   // Fade handles and ramp overlays use source-frame positions.
+   const auto fadeInX=sx+710.*static_cast<double>(sampleEditorEdit_.fadeIn)/visible;
+   const auto fadeOutX=ex-710.*static_cast<double>(sampleEditorEdit_.fadeOut)/visible;
+   c->setFrameColor(on);c->drawLine({sx,278},{fadeInX,180});
+   c->setFrameColor(letters);c->drawLine({fadeOutX,180},{ex,278});
+   c->setFillColor(on);c->drawRect({fadeInX-5,175,fadeInX+5,188},VSTGUI::kDrawFilled);
+   c->setFillColor(letters);c->drawRect({fadeOutX-5,175,fadeOutX+5,188},VSTGUI::kDrawFilled);
    c->setLineWidth(1.);
    // Scrollbar is proportional to the visible source-frame interval.
    constexpr double scrollX=284.,scrollWidth=710.;
@@ -841,7 +848,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
         static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
    c->drawString(info,{270,406,1020,430});
-   c->drawString("WELLENFORM: KLICK START, SHIFT+KLICK ENDE; MARKER ZIEHEN",
+   c->drawString("MARKER ZIEHEN: START/ENDE VERTIKAL, FADES AN OBEREN GRIFFEN",
                  {275,430,1020,451});
    const char* editButtons[]={"FADE IN -","FADE IN +","FADE OUT -","FADE OUT +",
                               "GAIN -","GAIN +","RESET"};
@@ -941,6 +948,19 @@ void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  invalid();
 }
 
+void DrumatorView::moveSampleFade(double x,bool fadeOut) {
+ if(!sampleEditorOpen_)return;
+ const auto frame=waveformFrameAt(x-284.,710.,sampleEditorFirst_,sampleEditorLast_);
+ const auto& e=sampleEditorEdit_;
+ if(fadeOut){
+   const auto bounded=std::clamp(frame,e.start+e.fadeIn,e.end);
+   sampleEditorEdit_.fadeOut=e.end-bounded;
+ }else{
+   const auto bounded=std::clamp(frame,e.start,e.end-e.fadeOut);
+   sampleEditorEdit_.fadeIn=bounded-e.start;
+ }
+ invalid();
+}
 bool DrumatorView::scrollEditorWave(double x) {
  if(!sampleEditorOpen_||!sampleEditorFrames_)return false;
  const auto span=sampleEditorLast_-sampleEditorFirst_;
@@ -974,6 +994,19 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      const auto endX=284.+710.*(static_cast<double>(sampleEditorEdit_.end)-sampleEditorFirst_)/visible;
      const auto startDistance=std::abs(x-startX);
      const auto endDistance=std::abs(x-endX);
+     const auto fadeInX=startX+710.*static_cast<double>(sampleEditorEdit_.fadeIn)/visible;
+     const auto fadeOutX=endX-710.*static_cast<double>(sampleEditorEdit_.fadeOut)/visible;
+     // Upper handles are for fades; the vertical START/END markers are
+     // grabbed anywhere below them. Handles remain draggable at zero fade.
+     if(y>=175&&y<=201){
+       constexpr double radius=13.;
+       const auto inDist=std::abs(x-fadeInX),outDist=std::abs(x-fadeOutX);
+       if(inDist<=radius||outDist<=radius){
+         sampleEditorDrag_=inDist<=outDist?4:5;
+         moveSampleFade(x,sampleEditorDrag_==5);
+         return VSTGUI::kMouseEventHandled;
+       }
+     }
      // Grab either line directly. When neither is near, Shift explicitly
      // selects END; ordinary empty-space clicks continue to position START.
      constexpr double grabRadius=12.;
@@ -1417,6 +1450,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  if(sampleEditorOpen_){
    if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_==3)scrollEditorWave(pos.x);
+   else if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_>=4)
+     moveSampleFade(pos.x,sampleEditorDrag_==5);
    else if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_)
      moveSampleMarker(pos.x,sampleEditorDrag_==2);
    return VSTGUI::kMouseEventHandled;
