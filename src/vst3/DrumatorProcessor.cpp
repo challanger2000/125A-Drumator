@@ -296,7 +296,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
      catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
    }else if(PreparedSample::fromWav(
        kit_.wav[idx].data(),kit_.wav[idx].size(),rate,
-       static_cast<double>(semitones),1.f,0.f,0,false,candidate)!=
+       static_cast<double>(semitones),1.f,0.f,0,false,candidate,
+       kit_.sampleEdits[idx])!=
        PrepareStatus::Ok)return Steinberg::kResultFalse;
    if(!candidate)return Steinberg::kResultFalse;
    for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
@@ -431,7 +432,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
      static_cast<const std::uint8_t*>(bytes),
      static_cast<std::size_t>(size),rate,
      static_cast<double>(static_cast<int>(kit_.pitch[static_cast<std::size_t>(row)])-24),
-     1.f,0.f,0,false,candidate);
+     1.f,0.f,0,false,candidate,SampleEdit{});
  if(prepared!=PrepareStatus::Ok)return Steinberg::kResultFalse;
  {
     std::size_t total=size;
@@ -451,6 +452,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     previewPending_.fetch_and(~(std::uint32_t{1}<<static_cast<unsigned>(row)),
                               std::memory_order_acq_rel);
     kit_.wav[static_cast<std::size_t>(row)].swap(retained);
+    kit_.sampleEdits[static_cast<std::size_t>(row)]=SampleEdit{};
     kit_.names[static_cast<std::size_t>(row)].swap(fileName);
  }
  return Steinberg::kResultOk;
@@ -982,7 +984,7 @@ bool Processor::publishRestoredKit(const KitState& kit,double rate) {
     }else if(PreparedSample::fromWav(
          kit.wav[row].data(),kit.wav[row].size(),rate,
          static_cast<double>(static_cast<int>(kit.pitch[row])-24),1.f,0.f,0,false,
-         fresh[row])!=PrepareStatus::Ok)return false;
+         fresh[row],kit.sampleEdits[row])!=PrepareStatus::Ok)return false;
  }
  for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
  for(std::size_t row=0;row<kRows;++row) {
