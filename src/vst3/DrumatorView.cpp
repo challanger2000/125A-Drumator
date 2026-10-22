@@ -974,6 +974,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          sampleEditorEdit_.start=sampleEditorFirst_+
            static_cast<std::uint32_t>((static_cast<std::uint64_t>(sampleEditorLast_-sampleEditorFirst_)*first)/sampleEditorWave_.size());
          if(sampleEditorEdit_.start>=sampleEditorEdit_.end)sampleEditorEdit_.start=sampleEditorEdit_.end-1;
+         const auto remaining=sampleEditorEdit_.length();
+         sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,remaining);
+         sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
+                                           remaining-sampleEditorEdit_.fadeIn);
        }
      }else if((x>=382&&x<492)||(x>=499&&x<609)){
        const auto span=sampleEditorLast_-sampleEditorFirst_;
