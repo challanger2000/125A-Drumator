@@ -1748,6 +1748,7 @@ void testTransportJumpRetiresOldVoices(){
 #include "ReauditCases.inl"
 }
 int main(int argc,char** argv){
+ std::cout<<std::unitbuf;
  if(argc!=2&&argc!=3)return 2;
  SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
  CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
@@ -1771,6 +1772,30 @@ int main(int argc,char** argv){
    catch(const std::exception& ex){allocationFail=-1;releaseProbe();++failures;
      const auto line=name+" FAIL: "+ex.what();evidence(line);qaCaseSummary+=line+'\n';}
  };
+ run("RE01 original deterministic VFA02",testReauditPatternLength);
+ run("RE02 original fresh DZM3 matrix",testFinalAuditDzm3);
+ run("RE03 paired duration fallback in Pattern and Song",testReauditDurationFallback);
+ run("RE04 peer FILL survives late Cancel",testReauditPeerFill);
+ run("RE05 component-first recall does not arm next kit",testReauditOriginOrder);
+ run("RE06 reentrant setDirty captures consistent streams",testReauditDirtySave);
+ run("RE07 host pattern feedback before component recall",testReauditHostMirror);
+ run("RE08 independent complete PCM timeline",testReauditPcmTimeline);
+ run("RE09 64 voices live swap locate Stop",testReauditLoadedSwap);
+ run("RE10 actual Processor deadline matrix",testReauditDeadlineMatrix);
+ run("RE11 cold Song overlap cannot divide by zero",[&]{testReauditSongColdChild(argv[1]);});
+ run("RM01 zero Stop repair mutation",[]{expectMutationKilled(qa::AuditMutation::suppressZeroStop,"zero Stop",testZeroFrameStopRetiresVoice);});
+ run("RM02 paired duration repair mutation",[]{expectMutationKilled(qa::AuditMutation::staleDuration,"paired duration",testReauditPatternLength);});
+ run("RM03 peer owner repair mutation",[]{expectMutationKilled(qa::AuditMutation::skipPeerCommit,"peer commit",testPeerVelocityCancelPreservesCommittedStep);});
+ run("RM04 asset identity repair mutation",[]{expectMutationKilled(qa::AuditMutation::basenameOnly,"asset identity",testComponentOnlySameBasenameRejectsStaleOrigin);});
+ run("RM05 TORTURE missing MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::dropMidi,"TORTURE missing MIDI",testTransportSequenceTorture);});
+ run("RM06 TORTURE duplicate MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::doubleMidi,"TORTURE doubled MIDI",testTransportSequenceTorture);});
+ run("RM07 TORTURE one-sample delay mutation",[]{expectMutationKilled(qa::AuditMutation::delayMidiOne,"TORTURE one-sample delay",testTransportSequenceTorture);});
+ run("RM08 TORTURE missing prefix mutation",[]{expectMutationKilled(qa::AuditMutation::zeroPrefix,"TORTURE zero first32",testTransportSequenceTorture);});
+ run("RM09 PACING accepted import no-op mutation",[]{expectMutationKilled(qa::AuditMutation::skipImport,"PACING import no-op",testPacedSampleSwapContinuity);});
+ run("RM10 PACING active dropout mutation",[]{expectMutationKilled(qa::AuditMutation::muteImportedProcessor,"PACING active-only dropout",testPacedSampleSwapContinuity);});
+ run("RM11 independent PCM detects offset and gaps",testReauditPcmNegatives);
+ run("RM12 PACING deadline diagnostic injection",testReauditDeadlineDiagnostic);
+ run("RM13 loaded swap detects ignored replacement",[]{expectMutationKilled(qa::AuditMutation::skipImport,"64 voice audible replacement",testReauditLoadedSwap);});
  run("T03 controlled actual bank",testPatternOverlap);
  run("T04 controlled real restore gate",testKitGate);
  for(bool zero:{true,false})for(bool busy:{false,true})for(const auto& points:std::vector<std::vector<unsigned>>{{5},{2},{5,2}}){
@@ -1817,30 +1842,6 @@ int main(int argc,char** argv){
  run("FA06 minimum-height host refusal menus",testAuditMinimumHeightMenus);
  run("SA01 two-view native invalidation after row and global edits",testSecondAuditViewInvalidation);
  run("SA02 actual sequencer/MIDI choke partition",testSecondAuditTriggerPartition);
- run("RE01 original deterministic VFA02",testReauditPatternLength);
- run("RE02 original fresh DZM3 matrix",testFinalAuditDzm3);
- run("RE03 paired duration fallback in Pattern and Song",testReauditDurationFallback);
- run("RE04 peer FILL survives late Cancel",testReauditPeerFill);
- run("RE05 component-first recall does not arm next kit",testReauditOriginOrder);
- run("RE06 reentrant setDirty captures consistent streams",testReauditDirtySave);
- run("RE07 host pattern feedback before component recall",testReauditHostMirror);
- run("RE08 independent complete PCM timeline",testReauditPcmTimeline);
- run("RE09 64 voices live swap locate Stop",testReauditLoadedSwap);
- run("RE10 actual Processor deadline matrix",testReauditDeadlineMatrix);
- run("RE11 cold Song overlap cannot divide by zero",[&]{testReauditSongColdChild(argv[1]);});
- run("RM01 zero Stop repair mutation",[]{expectMutationKilled(qa::AuditMutation::suppressZeroStop,"zero Stop",testZeroFrameStopRetiresVoice);});
- run("RM02 paired duration repair mutation",[]{expectMutationKilled(qa::AuditMutation::staleDuration,"paired duration",testReauditPatternLength);});
- run("RM03 peer owner repair mutation",[]{expectMutationKilled(qa::AuditMutation::skipPeerCommit,"peer commit",testPeerVelocityCancelPreservesCommittedStep);});
- run("RM04 asset identity repair mutation",[]{expectMutationKilled(qa::AuditMutation::basenameOnly,"asset identity",testComponentOnlySameBasenameRejectsStaleOrigin);});
- run("RM05 TORTURE missing MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::dropMidi,"TORTURE missing MIDI",testTransportSequenceTorture);});
- run("RM06 TORTURE duplicate MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::doubleMidi,"TORTURE doubled MIDI",testTransportSequenceTorture);});
- run("RM07 TORTURE one-sample delay mutation",[]{expectMutationKilled(qa::AuditMutation::delayMidiOne,"TORTURE one-sample delay",testTransportSequenceTorture);});
- run("RM08 TORTURE missing prefix mutation",[]{expectMutationKilled(qa::AuditMutation::zeroPrefix,"TORTURE zero first32",testTransportSequenceTorture);});
- run("RM09 PACING accepted import no-op mutation",[]{expectMutationKilled(qa::AuditMutation::skipImport,"PACING import no-op",testPacedSampleSwapContinuity);});
- run("RM10 PACING active dropout mutation",[]{expectMutationKilled(qa::AuditMutation::muteImportedProcessor,"PACING active-only dropout",testPacedSampleSwapContinuity);});
- run("RM11 independent PCM detects offset and gaps",testReauditPcmNegatives);
- run("RM12 PACING deadline diagnostic injection",testReauditDeadlineDiagnostic);
- run("RM13 loaded swap detects ignored replacement",[]{expectMutationKilled(qa::AuditMutation::skipImport,"64 voice audible replacement",testReauditLoadedSwap);});
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::collectedNotices=nullptr;
