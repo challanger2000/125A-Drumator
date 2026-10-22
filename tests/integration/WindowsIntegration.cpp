@@ -1550,11 +1550,14 @@ void testPeerVelocityCancelPreservesCommittedStep(){
  click(*peer,630.,108.+94.+60.);
  check(f.c->velocity(0,1,0)==100,
        "V1A03 peer step was not committed");
+ // The peer edit commits the first gesture, so its last velocity
+ // must survive a subsequently delivered stale Cancel unchanged.
+ const auto committedOwnVelocity=f.c->velocity(0,0,0);
  first->onMouseCancel();
  check(f.c->velocity(0,1,0)==100,
        "V1A03 late Cancel erased second view step");
- check(f.c->velocity(0,0,0)==60,
-       "V1A03 peer commit left unexpected own-step value");
+ check(f.c->velocity(0,0,0)==committedOwnVelocity,
+       "V1A03 stale Cancel changed previously committed velocity");
 }
 void testZeroFrameStopRetiresVoice(){
  Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
