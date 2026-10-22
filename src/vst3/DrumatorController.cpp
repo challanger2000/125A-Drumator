@@ -190,8 +190,9 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     for(std::size_t row=0;row<kRows;++row) {
       auto& path=samplePaths_[row];
       const auto last=path.find_last_of("/\\");
-      const auto basename=last==std::string::npos?path:path.substr(last+1);
-      if(candidate.names[row].empty()||basename!=candidate.names[row])
+      const auto start=last==std::string::npos?0:last+1;
+      if(candidate.names[row].empty()||
+         path.compare(start,std::string::npos,candidate.names[row])!=0)
         path.clear();
     }
     visibleRows_=candidate.visible;
