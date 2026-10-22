@@ -116,6 +116,7 @@ public:
  }
 private:
  void notifyViews(bool relayout);
+ bool processorConfirmsPattern(unsigned requested);
  void invalidateTransientEditsForRecall() noexcept;
  std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);

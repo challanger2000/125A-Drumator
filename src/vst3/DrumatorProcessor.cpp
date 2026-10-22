@@ -106,6 +106,15 @@ Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
 Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  if(!msg||!msg->getMessageID())return AudioEffect::notify(msg);
  const auto* id=msg->getMessageID();
+ // Control-thread-only state query. The audio selection is atomic; no
+ // callback lock, heap work or mutation is required.
+ if(std::strcmp(id,"Drumator.QueryPattern")==0) {
+   auto* attributes=msg->getAttributes();
+   return attributes&&attributes->setInt("Selected",
+       static_cast<Steinberg::int64>(selected_.load(std::memory_order_acquire)))==Steinberg::kResultOk
+       ? Steinberg::kResultOk : Steinberg::kResultFalse;
+ }
+
  if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
     std::strcmp(id,"Drumator.StepEdit")!=0&&
     std::strcmp(id,"Drumator.PatternReplace")!=0&&
