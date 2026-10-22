@@ -795,7 +795,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        // No previously validated generation exists; never render a partial edit.
        cursor=finish;return;
      }
-     if(audioPatternValid_[activePattern])\n       lengths[activePattern]=audioPatternLengthCache_[activePattern];
+     if(audioPatternValid_[activePattern])
+       lengths[activePattern]=audioPatternLengthCache_[activePattern];
      struct CoherentView {
        const std::array<std::uint8_t,kRows*kSteps>& values;
        std::uint8_t program;
