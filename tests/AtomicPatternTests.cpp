@@ -280,7 +280,7 @@ int main(){
     check(durationBank.replacePattern(0,first.data(),first.size(),32),
           "V1A02 initial 2T version");
     std::atomic<bool> done{false};
-    std::thread writer([&]{
+    std::thread durationWriter([&]{
       for(int i=0;i<10000;++i){
         if(!durationBank.replacePattern(0,(i&1)?first.data():second.data(),
                 first.size(),(i&1)?32:16))std::terminate();
@@ -296,7 +296,7 @@ int main(){
         ++accepted;
       }
     }
-    writer.join();
+    durationWriter.join();
     std::uint8_t finalDuration=0;
     check(durationBank.coherentPattern(0,read,finalDuration),
           "V1A02 final duration snapshot");
