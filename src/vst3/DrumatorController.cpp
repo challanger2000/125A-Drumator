@@ -117,7 +117,7 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
        if(length) {
          path.resize(length);
          if(stream.readRaw(path.data(),length)!=length||
-            path.find('\\0')!=std::string::npos)
+            path.find('\0')!=std::string::npos)
            return Steinberg::kResultFalse;
        }
      }
