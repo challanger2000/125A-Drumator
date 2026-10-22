@@ -278,6 +278,53 @@ std::vector<std::uint8_t> constantStereo(float l,float r){
  for(std::size_t n=0;n<1024;++n){std::memcpy(b.data()+44+n*8,&l,4);std::memcpy(b.data()+48+n*8,&r,4);}
  return b;
 }
+void testWavEditorPreviewAndRecall(){
+ Fixture f;
+ KitState initial;initial.visible=2;initial.grid.fill(0);
+ initial.names[0]="sample.wav";initial.wav[0]=constantStereo(.5f,-.25f);
+ f.kit(initial);prepareAudio(*f.p);
+ std::array<float,256> left{},right{};float* channels[]{left.data(),right.data()};
+ AudioBusBuffers out{};out.numChannels=2;out.channelBuffers32=channels;
+ ProcessData block{};block.numSamples=256;block.numOutputs=1;block.outputs=&out;
+ block.symbolicSampleSize=kSample32;
+ auto getKit=[&]{
+   ResizableMemoryIBStream stream;KitState kit;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                          static_cast<std::size_t>(stream.getCursor()),kit),
+         "WE01 processor save/decode failed");
+   return kit;
+ };
+ SampleEdit candidate{64,512,0,0,.5f};
+ SampleEdit observed{};std::uint32_t frames=0;
+ std::array<WaveformRange,256> peaks{};
+ check(f.c->sampleEditorSnapshot(0,observed,frames,peaks)&&frames==1024&&
+       observed.start==0&&observed.end==1024,"WE01 embedded editor snapshot");
+ check(f.c->previewSampleEdit(0,candidate),"WE01 provisional preview rejected");
+ check(f.p->process(block)==kResultOk,"WE01 stopped-transport preview render");
+ check(std::abs(left[100]-.25f)<.005f&&
+       std::abs(right[100]+.125f)<.005f,
+       "WE01 provisional START/GAIN not audible");
+ check(getKit().sampleEdits[0].end==0,"WE01 preview dirtied project");
+ f.c->stopSampleEditPreview();
+ check(f.p->process(block)==kResultOk,"WE01 preview stop render");
+ check(std::abs(left[100])<1e-6f&&std::abs(right[100])<1e-6f,
+       "WE01 cancel left provisional audio playing");
+ check(getKit().sampleEdits[0].end==0,"WE01 cancel changed saved edit");
+ check(f.c->commitSampleEdit(0,candidate),"WE01 commit rejected");
+ const auto committed=getKit();
+ check(committed.sampleEdits[0].start==64&&committed.sampleEdits[0].end==512&&
+       committed.sampleEdits[0].gain==.5f,"WE01 edit missing from kit state");
+ const auto encoded=Fixture::encode(committed);
+ drumator::qa::ByteStream input(const_cast<std::uint8_t*>(encoded.data()),encoded.size());
+ check(f.p->setState(&input)==kResultOk&&f.recall(encoded)==kResultOk,
+       "WE01 processor/controller recall rejected");
+ check(f.c->sampleEditorSnapshot(0,observed,frames,peaks)&&
+       observed.start==64&&observed.end==512&&observed.gain==.5f,
+       "WE01 recalled editor state differs");
+ f.p->setProcessing(false);f.p->setActive(false);
+ evidence("WE01 stopped audition, cancel, state neutrality, OK and DM16 recall PASS");
+}
 void testArbitration(bool zero,bool busy,const std::vector<unsigned>& points){
  Fixture f;auto old=namedKit('X');old.selected=2;f.kit(old);prepareAudio(*f.p);
  auto next=namedKit('Y');next.selected=6;next.grid.fill(0);
@@ -1816,6 +1863,7 @@ int main(int argc,char** argv){
  run("RM11 independent PCM detects offset and gaps",testReauditPcmNegatives);
  run("RM12 PACING deadline diagnostic injection",testReauditDeadlineDiagnostic);
  run("RM13 loaded swap detects ignored replacement",[]{expectMutationKilled(qa::AuditMutation::skipImport,"64 voice audible replacement",testReauditLoadedSwap);});
+ run("WE01 actual WAV preview and project recall",testWavEditorPreviewAndRecall);
  run("T03 controlled actual bank",testPatternOverlap);
  run("T04 controlled real restore gate",testKitGate);
  for(bool zero:{true,false})for(bool busy:{false,true})for(const auto& points:std::vector<std::vector<unsigned>>{{5},{2},{5,2}}){
