@@ -23,5 +23,27 @@ int main(){
  require(drumator::waveformFrameAt(-10,200,0,100)==0);
  require(drumator::waveformFrameAt(100,200,0,100)==50);
  require(drumator::waveformFrameAt(220,200,0,100)==100);
+ // Preview/OK/CANCEL share immutable, validated edit envelopes.
+ auto pending=SampleEdit::reset(8192);
+ pending.start=256;pending.end=4096;pending.fadeIn=256;
+ pending.fadeOut=128;pending.gain=.75f;
+ require(pending.valid(8192));
+ const auto saved=SampleEdit::reset(8192);
+ // CANCEL preserves the saved state; only OK would select pending.
+ require(saved.start==0&&saved.end==8192&&saved.gain==1.f);
+ require(pending.amplitude(256)==0.f);
+ require(std::abs(pending.amplitude(512)-.75f)<1e-6f);
+ require(pending.amplitude(4095)==0.f);
+ pending.end=pending.start+1;
+ pending.fadeIn=0;pending.fadeOut=0;
+ require(pending.valid(8192)&&pending.length()==1);
+ pending.fadeIn=1;pending.fadeOut=1;
+ require(!pending.valid(8192));
+ pending=SampleEdit::reset(8192);
+ pending.gain=0.f;
+ require(pending.valid(8192)&&pending.amplitude(512)==0.f);
+ pending.gain=-1.f;require(!pending.valid(8192));
+ pending.gain=4.01f;require(!pending.valid(8192));
+ require(drumator::waveformFrameAt(355.,710.,200,1200)==700);
  std::cout<<"SampleEdit core geometry/envelope PASS\\n";
 }
