@@ -271,6 +271,43 @@ int main(){
   check(coherent==oldPattern||coherent==newPattern,"invalid final generation");
   check(!transactionBank.replacePattern(0,newPattern.data(),newPattern.size()-1),
         "invalid replacement length accepted");
+  // V1A02: the musical duration and all cells form one versioned snapshot.
+  // A reader may observe the old or the new generation, never a mixed pair.
+  {
+    AtomicPatternBank durationBank;
+    std::array<std::uint8_t,kRows*kSteps> first{},second{},read{};
+    first.fill(0);second.fill(0);first[0]=37;second[0]=100;
+    check(durationBank.replacePattern(0,first.data(),first.size(),32),
+          "V1A02 initial 2T version");
+    std::atomic<bool> done{false};
+    std::thread writer([&]{
+      for(int i=0;i<10000;++i){
+        if(!durationBank.replacePattern(0,(i&1)?first.data():second.data(),
+                first.size(),(i&1)?32:16))std::terminate();
+      }
+      done.store(true,std::memory_order_release);
+    });
+    std::size_t accepted=0;
+    while(!done.load(std::memory_order_acquire)){
+      std::uint8_t duration=0;
+      if(durationBank.coherentPattern(0,read,duration)){
+        check((duration==32&&read==first)||(duration==16&&read==second),
+              "V1A02 length/steps mixed across versions");
+        ++accepted;
+      }
+    }
+    writer.join();
+    std::uint8_t finalDuration=0;
+    check(durationBank.coherentPattern(0,read,finalDuration),
+          "V1A02 final duration snapshot");
+    check((finalDuration==32&&read==first)||(finalDuration==16&&read==second),
+          "V1A02 final mixed state");
+    check(!durationBank.setLength(0,17),"V1A02 invalid duration accepted");
+    check(durationBank.setLength(0,16),"V1A02 length-only update rejected");
+    check(durationBank.coherentPattern(0,read,finalDuration)&&finalDuration==16,
+          "V1A02 length-only snapshot failed");
+    check(accepted>0,"V1A02 no successful concurrent snapshots");
+  }
   check(verified>0,"T03 no successful snapshots");
   // Exact mid-write/read overlap is additionally forced in the Windows
   // integration target using test-only generated-source probe points.
