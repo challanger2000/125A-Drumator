@@ -107,8 +107,24 @@ int main() {
           "out-of-range DM11 bus accepted despite valid checksum");
     check(copy.output==preservedRouting.output&&copy.grid==preservedRouting.grid,
           "rejected bus changed previously loaded kit");
+    // First strip the DM16 WAV-edit extension to recreate an actual DM15.
+    auto old15=encoded;
+    old15.erase(old15.end()-static_cast<std::ptrdiff_t>(4+kRows*kSampleEditBytes),old15.end()-4);
+    for(int i=0;i<4;++i)
+      old15[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV15>>(8*i);
+    const auto old15Size=static_cast<std::uint32_t>(old15.size()-8);
+    for(int i=0;i<4;++i)
+      old15[4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(old15Size>>(8*i));
+    const auto old15Hash=KitCodec::hash(old15.data()+8,old15.size()-12);
+    for(int i=0;i<4;++i)
+      old15[old15.size()-4+static_cast<std::size_t>(i)]=
+          static_cast<std::uint8_t>(old15Hash>>(8*i));
+    KitState migrated15;
+    check(KitCodec::decode(old15.data(),old15.size(),migrated15)&&
+          migrated15.sampleEdits[0].end==0,
+          "DM15 WAV-edit default migration failed");
     // Strip the DM15 eight-byte length extension to recreate DM14.
-    auto old14=encoded;
+    auto old14=old15;
     old14.erase(old14.end()-static_cast<std::ptrdiff_t>(4+kPatterns),old14.end()-4);
     for(int i=0;i<4;++i)
       old14[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV14>>(8*i));
@@ -144,7 +160,7 @@ int main() {
     // Corrupt display-label length with a corrected checksum, rejecting
     // the state without mutating its previous successful contents.
     auto badDisplay=encoded;
-    const auto labelsBegin=badDisplay.size()-4-kPatterns-labelsSize;
+    const auto labelsBegin=badDisplay.size()-4-kRows*kSampleEditBytes-kPatterns-labelsSize;
     badDisplay[labelsBegin]=static_cast<std::uint8_t>(kMaxRowLabel+1);
     const auto badDisplayHash=KitCodec::hash(badDisplay.data()+8,badDisplay.size()-12);
     for(int i=0;i<4;++i)badDisplay[badDisplay.size()-4+static_cast<std::size_t>(i)]=
