@@ -1538,6 +1538,29 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+void testZeroFrameStopRetiresVoice(){
+ Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+ kit.names[0]="zero-stop.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock audio;
+ constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|
+                        ProcessContext::kProjectTimeMusicValid;
+ audio.clock.state=playing;audio.clock.projectTimeMusic=4.;
+ EventList notes;Event hit{};hit.type=Event::kNoteOnEvent;hit.noteOn.pitch=36;
+ hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+ check(notes.addEvent(hit)==kResultOk,"SOR03Z trigger fixture");
+ audio.data.inputEvents=&notes;
+ check(f.p->process(audio.data)==kResultOk&&IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "SOR03Z initial voice missing");
+ audio.data.inputEvents=nullptr;audio.data.numSamples=0;
+ audio.clock.state=0;audio.clock.projectTimeMusic=4.+256./24000.;
+ check(f.p->process(audio.data)==kResultOk&&IntegrationAccess::activeAudioVoices(*f.p)==0,
+       "SOR03Z zero-frame stopped callback failed to retire voice");
+ audio.data.numSamples=256;audio.clock.state=playing;
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f&&audio.right[80]==0.f,
+       "SOR03Z continuous PPQ restart resumed old voice");
+ f.p->setProcessing(false);f.p->setActive(false);
+}
 void testTransportJumpRetiresOldVoices(){
  Fixture f;
  KitState kit;kit.visible=1;kit.grid.fill(0);kit.grid[0]=100;
@@ -1592,6 +1615,7 @@ int main(int argc,char** argv){
  run("P19 1T/2T copy-paste-duplicate duration",testPatternDurationClipboard);
  run("T28 rate-switch transport clock reset",testRateChangeTransportReset);
  run("SOR03 host timeline jump voice cleanup",testTransportJumpRetiresOldVoices);
+ run("SOR03Z zero-frame stop retires old voices",testZeroFrameStopRetiresVoice);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
   run("SOR01 new Step Velocity 100",testNewStepDefault100);
  run("VELO 100 reset existing notes",testVelocityResetPattern);
