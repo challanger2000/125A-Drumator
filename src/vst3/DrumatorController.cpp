@@ -69,7 +69,13 @@ void Controller::invalidateTransientEditsForRecall() noexcept {
 Steinberg::tresult PLUGIN_API Controller::setParamNormalized(
     Steinberg::Vst::ParamID id,Steinberg::Vst::ParamValue value) {
  const auto result=EditController::setParamNormalized(id,value);
- if(result==Steinberg::kResultOk&&id==kPatternParam)notifyViews(false);
+ if(result==Steinberg::kResultOk&&id==kPatternParam) {
+   // Keep a newer host pattern callback when Component-state recall arrives late.
+   // Internal recall bypasses this override and does not set the pending flag.
+   hostPatternPending_=true;
+   hostPatternValue_=getParamNormalized(kPatternParam);
+   notifyViews(false);
+ }
  return result;
 }
 Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
@@ -236,8 +242,11 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     // failure to refresh an editor must not be reported as rejected kit state.
     // Update the registered parameter independently from native editor focus.
     // A failed HWND teardown must not leave the selected parameter stale.
+    const auto restoredPattern=hostPatternPending_
+        ? hostPatternValue_ : static_cast<double>(candidate.selected)/7.0;
+    hostPatternPending_=false;
     const auto selectedResult=EditController::setParamNormalized(
-                  kPatternParam,static_cast<double>(candidate.selected)/7.0);
+                  kPatternParam,restoredPattern);
     for(auto* view:views_)if(view) {
        try {view->finishTransientEditsAfterRecall();}
        catch(const std::bad_alloc&) { /* old edit token already invalid */ }
@@ -288,8 +297,11 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  songEnabled_=false;songChain_=SongChain{};
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
+ const auto restoredPattern=hostPatternPending_
+     ? hostPatternValue_ : static_cast<double>(next)/7.0;
+ hostPatternPending_=false;
  const auto selectedResult=EditController::setParamNormalized(
-      kPatternParam,static_cast<double>(next)/7.0);
+      kPatternParam,restoredPattern);
  for(auto* view:views_)if(view) {
    try {view->finishTransientEditsAfterRecall();}
    catch(const std::bad_alloc&) { /* legacy model already committed */ }

@@ -142,6 +142,9 @@ private:
  bool pathsRestoredBeforeComponent_{false};
  bool componentStatePendingController_{false};
  bool dirtyPending_{false};
+ // Last host pattern callback, not yet reconciled with Component-state recall.
+ bool hostPatternPending_{false};
+ Steinberg::Vst::ParamValue hostPatternValue_{0.};
  std::array<bool,kRows> muted_{};
  std::array<bool,kRows> solo_{};
  std::array<std::uint8_t,kRows> gain_{};
