@@ -1452,6 +1452,20 @@ void testRealSampleFolderStepping(){
  check(f.c->stepSample(0,-1)==Controller::LoadStatus::Accepted&&
        IntegrationAccess::paths(*f.c)[0]==aPath,
        "SOR02 previous sample failed after project recall");
+ // Opposite legal host order: Controller state precedes component state.
+ componentState.seek(0,IBStream::kIBSeekSet,nullptr);
+ controllerState.seek(0,IBStream::kIBSeekSet,nullptr);
+ check(f.c->setState(&controllerState)==kResultOk&&
+       f.c->setComponentState(&componentState)==kResultOk&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 opposite restore ordering lost matching origin");
+ check(f.c->stepSample(0,+1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==cPath,
+       "SOR02 next failed when component state restored second");
+ check(f.c->stepSample(0,-1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 return to original sample failed");
+
  const auto previous=snapshot();
  check(f.c->stepSample(0,0)==Controller::LoadStatus::Rejected&&
        f.c->stepSample(1,+1)==Controller::LoadStatus::NotFound&&
