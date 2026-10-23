@@ -92,7 +92,12 @@ Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
              previewPending_.store(0,std::memory_order_release);
              auditionStart_.store(false,std::memory_order_release);
-             auditionStop_.store(true,std::memory_order_release);}
+             auditionStop_.store(true,std::memory_order_release);
+             auto command=auditionCommand_.load(std::memory_order_relaxed);
+             while(!auditionCommand_.compare_exchange_weak(
+                 command,((command>>1)+1u)<<1,
+                 std::memory_order_release,std::memory_order_relaxed)){}
+            }
  return AudioEffect::setActive(state);
 }
 Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
@@ -101,7 +106,12 @@ Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
              previewPending_.store(0,std::memory_order_release);
              auditionStart_.store(false,std::memory_order_release);
-             auditionStop_.store(true,std::memory_order_release);}
+             auditionStop_.store(true,std::memory_order_release);
+             auto command=auditionCommand_.load(std::memory_order_relaxed);
+             while(!auditionCommand_.compare_exchange_weak(
+                 command,((command>>1)+1u)<<1,
+                 std::memory_order_release,std::memory_order_relaxed)){}
+            }
  return Steinberg::kResultOk;
 }
 // Messages are delivered on the UI thread by the VST3 IConnectionPoint
