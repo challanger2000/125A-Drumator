@@ -925,18 +925,18 @@ bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
  return ok;
  }catch(const std::bad_alloc&){return false;}
 }
-void Controller::stopSampleEditPreview(){
+bool Controller::stopSampleEditPreview(){
  Steinberg::Vst::IMessage* msg=nullptr;
  try {
    msg=allocateMessage();
-   if(!msg)return;
+   if(!msg)return false;
+   struct MessageOwner {Steinberg::Vst::IMessage* value;
+     ~MessageOwner(){if(value)value->release();}} owner{msg};
    msg->setMessageID("Drumator.EditorPreviewStop");
-   (void)sendMessage(msg);
+   return sendMessage(msg)==Steinberg::kResultOk;
  }catch(const std::bad_alloc&) {
-   // A host-side allocation failure must never escape a VSTGUI callback.
-   // The preview will also be cleared on normal plugin deactivation.
+   return false;
  }
- if(msg)msg->release();
 }
 bool Controller::previewSample(std::size_t row) {
  if(row>=visibleRows_)return false;
