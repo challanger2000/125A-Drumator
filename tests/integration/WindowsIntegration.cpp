@@ -1960,6 +1960,7 @@ int main(int argc,char** argv){
  run("FR05 one-frame Fade Out native pixel contract",testFr05ShortFadePixelsMatchAudioContract);
  run("FR06 modal error message native pixels",testFr06ModalErrorPixels);
  run("FR10 global knob right-edge mouse input",testFr10GlobalKnobEdgeHit);
+ run("RV05 all global knob rendered centers",testRv05GlobalKnobPaintCenters);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::collectedNotices=nullptr;
