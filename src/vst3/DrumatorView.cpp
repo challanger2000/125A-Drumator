@@ -525,12 +525,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(background);
  c->drawRect({0,0,1280,fullHeight},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
- c->drawString("125A  DRUMATOR",{16,5,304,35},VSTGUI::kLeftText);
+ c->drawString("125A DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
  c->drawString("PATTERN",{330,13,460,33},VSTGUI::kLeftText);
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
- drawControl(c,{460,8,526,34},"1 TAKT",oneBar);
- drawControl(c,{533,8,608,34},"2 TAKTE",!oneBar);
+ drawControl(c,{430,8,514,34},"1 BAR",oneBar);
+ drawControl(c,{522,8,606,34},"2 BARS",!oneBar);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    char label[12]{};
    std::snprintf(label,sizeof(label),"%c %uT",static_cast<char>('A'+pattern),
@@ -591,6 +591,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(letters);
    c->drawString(fitted.c_str(),{83,y+5,270,y+35},VSTGUI::kLeftText);
    drawControl(c,{275,y+5,301,y+35},"...");
+    drawControl(c,{275,y+54,358,y+84},"EDIT");
    drawControl(c,{303,y+5,329,y+35},"<");
    drawControl(c,{332,y+5,358,y+35},">");
    drawControl(c,{362,y+5,398,y+35},"PLAY");
@@ -680,8 +681,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    }
  }
  // Only row management and one status line remain at the bottom.
- drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"+ ZEILE");
- drawControl(c,{UiCompactLayout::rowRemove.left,bottom+5,UiCompactLayout::rowRemove.right,bottom+34},"- ZEILE",false,controller_.canHideLast());
+ drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"ADD ROW");
+ drawControl(c,{UiCompactLayout::rowRemove.left,bottom+5,UiCompactLayout::rowRemove.right,bottom+34},"REMOVE ROW",false,controller_.canHideLast());
  char range[64]{};
  std::snprintf(range,sizeof(range),"%u-%u / %u INSTRUMENTE",
    static_cast<unsigned>(firstRow_+1),static_cast<unsigned>(firstRow_+displayedRows()),
@@ -724,7 +725,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        const auto entry=controller_.songEntry(index);
        std::snprintf(cell,sizeof(cell),"%02u   %c   %s",
            static_cast<unsigned>(index+1),static_cast<char>('A'+entry.pattern),
-           entry.steps==8?"1/2 TAKT":entry.steps==16?"1 TAKT":"2 TAKTE");
+           entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS");
      }else std::snprintf(cell,sizeof(cell),"%02u   + EINTRAG",
              static_cast<unsigned>(index+1));
      drawControl(c,{sx,sy,sx+UiSongLayout::cellWidth,sy+UiSongLayout::cellHeight},
@@ -746,15 +747,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    }
    c->setFontColor(accent);
    c->drawString("LAENGE:",VSTGUI::CRect(594,277,681,303),VSTGUI::kLeftText);
-   const char* lenNames[]={"1/2 TAKT","1 TAKT","2 TAKTE"};
+   const char* lenNames[]={"1/2 BAR","1 BAR","2 BARS"};
    const std::uint8_t lenSteps[]={8,16,32};
    for(int idx=0;idx<3;++idx) {
      const auto chosen=selectionVisible&&controller_.songEntry(songSlot_).steps==lenSteps[idx];
      const double bx=678+idx*106.;
      drawControl(c,{bx,277,bx+100,303},lenNames[idx],chosen,selectionVisible);
    }
-   drawControl(c,{1012,277,1110,303},"+ EINTRAG",false,count<64);
-   drawControl(c,{1118,277,1239,303},"LETZTEN LOESCHEN",false,count>1);
+   drawControl(c,{1012,277,1110,303},"ADD ENTRY",false,count<64);
+   drawControl(c,{1118,277,1239,303},"REMOVE LAST",false,count>1);
  }
 
  // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
@@ -773,8 +774,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                 std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
    }
  }else if(popup_==2) {
-   const char* options[]={"KOPIEREN","EINFUEGEN","LOESCHEN","RUECKGAENGIG",
-                          "VELO VARIIEREN","VELO 100","DUPLIZIEREN"};
+   const char* options[]={ "COPY","PASTE","CLEAR","UNDO","RANDOM VELOCITY","VELOCITY 100","DUPLICATE"};
    for(int i=0;i<7;++i)
      drawControl(c,{782,86.+i*26.,968,111.+i*26.},options[i],
                  false,(i!=3||controller_.canUndoCurrentPattern())&&
@@ -791,8 +791,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    }
  }else if(popup_==5&&popupRow_<controller_.visibleRows()) {
    const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,130.);
-   const char* options[]={"SAMPLE LADEN","WAV EDITOR","INSTRUMENT UMBENENNEN","SAMPLE ENTFERNEN"};
-   for(int i=0;i<4;++i)
+   const char* options[]={"LOAD SAMPLE","RENAME ROW","REMOVE SAMPLE"};
+   for(int i=0;i<3;++i)
       drawControl(c,{78,top+i*30.,304,top+i*30.+29.},options[i]);
  }else if(popup_==4&&popupRow_<controller_.visibleRows()) {
    const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,145.);
@@ -1010,7 +1010,7 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  if(!controller_.sampleEditorSnapshot(row,edit,frames,wave,0,0,
                                       &sampleEditorRevision_,&sampleEditorWaveRight_,
                                       &sampleEditorStereo_)||frames==0){
-   status_="WAV-EDITOR: KEIN GUELTIGES SAMPLE";
+   status_="NO SAMPLE TO EDIT";
    invalid();return false;
  }
  const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
@@ -1245,12 +1245,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       }
    }else if(kind==5&&target<controller_.visibleRows()){
      const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),130.);
-     if(x>=78&&x<304&&y>=top&&y<top+120.){
+     if(x>=78&&x<304&&y>=top&&y<top+90.){
        const auto option=static_cast<int>((y-top)/30.);
-       if(option>=0&&option<4&&y<top+option*30.+29.){
+       if(option>=0&&option<3&&y<top+option*30.+29.){
          if(option==0)load(target);
-         else if(option==1)ok=openSampleEditor(target);
-         else if(option==2)editName(target);
+         else if(option==1)editName(target);
          else if(!controller_.clearSample(target))ok=false;
          acted=true;
        }
@@ -1277,8 +1276,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    invalid();return done;
  }
  // Explicit pattern-length choice, independent of the operation popup.
- if(y>=8&&y<34&&((x>=460&&x<526)||(x>=533&&x<608))){
-   const bool wantOne=x<526;
+ if(y>=8&&y<34&&((x>=430&&x<514)||(x>=522&&x<606))){
+   const bool wantOne=x<514;
    const bool isOne=controller_.patternLength(controller_.currentPattern())==16;
    if(wantOne!=isOne&&!controller_.togglePatternLength(controller_.currentPattern()))
      status_="PATTERN-LAENGE NICHT UEBERNOMMEN";
@@ -1439,7 +1438,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       const auto step=UiCompactLayout::stepAt(x);
       if(step>=0) {
         if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
-          status_="STEPS 17-32: 2 TAKTE WAEHLEN";
+          status_="STEPS 17-32: SELECT 2 BARS";
           invalid();return done;
         }
         velocityRow_=row;velocityStep_=static_cast<std::size_t>(step);
@@ -1470,7 +1469,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      velocityRow_=row;
      (void)toggleRowVelocity(row);invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::sampleMenu)&&
+   if(x>=275&&x<358&&y>=top+54&&y<top+84){
+      (void)openSampleEditor(row);invalid();return done;
+    }
+    if(UiCompactLayout::hit(x,UiCompactLayout::sampleMenu)&&
       y>=top+5&&y<top+35){
      popup_=5;popupRow_=row;invalid();return done;
    }
@@ -1516,7 +1518,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      const auto step=UiCompactLayout::stepAt(x);
      if(step>=0){
        if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
-         status_="STEPS 17-32: 2 TAKTE WAEHLEN";
+         status_="STEPS 17-32: SELECT 2 BARS";
          invalid();return done;
        }
        velocityStep_=static_cast<std::size_t>(step);
