@@ -264,6 +264,35 @@ void testRv02NativeEditorCloseTransientReject(){
        audio.left[80]==0.f&&audio.right[80]==0.f,
        "RV02 transient STOP rejection left audio alive after editor close");
 }
+void testRv02ApplyRejectKeepsEdit(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ auto& view=fa23Open(f);
+ const SampleEdit proposal{20,900,0,0,.5f};
+ check(proposal.valid(1024),"RV02 apply proposal invalid");
+ const auto previous=auditReturnedKit(*f.p).sampleEdits[0];
+ IntegrationAccess::setSampleEditorDraft(view,proposal);
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024))&&
+       f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "RV02 apply preview setup failed");
+ qa::auditMutation=qa::AuditMutation::rejectPreviewStop;
+ click(view,975.,475.);
+ qa::auditMutation=qa::AuditMutation::none;
+ const auto rejected=auditReturnedKit(*f.p).sampleEdits[0];
+ check(IntegrationAccess::sampleEditorOpen(view)&&
+       rejected.start==previous.start&&rejected.end==previous.end&&
+       rejected.gain==previous.gain,
+       "RV02 rejected STOP committed edit behind modal");
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "RV02 rejected STOP did not preserve previous audible preview");
+ click(view,975.,475.);
+ const auto applied=auditReturnedKit(*f.p).sampleEdits[0];
+ check(!IntegrationAccess::sampleEditorOpen(view)&&
+       applied.start==proposal.start&&applied.end==proposal.end&&
+       applied.gain==proposal.gain,
+       "RV02 Apply retry did not commit exactly once after STOP");
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f,
+       "RV02 successful Apply left audible preview");
+}
 void testRv03RecallQueryOOM(){
  const std::array<qa::AuditMutation,2> faults{
      qa::AuditMutation::patternQueryOOM,qa::AuditMutation::patternReplyOOM};

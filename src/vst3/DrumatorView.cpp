@@ -1220,8 +1220,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
          (void)adjustEditorHeight();break;
        case 7:
+         // APPLY is a STOP-then-commit transaction. A failed STOP must not
+         // leave a committed edit behind an apparently unfinished modal.
+         if(!controller_.stopSampleEditPreview()){
+           status_="PREVIEW STOP FAILED; EDIT NOT APPLIED";break;
+         }
          if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_)){
-           if(!controller_.stopSampleEditPreview()){status_="EDIT APPLIED; PREVIEW STOP FAILED";break;}
            sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
            (void)adjustEditorHeight();
          }else status_="APPLY FAILED: SAMPLE CHANGED OR PROCESSOR REJECTED";
