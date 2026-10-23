@@ -102,6 +102,8 @@ namespace drumator {
 // Added as a friend in generated TEST headers only. Observes real state,
 // including Undo/clipboard/paths, rather than mirroring the commit algorithm.
 struct IntegrationAccess {
+ static bool sampleEditorOpen(const DrumatorView& view){return view.sampleEditorOpen_;}
+ static SampleEdit sampleEditorDraft(const DrumatorView& view){return view.sampleEditorEdit_;}
  static void seedTransportClock(Processor& p) {
    p.haveExpectedPpq_=true;
    p.expectedNextPpq_=19.5;
@@ -1840,6 +1842,7 @@ void testTransportJumpRetiresOldVoices(){
  evidence("SOR03 native processor timeline jump retires old voice without stopped callback PASS");
 }
 #include "ReauditCases.inl"
+#include "FinalAudit20261023.inl"
 }
 int main(int argc,char** argv){
  std::cout<<std::unitbuf;
@@ -1937,6 +1940,16 @@ int main(int argc,char** argv){
  run("FA06 minimum-height host refusal menus",testAuditMinimumHeightMenus);
  run("SA01 two-view native invalidation after row and global edits",testSecondAuditViewInvalidation);
  run("SA02 actual sequencer/MIDI choke partition",testSecondAuditTriggerPartition);
+ run("FA23-01 edited Clear remains saveable",testFa23ClearEditedState);
+ run("FA23-02 preview restarts without layering",testFa23PreviewRetrigger);
+ run("FA23-03 preview publication boundary",testFa23PreviewPublication);
+ run("FA23-04 WAV modal blocks drop",testFa23ModalDrop);
+ run("FA23-05 stale draft cannot edit new sample",testFa23StaleEditor);
+ run("FA23-06 multiple restore provenance cycles",testFa23OriginCycles);
+ run("FA23-07 Undo duration during live gesture",testFa23UndoDuringStroke);
+ run("FA23-08 interpolation respects trim bounds",testFa23TrimInterpolation);
+ run("FA23-09 audition deactivation",testFa23AuditionDeactivate);
+ run("FA23-10 waveform query OOM",testFa23QueryOOM);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::collectedNotices=nullptr;
