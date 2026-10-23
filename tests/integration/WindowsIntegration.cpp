@@ -1460,7 +1460,7 @@ void testControllerMetadataCommit(){
        f.c->label(1)==path.filename().string(),
        "N11 loaded sample filename/path/processor state diverged");
  check(f.c->clearSample(1)&&IntegrationAccess::paths(*f.c)[1].empty()&&
-       f.c->label(1)=="LEER - WAV LADEN"&&
+       f.c->label(1)=="EMPTY - LOAD WAV"&&
        savedKit().names[1].empty()&&savedKit().wav[1].empty(),
        "N11 clear sample did not atomically reset metadata");
  std::error_code ec;std::filesystem::remove(path,ec);
