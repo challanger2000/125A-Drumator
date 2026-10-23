@@ -973,7 +973,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(gainText,{911,405,1001,439});
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
    if(status_.find("FAILED")!=std::string::npos||
-      status_.find("AUTO START:")!=std::string::npos||
+      status_.find("REJECTED")!=std::string::npos||
+      status_.find("ERROR")!=std::string::npos||
+      status_.find("NOT ")!=std::string::npos||
       status_.find("PREVIEW")!=std::string::npos)
      c->drawString(status_.c_str(),{265,556,1020,585});
  }

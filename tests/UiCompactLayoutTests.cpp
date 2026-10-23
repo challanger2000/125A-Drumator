@@ -1,4 +1,5 @@
 #include "core/UiCompactLayout.h"
+#include "core/UiWaveEditorLayout.h"
 #include "core/UiSongLayout.h"
 #include <iostream>
 using drumator::UiCompactLayout;
@@ -43,6 +44,25 @@ int main(){
  EXPECT(UiCompactLayout::edit.right-UiCompactLayout::edit.left==64.);
  EXPECT(UiCompactLayout::sample.right<UiCompactLayout::edit.left);
  EXPECT(UiCompactLayout::edit.right<UiCompactLayout::sampleMenu.left);
+ // The paint and hit maps for every WAV toolbar action share one schema.
+ using Wave=drumator::UiWaveEditorLayout;
+ EXPECT(Wave::toolbar.size()==8);
+ EXPECT(Wave::zoomIn.width()==Wave::zoomOut.width());
+ EXPECT(Wave::fit.width()==Wave::reset.width());
+ EXPECT(Wave::preview.width()==Wave::stop.width());
+ EXPECT(Wave::cancel.width()==Wave::apply.width());
+ EXPECT(Wave::buttonAt(310.,470.)==0);
+ EXPECT(Wave::buttonAt(390.,470.)==1);
+ EXPECT(Wave::buttonAt(470.,470.)==2);
+ EXPECT(Wave::buttonAt(560.,470.)==3);
+ EXPECT(Wave::buttonAt(660.,470.)==4);
+ EXPECT(Wave::buttonAt(770.,470.)==5);
+ EXPECT(Wave::buttonAt(875.,470.)==6);
+ EXPECT(Wave::buttonAt(990.,470.)==7);
+ EXPECT(Wave::buttonAt(521.,470.)==-1);
+ EXPECT(Wave::gain.hit(650.,420.));
+ EXPECT(Wave::waveform.hit(400.,250.));
+ EXPECT(Wave::scrollbar.hit(400.,395.));
  EXPECT(UiCompactLayout::hit(240.,UiCompactLayout::edit));
  EXPECT(!UiCompactLayout::hit(240.,UiCompactLayout::sample));
  EXPECT(UiCompactLayout::sample.right<UiCompactLayout::sampleMenu.left);
