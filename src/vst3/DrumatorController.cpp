@@ -268,8 +268,12 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     const auto restoredPattern=hostPatternPending_&&processorConfirmsPattern(patternFromNormalized(hostPatternValue_))
         ? hostPatternValue_ : static_cast<double>(candidate.selected)/7.0;
     hostPatternPending_=false;
-    const auto selectedResult=EditController::setParamNormalized(
-                  kPatternParam,restoredPattern);
+    Steinberg::tresult selectedResult=Steinberg::kResultFalse;
+    try {
+      selectedResult=EditController::setParamNormalized(kPatternParam,restoredPattern);
+    }catch(const std::bad_alloc&) {
+      // Recall state has already committed; UI parameter refresh is best-effort.
+    }
     for(auto* view:views_)if(view) {
        try {view->finishTransientEditsAfterRecall();}
        catch(const std::bad_alloc&) { /* old edit token already invalid */ }
@@ -324,8 +328,12 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  const auto restoredPattern=hostPatternPending_&&processorConfirmsPattern(patternFromNormalized(hostPatternValue_))
      ? hostPatternValue_ : static_cast<double>(next)/7.0;
  hostPatternPending_=false;
- const auto selectedResult=EditController::setParamNormalized(
-      kPatternParam,restoredPattern);
+ Steinberg::tresult selectedResult=Steinberg::kResultFalse;
+ try {
+   selectedResult=EditController::setParamNormalized(kPatternParam,restoredPattern);
+ }catch(const std::bad_alloc&) {
+   // Recall state has already committed; UI parameter refresh is best-effort.
+ }
  for(auto* view:views_)if(view) {
    try {view->finishTransientEditsAfterRecall();}
    catch(const std::bad_alloc&) { /* legacy model already committed */ }
