@@ -15,7 +15,7 @@ class PreparedKitNames final {
     Names pendingCustom=desiredCustom;
     Names pendingLabels{};
     for(std::size_t i=0;i<Rows;++i)
-      pendingLabels[i]=wavNames[i].empty()?"LEER - WAV LADEN":wavNames[i];
+      pendingLabels[i]=wavNames[i].empty()?"EMPTY - LOAD WAV":wavNames[i];
     pendingCustom_.swap(pendingCustom);
     pendingLabels_.swap(pendingLabels);
   }
