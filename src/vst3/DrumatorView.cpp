@@ -822,15 +822,26 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const auto sx=284.+710.*(static_cast<double>(sampleEditorEdit_.start)-sampleEditorFirst_)/visible;
    const auto ex=284.+710.*(static_cast<double>(sampleEditorEdit_.end)-sampleEditorFirst_)/visible;
    c->setFrameColor(on);c->setLineWidth(2.);
-   c->drawLine({sx,175},{sx,382});
-   c->setFrameColor(letters);c->drawLine({ex,175},{ex,382});
+   if(sx>=284.&&sx<=994.)c->drawLine({sx,175},{sx,382});
+   c->setFrameColor(letters);
+   if(ex>=284.&&ex<=994.)c->drawLine({ex,175},{ex,382});
    // Fade handles and ramp overlays use source-frame positions.
    const auto fadeInX=sx+710.*static_cast<double>(sampleEditorEdit_.fadeIn)/visible;
    const auto fadeOutX=ex-710.*static_cast<double>(sampleEditorEdit_.fadeOut)/visible;
-   c->setFrameColor(on);c->drawLine({sx,278},{fadeInX,180});
-   c->setFrameColor(letters);c->drawLine({fadeOutX,180},{ex,278});
-   c->setFillColor(on);c->drawRect({fadeInX-5,175,fadeInX+5,188},VSTGUI::kDrawFilled);
-   c->setFillColor(letters);c->drawRect({fadeOutX-5,175,fadeOutX+5,188},VSTGUI::kDrawFilled);
+   c->setFrameColor(on);
+   if(fadeInX>=284.&&sx<=994.)
+     c->drawLine({std::clamp(sx,284.,994.),278},
+                 {std::clamp(fadeInX,284.,994.),180});
+   c->setFrameColor(letters);
+   if(ex>=284.&&fadeOutX<=994.)
+     c->drawLine({std::clamp(fadeOutX,284.,994.),180},
+                 {std::clamp(ex,284.,994.),278});
+   if(fadeInX>=289.&&fadeInX<=989.){
+     c->setFillColor(on);c->drawRect({fadeInX-5,175,fadeInX+5,188},VSTGUI::kDrawFilled);
+   }
+   if(fadeOutX>=289.&&fadeOutX<=989.){
+     c->setFillColor(letters);c->drawRect({fadeOutX-5,175,fadeOutX+5,188},VSTGUI::kDrawFilled);
+   }
    c->setLineWidth(1.);
    // Scrollbar is proportional to the visible source-frame interval.
    constexpr double scrollX=284.,scrollWidth=710.;
