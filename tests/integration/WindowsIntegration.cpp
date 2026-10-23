@@ -1952,6 +1952,8 @@ int main(int argc,char** argv){
  run("FA23-10 waveform query OOM",testFa23QueryOOM);
  run("FR01 stop ordering after consumed start",testFr01StopAfterStartConsumed);
  run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
+ run("FR03 legacy sample-present synchronization",testFr03LegacyRecallSamplePresence);
+ run("FR08 controller path length consistency",testFr08PathSerializationBoundary);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::collectedNotices=nullptr;

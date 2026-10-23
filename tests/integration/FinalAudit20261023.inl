@@ -192,3 +192,29 @@ void testFr02ControllerMessageOOM(){
  }
  check(!auditReturnedKit(*f.p).wav[0].empty(),"FR02 OOM corrupted source");
 }
+
+void testFr03LegacyRecallSamplePresence(){
+ for(std::uint32_t magic:{0x31524d44u,0x32524d44u,0x33524d44u}){
+   Fixture f;fa23Kit(f);f.open();
+   check(f.c->hasSample(0),"FR03 loaded source missing before legacy recall");
+   std::vector<std::uint8_t> legacy;
+   for(auto n:{magic,std::uint32_t{0}})
+     for(int i=0;i<4;++i)
+       legacy.push_back(static_cast<std::uint8_t>(n>>(i*8)));
+   if(magic==0x33524d44u)legacy.push_back(4);
+   if(magic!=0x31524d44u)legacy.insert(legacy.end(),kCells,19);
+   check(f.recall(legacy)==kResultOk,"FR03 legacy controller recall rejected");
+   check(!f.c->hasSample(0),
+         "FR03 stale sample-present bit enabled EDIT on empty legacy state");
+ }
+}
+void testFr08PathSerializationBoundary(){
+ Fixture f;fa23Kit(f);
+ const auto old=auditReturnedKit(*f.p).wav[0];
+ const std::string tooLong=std::string(4093u,'x')+".wav";
+ check(tooLong.size()==4097u,"FR08 pathname fixture length");
+ check(f.c->loadWav(0,tooLong)==Controller::LoadStatus::Rejected,
+       "FR08 invalid unserializable path accepted for import");
+ check(auditReturnedKit(*f.p).wav[0]==old,
+       "FR08 rejected path changed embedded audio");
+}

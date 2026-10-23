@@ -62,6 +62,11 @@ int main(){
  EXPECT(Wave::buttonAt(521.,470.)==-1);
  EXPECT(Wave::gain.hit(650.,420.));
  EXPECT(Wave::waveform.hit(400.,250.));
+ EXPECT(Wave::waveform.hit(500.,155.));
+ EXPECT(Wave::waveform.hit(500.,165.));
+ EXPECT(Wave::waveform.hit(500.,382.));
+ EXPECT(!Wave::waveform.hit(500.,154.9));
+ EXPECT(!Wave::waveform.hit(500.,382.1));
  EXPECT(Wave::scrollbar.hit(400.,395.));
  EXPECT(UiCompactLayout::hit(240.,UiCompactLayout::edit));
  EXPECT(!UiCompactLayout::hit(240.,UiCompactLayout::sample));

@@ -856,7 +856,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString("SAMPLE EDITOR",{260,114,1000,148});
    // Wide, filled peak envelope: adjacent interpolated columns preserve
    // transients without inventing audio or filtering source PCM.
-   c->setFillColor(panel);c->drawRect({284,155,994,382},VSTGUI::kDrawFilled);
+   c->setFillColor(panel);c->drawRect(editorRect(UiWaveEditorLayout::waveform),VSTGUI::kDrawFilled);
    c->setFrameColor(border);c->drawLine({284,268},{994,268});
    if(sampleEditorStereo_)c->drawLine({284,326},{994,326});
    const auto n=sampleEditorWave_.size();
@@ -876,13 +876,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      const double sourceFrame=sampleEditorFirst_+
          (pixel+0.5)*static_cast<double>(sampleEditorLast_-sampleEditorFirst_)/710.;
      const auto& e=sampleEditorEdit_;
-     double fade=1.;
-     if(sourceFrame<e.start||sourceFrame>=e.end)fade=0.;
-     else {
-       if(e.fadeIn>0)fade=std::min(fade,(sourceFrame-e.start)/e.fadeIn);
-       if(e.fadeOut>0)fade=std::min(fade,std::max(0.,static_cast<double>(e.end)-1.-std::floor(sourceFrame))/e.fadeOut);
-     }
-     fade=std::clamp(fade,0.,1.);
+     // The same discrete source-frame envelope as the audio engine.
+     // A one-frame Fade Out now displays silence, matching rendered PCM.
+     const double fade=static_cast<double>(e.amplitude(
+           static_cast<std::uint32_t>(std::floor(sourceFrame))));
      const double upper=std::clamp(mid-hi*amp*fade,sampleEditorStereo_?156.:156.,
                                    sampleEditorStereo_?264.:381.);
      const double lower=std::clamp(mid-lo*amp*fade,sampleEditorStereo_?156.:156.,
