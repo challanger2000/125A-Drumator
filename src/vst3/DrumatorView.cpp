@@ -1,4 +1,7 @@
 #include "DrumatorView.h"
+#include "BrandLogoGeometry.h"
+#include "vstgui/lib/cgraphicspath.h"
+#include <cstdlib>
 #include "DrumatorEditor.h"
 #include "core/RowResizeTransaction.h"
 #include "core/CompactRowViewport.h"
@@ -46,6 +49,42 @@ const VSTGUI::CColor on{224,137,66,255};
 const VSTGUI::CColor off{67,81,96,255};
 const VSTGUI::CColor letters{228,236,243,255};
 const VSTGUI::CColor accent{104,175,203,255};
+
+// Exact 125A vector logo from the authoritative brand master, rendered
+// natively through VSTGUI (SVG paths contain only M, L, Z commands).
+// The source master is 1774x887; keep its proportions unchanged.
+void drawBrandLogo(VSTGUI::CDrawContext* c) {
+ constexpr double scale=32./887.;
+ constexpr double x0=16.,y0=2.;
+ for(const auto& shape: kBrandLogoPaths){
+   auto* path=c->createGraphicsPath();
+   if(!path)continue;
+   const char* cursor=shape.path;
+   while(*cursor){
+     while(*cursor==' '||*cursor=='\\n'||*cursor=='\\t')++cursor;
+     if(!*cursor)break;
+     const char operation=*cursor++;
+     if(operation=='Z'){path->closeSubpath();continue;}
+     if(operation!='M'&&operation!='L')break;
+     while(*cursor==' ')++cursor;
+     char* endX=nullptr;
+     const double x=std::strtod(cursor,&endX);
+     if(endX==cursor)break;
+     cursor=endX;
+     while(*cursor==' ')++cursor;
+     char* endY=nullptr;
+     const double y=std::strtod(cursor,&endY);
+     if(endY==cursor)break;
+     cursor=endY;
+     if(operation=='M')path->beginSubpath(x0+x*scale,y0+y*scale);
+     else path->addLine(x0+x*scale,y0+y*scale);
+   }
+   c->setFillColor(shape.red?VSTGUI::CColor{215,25,32,255}:
+                             VSTGUI::CColor{217,217,217,255});
+   c->drawGraphicsPath(path,VSTGUI::CDrawContext::kPathFilledEvenOdd);
+   path->forget();
+ }
+}
 
 // Centralized VSTGUI button renderer: consistent visible frame, fill,
 // contrast and selected/disabled states, with fixed hit regions.
@@ -526,6 +565,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawRect({0,0,1280,fullHeight},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
  c->drawString("125A DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
+ drawBrandLogo(c);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
  c->drawString("PATTERN",{180,13,276,33},VSTGUI::kLeftText);
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
