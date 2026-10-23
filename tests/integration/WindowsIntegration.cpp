@@ -1203,7 +1203,7 @@ void testPatternLengthControls(){
  f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
  check(f.c->patternLength(0)==32,"UX pattern length initial state");
- click(*v,481.,20.);
+ click(*v,322.,20.);
  check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
  const double blockedX=UiCompactLayout::stepX+20.*UiCompactLayout::stepWidth+8.;
  const auto oldHidden=f.c->velocity(0,0,20);
@@ -1212,9 +1212,9 @@ void testPatternLengthControls(){
  click(*v,1248.,UiCompactLayout::header+60.);
  click(*v,blockedX,UiCompactLayout::header+UiCompactLayout::baseRow+12.);
  check(f.c->velocity(0,0,20)==oldHidden,"UX edited inactive velocity in 1T");
- click(*v,481.,20.);
+ click(*v,322.,20.);
  check(f.c->patternLength(0)==16,"UX selected length not idempotent");
- click(*v,557.,20.);
+ click(*v,414.,20.);
  check(f.c->patternLength(0)==32,"UX visible 2 TAKTE control failed");
  click(*v,820.,65.);
  click(*v,820.,98.);
