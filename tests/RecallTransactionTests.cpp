@@ -60,7 +60,7 @@ int main() {
  defaults.prepare(empty,empty);
  defaults.commit(liveCustom,liveLabels);
  CHECK(liveCustom==empty);
- CHECK(liveLabels[0]=="LEER - WAV LADEN"&&liveLabels[15]=="LEER - WAV LADEN");
+ CHECK(liveLabels[0]=="EMPTY - LOAD WAV"&&liveLabels[15]=="EMPTY - LOAD WAV");
  CHECK(drumator::zoomRecallIsAtomic(0));
  CHECK(drumator::zoomRecallIsAtomic(1));
  CHECK(!drumator::zoomRecallIsAtomic(2));
