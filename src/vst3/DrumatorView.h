@@ -69,7 +69,10 @@ private:
  std::uint32_t sampleEditorFrames_{0};
  std::uint32_t sampleEditorFirst_{0},sampleEditorLast_{0};
  std::array<WaveformRange,256> sampleEditorWave_{};
- int sampleEditorDrag_{0}; // 1=start, 2=end, 3=scroll, 4=fade-in, 5=fade-out
+ int sampleEditorDrag_{0}; // 1=start, 2=end, 3=scroll, 4=fade-in, 5=fade-out, 6=gain
+ bool sampleEditorPreviewing_{false};
+ void setSampleEditorGain(double x);
+ bool zoomSampleEditor(bool in,bool full=false);
  void moveSampleFade(double x,bool fadeOut);
  bool scrollEditorWave(double x);
  std::size_t popupRow_{kRows};

@@ -848,17 +848,26 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
         static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
    c->drawString(info,{270,406,1020,430});
-   c->drawString("MARKER ZIEHEN: START/ENDE VERTIKAL, FADES AN OBEREN GRIFFEN",
+   c->drawString("START / ENDE ZIEHEN   |   FADE-GRIFFE OBEN ZIEHEN",
                  {275,430,1020,451});
-   const char* editButtons[]={"FADE IN -","FADE IN +","FADE OUT -","FADE OUT +",
-                              "GAIN -","GAIN +","RESET"};
-   for(int i=0;i<7;++i)drawControl(c,{265.+i*108.,458,369.+i*108.,493},editButtons[i]);
-   drawControl(c,{265,503,375,532},"AUTO START");
-   drawControl(c,{382,503,492,532},"ZOOM +");
-   drawControl(c,{499,503,609,532},"ZOOM -");
-   drawControl(c,{570,535,708,578},"VORHOEREN");
-   drawControl(c,{716,535,855,578},"ABBRECHEN");
-   drawControl(c,{862,535,1000,578},"OK");
+   drawControl(c,{265,455,337,491},"ZOOM +");
+   drawControl(c,{344,455,416,491},"ZOOM -");
+   drawControl(c,{423,455,533,491},"GANZES WAV");
+   // Gain from 0 to 200%, unity clearly marked and directly draggable.
+   c->drawString("GAIN",{558,455,622,477});
+   c->setFillColor(off);c->drawRect({615,466,900,480},VSTGUI::kDrawFilled);
+   const auto gainX=615.+285.*std::clamp(static_cast<double>(sampleEditorEdit_.gain)/2.,0.,1.);
+   c->setFillColor(accent);c->drawRect({615,466,gainX,480},VSTGUI::kDrawFilled);
+   c->setFillColor(letters);c->drawRect({gainX-4,459,gainX+4,487},VSTGUI::kDrawFilled);
+   char gainText[36]{};
+   std::snprintf(gainText,sizeof(gainText),"%u%%",
+                 static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
+   c->drawString(gainText,{911,454,1001,488});
+   drawControl(c,{265,501,375,532},"AUTO START");
+   drawControl(c,{382,501,492,532},"RESET");
+   drawControl(c,{265,540,465,584},sampleEditorPreviewing_?"STOP":"VORHOEREN");
+   drawControl(c,{568,540,765,584},"ABBRECHEN");
+   drawControl(c,{785,540,1000,584},"UEBERNEHMEN");
  }
  setDirty(false);
 }
@@ -944,8 +953,32 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  }
  sampleEditorEdit_=edit;sampleEditorFrames_=frames;sampleEditorWave_=wave;
  sampleEditorRow_=row;sampleEditorFirst_=0;sampleEditorLast_=frames;
- sampleEditorDrag_=0;sampleEditorOpen_=true;
+ sampleEditorDrag_=0;sampleEditorPreviewing_=false;sampleEditorOpen_=true;
  invalid();return true;
+}
+void DrumatorView::setSampleEditorGain(double x) {
+ if(!sampleEditorOpen_)return;
+ const auto value=std::clamp((x-615.)/285.,0.,1.);
+ sampleEditorEdit_.gain=static_cast<float>(std::round(value*200.)/100.);
+ invalid();
+}
+bool DrumatorView::zoomSampleEditor(bool in,bool full) {
+ if(!sampleEditorOpen_)return false;
+ const auto span=sampleEditorLast_-sampleEditorFirst_;
+ auto nextSpan=full?sampleEditorFrames_:
+     (in?std::max<std::uint32_t>(1,span/2):
+       std::min(sampleEditorFrames_,span>sampleEditorFrames_/2?sampleEditorFrames_:span*2));
+ nextSpan=std::min(nextSpan,sampleEditorFrames_);
+ const auto center=sampleEditorFirst_+span/2;
+ const auto first=center>nextSpan/2?center-nextSpan/2:0;
+ const auto nextFirst=std::min(first,sampleEditorFrames_-nextSpan);
+ auto wave=sampleEditorWave_;
+ SampleEdit ignored;std::uint32_t frames=0;
+ if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,frames,wave,
+                                      nextFirst,nextFirst+nextSpan)||
+    frames!=sampleEditorFrames_){status_="ZOOM: WAVEFORM NICHT LESBAR";return false;}
+ sampleEditorFirst_=nextFirst;sampleEditorLast_=nextFirst+nextSpan;
+ sampleEditorWave_=wave;invalid();return true;
 }
 void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  if(!sampleEditorOpen_||sampleEditorFrames_<2)return;
@@ -1029,70 +1062,51 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      moveSampleMarker(x,sampleEditorDrag_==2);
      return VSTGUI::kMouseEventHandled;
    }
-   if(x>=265&&x<1021&&y>=458&&y<493) {
-     const int i=static_cast<int>((x-265)/108.);
-     const auto span=sampleEditorEdit_.length();
-     const auto increment=std::max<std::uint32_t>(1,sampleEditorFrames_/100);
-     if(i==0)sampleEditorEdit_.fadeIn=sampleEditorEdit_.fadeIn>increment?
-          sampleEditorEdit_.fadeIn-increment:0;
-     if(i==1)sampleEditorEdit_.fadeIn=std::min(
-          sampleEditorEdit_.fadeIn+increment,span-sampleEditorEdit_.fadeOut);
-     if(i==2)sampleEditorEdit_.fadeOut=sampleEditorEdit_.fadeOut>increment?
-          sampleEditorEdit_.fadeOut-increment:0;
-     if(i==3)sampleEditorEdit_.fadeOut=std::min(
-          sampleEditorEdit_.fadeOut+increment,span-sampleEditorEdit_.fadeIn);
-     if(i==4)sampleEditorEdit_.gain=std::max(0.f,sampleEditorEdit_.gain-.1f);
-     if(i==5)sampleEditorEdit_.gain=std::min(4.f,sampleEditorEdit_.gain+.1f);
-     if(i==6)sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);
+   if(x>=615&&x<=900&&y>=453&&y<=492){
+     sampleEditorDrag_=6;setSampleEditorGain(x);
+     return VSTGUI::kMouseEventHandled;
+   }
+   if(y>=455&&y<=491&&x>=265&&x<=533){
+     if(x<=337)(void)zoomSampleEditor(true);
+     else if(x>=344&&x<=416)(void)zoomSampleEditor(false);
+     else if(x>=423)(void)zoomSampleEditor(false,true);
+     return done;
+   }
+   if(y>=501&&y<=532&&x>=382&&x<=492){
+     sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);
      invalid();return done;
    }
-   if(y>=503&&y<532){
-     if(x>=265&&x<375){
-       // The first waveform bin exceeding -48 dBFS marks the rough onset.
-       // A precise sample scan is exposed through a separate control query.
-       const auto threshold=0.0039810717f;
-       std::size_t first=0;
-       while(first<sampleEditorWave_.size()&&
-             std::max(std::abs(sampleEditorWave_[first].minimum),
-                      std::abs(sampleEditorWave_[first].maximum))<threshold)++first;
-       if(first<sampleEditorWave_.size()){
-         sampleEditorEdit_.start=sampleEditorFirst_+
-           static_cast<std::uint32_t>((static_cast<std::uint64_t>(sampleEditorLast_-sampleEditorFirst_)*first)/sampleEditorWave_.size());
-         if(sampleEditorEdit_.start>=sampleEditorEdit_.end)sampleEditorEdit_.start=sampleEditorEdit_.end-1;
-         const auto remaining=sampleEditorEdit_.length();
-         sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,remaining);
-         sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
-                                           remaining-sampleEditorEdit_.fadeIn);
-       }
-     }else if((x>=382&&x<492)||(x>=499&&x<609)){
-       const auto span=sampleEditorLast_-sampleEditorFirst_;
-       std::uint32_t nextSpan=span;
-       if(x<492)nextSpan=std::max<std::uint32_t>(256,span/2);
-       else nextSpan=std::min(sampleEditorFrames_,span>sampleEditorFrames_/2?sampleEditorFrames_:span*2);
-       nextSpan=std::min(nextSpan,sampleEditorFrames_);
-       const auto center=sampleEditorFirst_+span/2;
-       const auto first=center>nextSpan/2?center-nextSpan/2:0;
-       sampleEditorFirst_=std::min(first,sampleEditorFrames_-nextSpan);
-       sampleEditorLast_=sampleEditorFirst_+nextSpan;
-       SampleEdit unused;std::uint32_t frames=0;
-       if(!controller_.sampleEditorSnapshot(sampleEditorRow_,unused,frames,sampleEditorWave_,
-                                            sampleEditorFirst_,sampleEditorLast_))
-          status_="ZOOM: WAVEFORM NICHT LESBAR";
+   if(y>=501&&y<=532&&x>=265&&x<=375){
+     const auto threshold=0.0039810717f;
+     std::size_t first=0;
+     while(first<sampleEditorWave_.size()&&
+           std::max(std::abs(sampleEditorWave_[first].minimum),
+                    std::abs(sampleEditorWave_[first].maximum))<threshold)++first;
+     if(first<sampleEditorWave_.size()){
+       sampleEditorEdit_.start=sampleEditorFirst_+
+         static_cast<std::uint32_t>((static_cast<std::uint64_t>(
+            sampleEditorLast_-sampleEditorFirst_)*first)/sampleEditorWave_.size());
+       sampleEditorEdit_.start=std::min(sampleEditorEdit_.start,sampleEditorEdit_.end-1);
+       const auto remaining=sampleEditorEdit_.length();
+       sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,remaining);
+       sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
+                                         remaining-sampleEditorEdit_.fadeIn);
      }
      invalid();return done;
    }
-   if(y>=535&&y<578) {
-     if(x>=570&&x<708){
-       // Preview the provisional edit without modifying the saved kit.
-       if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_))
-         status_="VORHOEREN FEHLGESCHLAGEN";
-     }else if(x>=716&&x<855){
-       controller_.stopSampleEditPreview();
+   if(y>=540&&y<584) {
+     if(x>=265&&x<465){
+       if(sampleEditorPreviewing_){controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;}
+       else if(controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_))
+         sampleEditorPreviewing_=true;
+       else status_="VORHOEREN FEHLGESCHLAGEN";
+     }else if(x>=568&&x<765){
+       controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;
        sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
        (void)adjustEditorHeight();
-     }else if(x>=862&&x<1000){
+     }else if(x>=785&&x<1000){
        if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_)){
-         controller_.stopSampleEditPreview();
+         controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
          (void)adjustEditorHeight();
        }else status_="WAV EDIT: PROZESSOR HAT AENDERUNG ABGELEHNT";
@@ -1463,7 +1477,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
  if(sampleEditorOpen_){
-   if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_==3)scrollEditorWave(pos.x);
+   if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_==6)setSampleEditorGain(pos.x);
+   else if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_==3)scrollEditorWave(pos.x);
    else if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_>=4)
      moveSampleFade(pos.x,sampleEditorDrag_==5);
    else if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_)
