@@ -151,6 +151,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  // old immutable PreparedSample via SampleExchange retirement.
 
  if(std::strcmp(id,"Drumator.EditorPreviewStop")==0){
+   auditionStopGeneration_.fetch_add(1,std::memory_order_acq_rel);
    auditionStart_.store(false,std::memory_order_release);
    auditionStop_.store(true,std::memory_order_release);
    return Steinberg::kResultOk;
@@ -857,6 +858,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  }
  // Adopt only complete prepared assets, without deleting on audio.
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
+ const auto auditionGeneration=auditionStopGeneration_.load(std::memory_order_acquire);
  const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);
  auditionExchange_.audioAdopt(auditionVoices_,processSetup.sampleRate);
  triggers_.clear();
@@ -1093,9 +1095,11 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
  if(auditionStop_.exchange(false,std::memory_order_acq_rel))auditionVoices_.reset();
- if(fireAudition)auditionVoices_.reset();
+ const bool validAuditionStart=fireAudition&&
+    auditionGeneration==auditionStopGeneration_.load(std::memory_order_acquire);
+ if(validAuditionStart)auditionVoices_.reset();
  Trigger one{};one.row=0;one.velocity=127;
- const auto audition=auditionVoices_.render(fireAudition?&one:nullptr,fireAudition?1:0,
+ const auto audition=auditionVoices_.render(validAuditionStart?&one:nullptr,validAuditionStart?1:0,
     auditionLeft_.data(),auditionRight_.data(),static_cast<std::uint32_t>(data.numSamples));
  auditionExchange_.audioCollect(auditionVoices_);
  if(audition.status!=RenderStatus::Ok)return Steinberg::kResultFalse;

@@ -10,7 +10,7 @@ struct UiWaveEditorLayout final {
    }
    constexpr double width() const noexcept {return right-left;}
  };
- static constexpr Rect waveform{284.,175.,994.,382.};
+ static constexpr Rect waveform{284.,155.,994.,382.};
  static constexpr Rect scrollbar{284.,385.,994.,405.};
  static constexpr Rect gain{615.,405.,900.,442.};
  static constexpr Rect zoomIn{265.,455.,345.,491.};

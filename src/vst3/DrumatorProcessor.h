@@ -111,6 +111,7 @@ private:
  SampleExchange auditionExchange_{};
  SampleVoiceEngine auditionVoices_{};
  std::atomic<bool> auditionStart_{false},auditionStop_{false};
+ std::atomic<std::uint64_t> auditionStopGeneration_{0};
  std::vector<float> auditionLeft_{},auditionRight_{};
  TriggerBatch triggers_{};
  PatternEventTimeline patternTimeline_{};

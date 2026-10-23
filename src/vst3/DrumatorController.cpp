@@ -315,6 +315,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  // Successful legacy state already invalidated all pending edits.
  clipboardValid_=false;
  for(auto& path:samplePaths_)path.clear();
+ samplePresent_.fill(false);
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  randomVelocity_.fill(0);masterVolume_=100;
  songEnabled_=false;songChain_=SongChain{};
@@ -1044,6 +1045,7 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
 Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& path) {
  if(row>=kRows)return LoadStatus::InvalidRow;
  if(path.empty())return LoadStatus::NotFound;
+ if(path.size()>4096u)return LoadStatus::Rejected;
  try {
  const auto suffix=pathToUtf8(pathFromUtf8(path).extension());
  std::string ext=suffix;

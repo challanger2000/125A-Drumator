@@ -56,7 +56,7 @@ void testFa23ModalDrop(){
  FinalAuditFiles files;Fixture f;fa23Kit(f);auto& view=fa23Open(f);
  const auto before=auditReturnedKit(*f.p).wav[0];
  AuditFilePackage package(files.write("replacement.wav",constantStereo(-.125f,.375f)));
- VSTGUI::DragEventData drag{};drag.drag=&package;drag.pos={250.,128.};
+ VSTGUI::DragEventData drag{};drag.drag=&package;drag.pos={150.,128.};
  const auto operation=view.onDragEnter(drag);const bool accepted=view.onDrop(drag);
  check(operation==VSTGUI::DragOperation::None&&!accepted&&auditReturnedKit(*f.p).wav[0]==before,
        "FA23 modal WAV editor admitted a file drop into the covered sample row");

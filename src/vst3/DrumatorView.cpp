@@ -594,11 +594,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{1120,7,1250,35},zoomLabel,popup_==1);
  char text[36]{};
  std::snprintf(text,sizeof(text),"%u%%",controller_.swingPercent());
- drawRotary(c,80,76,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
+ drawRotary(c,UiCompactLayout::globalKnobCenters[0],76,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
  std::snprintf(text,sizeof(text),"%u%%",controller_.humanizePercent());
- drawRotary(c,178,76,controller_.humanizePercent()/100.,"HUMANIZE",text,activeKnob_==5);
+ drawRotary(c,UiCompactLayout::globalKnobCenters[1],76,controller_.humanizePercent()/100.,"HUMANIZE",text,activeKnob_==5);
  std::snprintf(text,sizeof(text),"%u%%",controller_.masterVolume());
- drawRotary(c,1178,76,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
+ drawRotary(c,UiCompactLayout::globalKnobCenters[2],76,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
  // Four full-fledged rows per page: the selection has its own independent hit box.
  for(std::size_t i=0;i<displayedRows();++i) {
    const auto row=firstRow_+i;
@@ -670,7 +670,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Nonzero legacy realtime modulation remains visible and controllable.
    if(controller_.rowRandomVelocity(row)>0){
      char legacy[32]{};
-     std::snprintf(legacy,sizeof(legacy),"ALT RT %u%%",
+     std::snprintf(legacy,sizeof(legacy),"LEGACY RT %u%%",
                    static_cast<unsigned>(controller_.rowRandomVelocity(row)));
      drawRotary(c,centers[3],y+68,controller_.rowRandomVelocity(row)/100.,
                 "RANDOM RT",legacy,chosen&&activeKnob_==3);
@@ -749,16 +749,16 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        songSlot_<first+UiSongLayout::perPage&&songSlot_<count;
    char header[128]{};
    std::snprintf(header,sizeof(header),
-       "SONG-ABLAUF   %02u-%02u / 64   |   POSITION WAEHLEN, DANACH PATTERN UND LAENGE",
+       "SONG CHAIN   %02u-%02u / 64   |   SELECT SLOT, THEN PATTERN AND LENGTH",
        static_cast<unsigned>(first+1),static_cast<unsigned>(first+UiSongLayout::perPage));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
    c->drawString(header,{16,105,975,133},VSTGUI::kLeftText);
    drawControl(c,{UiSongLayout::previousLeft,UiSongLayout::navTop,
                   UiSongLayout::previousRight,UiSongLayout::navBottom},
-               "< ZURUECK",false,songPage_>0);
+               "< PREVIOUS",false,songPage_>0);
    drawControl(c,{UiSongLayout::nextLeft,UiSongLayout::navTop,
                   UiSongLayout::nextRight,UiSongLayout::navBottom},
-               "WEITER >",false,UiSongLayout::canNext(songPage_,count));
+               "NEXT >",false,UiSongLayout::canNext(songPage_,count));
    for(std::size_t offset=0;offset<UiSongLayout::perPage;++offset) {
      const auto index=first+offset;
      if(index>count)continue;
@@ -880,7 +880,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(sourceFrame<e.start||sourceFrame>=e.end)fade=0.;
      else {
        if(e.fadeIn>0)fade=std::min(fade,(sourceFrame-e.start)/e.fadeIn);
-       if(e.fadeOut>0)fade=std::min(fade,(e.end-sourceFrame)/e.fadeOut);
+       if(e.fadeOut>0)fade=std::min(fade,std::max(0.,static_cast<double>(e.end)-1.-std::floor(sourceFrame))/e.fadeOut);
      }
      fade=std::clamp(fade,0.,1.);
      const double upper=std::clamp(mid-hi*amp*fade,sampleEditorStereo_?156.:156.,
@@ -972,11 +972,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                  static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->drawString(gainText,{911,405,1001,439});
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   if(status_.find("FAILED")!=std::string::npos||
-      status_.find("REJECTED")!=std::string::npos||
-      status_.find("ERROR")!=std::string::npos||
-      status_.find("NOT ")!=std::string::npos||
-      status_.find("PREVIEW")!=std::string::npos)
+   if(!status_.empty())
      c->drawString(status_.c_str(),{265,556,1020,585});
  }
  setDirty(false);
