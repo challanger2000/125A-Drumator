@@ -271,6 +271,17 @@ void testFr05ShortFadePixelsMatchAudioContract(){
  const auto full=frGuiPixels(view,300,157,980,381);
  check(full!=silentPixels,
        "FR05 negative control: live waveform renderer never shows audible signal");
+ // RV04: hold start/end/fades fixed while changing gain. The original
+ // renderer ignored gain entirely; the old code must fail this assertion.
+ const SampleEdit audibleRange{128,896,0,0,1.f};
+ auto mutedRange=audibleRange;
+ mutedRange.gain=0.f;
+ IntegrationAccess::setSampleEditorDraft(view,audibleRange);
+ const auto audibleRangePixels=frGuiPixels(view,300,157,980,381);
+ IntegrationAccess::setSampleEditorDraft(view,mutedRange);
+ const auto mutedRangePixels=frGuiPixels(view,300,157,980,381);
+ check(audibleRangePixels!=mutedRangePixels,
+       "RV04 waveform renderer ignores edit gain; old fade-oracle blind spot");
 }
 void testFr06ModalErrorPixels(){
  Fixture f;fa23Kit(f);auto& view=fa23Open(f);
