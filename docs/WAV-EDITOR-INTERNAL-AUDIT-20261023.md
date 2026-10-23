@@ -19,3 +19,9 @@ The preceding branch commits have green Windows CI, including the native VST3 Va
 
 ## Release gate
 **NOT FINAL.** The audit documents unresolved usability behavior and missing host acceptance; passing the build alone is not a final release authorization.
+
+## Supplemental audit corrections (2026-10-23)
+- Playback action uses separate **VORHOEREN** (always retriggers the one-shot) and **STOP** controls. The preceding mutable STOP label was not linked to voice completion and wrongly required two clicks to replay finished samples.
+- The embedded sample and decoded waveform are verified before requesting a host resize. An invalid or empty sample row no longer unnecessarily expands the plug-in window.
+- Zoom refuses a zero-frame source explicitly, avoiding division and range errors if the editor is invoked with inconsistent state.
+- The above fixes are source-level changes; a new CI pass and actual Studio One acceptance remain necessary.

@@ -324,7 +324,7 @@ DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
- if(sampleEditorOpen_){controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;sampleEditorOpen_=false;
+ if(sampleEditorOpen_){controller_.stopSampleEditPreview();sampleEditorOpen_=false;
    sampleEditorRow_=kRows;sampleEditorDrag_=0;}
  if(laneDragActive_){controller_.endVelocityStroke(false,this);laneDragActive_=false;}
  detailDragControl_=-1;detailDragRow_=kRows;
@@ -405,7 +405,7 @@ void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
 }
 void DrumatorView::discardTransientEditsForRecall() noexcept {
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
- sampleEditorOpen_=false;sampleEditorPreviewing_=false;sampleEditorRow_=kRows;sampleEditorDrag_=0;
+ sampleEditorOpen_=false;sampleEditorRow_=kRows;sampleEditorDrag_=0;
  // Nothrow logical invalidation before the new kit commit. Do not call
  // VSTGUI/Win32 here: closing an EDIT HWND may invoke allocating callbacks.
  laneDragActive_=false;
@@ -876,7 +876,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(gainText,{911,454,1001,488});
    drawControl(c,{265,501,375,532},"AUTO START");
    drawControl(c,{382,501,492,532},"RESET");
-   drawControl(c,{265,540,465,584},sampleEditorPreviewing_?"STOP":"VORHOEREN");
+   drawControl(c,{265,540,365,584},"VORHOEREN");
+   drawControl(c,{375,540,465,584},"STOP");
    drawControl(c,{568,540,765,584},"ABBRECHEN");
    drawControl(c,{785,540,1000,584},"UEBERNEHMEN");
  }
@@ -945,8 +946,14 @@ void DrumatorView::load(std::size_t row) {
 }
 
 bool DrumatorView::openSampleEditor(std::size_t row) {
- // The modal WAV editor requires 605 logical pixels, whereas the compact
- // drum grid may have resized the plug-in window to only 370 pixels.
+ SampleEdit edit;std::uint32_t frames=0;
+ std::array<WaveformRange,256> wave{};
+ // Verify a usable source BEFORE any host resize. Opening an empty row
+ // must not enlarge the entire plug-in window.
+ if(!controller_.sampleEditorSnapshot(row,edit,frames,wave)||frames==0){
+   status_="WAV-EDITOR: KEIN GUELTIGES SAMPLE";
+   invalid();return false;
+ }
  const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  constexpr double editorHeight=620.;
  if(getViewSize().getHeight()<editorHeight){
@@ -957,14 +964,9 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
    if(auto* parent=getParentView())parent->setViewSize({0,0,1280,editorHeight});
    setViewSize({0,0,1280,editorHeight});
  }
- SampleEdit edit;std::uint32_t frames=0;
- std::array<WaveformRange,256> wave{};
- if(!controller_.sampleEditorSnapshot(row,edit,frames,wave)){
-   status_="WAV-EDITOR: KEIN GUELTIGES SAMPLE";return false;
- }
  sampleEditorEdit_=edit;sampleEditorFrames_=frames;sampleEditorWave_=wave;
  sampleEditorRow_=row;sampleEditorFirst_=0;sampleEditorLast_=frames;
- sampleEditorDrag_=0;sampleEditorPreviewing_=false;sampleEditorOpen_=true;
+ sampleEditorDrag_=0;sampleEditorOpen_=true;
  invalid();return true;
 }
 void DrumatorView::setSampleEditorGain(double x) {
@@ -974,7 +976,7 @@ void DrumatorView::setSampleEditorGain(double x) {
  invalid();
 }
 bool DrumatorView::zoomSampleEditor(bool in,bool full) {
- if(!sampleEditorOpen_)return false;
+ if(!sampleEditorOpen_||sampleEditorFrames_==0)return false;
  const auto span=sampleEditorLast_-sampleEditorFirst_;
  auto nextSpan=full?sampleEditorFrames_:
      (in?std::max<std::uint32_t>(1,span/2):
@@ -1106,18 +1108,21 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      invalid();return done;
    }
    if(y>=540&&y<584) {
-     if(x>=265&&x<465){
-       if(sampleEditorPreviewing_){controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;}
-       else if(controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_))
-         sampleEditorPreviewing_=true;
-       else status_="VORHOEREN FEHLGESCHLAGEN";
+     if(x>=265&&x<365){
+       // Every click restarts a one-shot, even if its previous playback
+       // already ended naturally. The button does not pretend to know
+       // whether the audio thread is still sounding.
+       if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_))
+         status_="VORHOEREN FEHLGESCHLAGEN";
+     }else if(x>=375&&x<465){
+       controller_.stopSampleEditPreview();
      }else if(x>=568&&x<765){
-       controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;
+       controller_.stopSampleEditPreview();
        sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
        (void)adjustEditorHeight();
      }else if(x>=785&&x<1000){
        if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_)){
-         controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;
+         controller_.stopSampleEditPreview();
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
          (void)adjustEditorHeight();
        }else status_="WAV EDIT: PROZESSOR HAT AENDERUNG ABGELEHNT";
