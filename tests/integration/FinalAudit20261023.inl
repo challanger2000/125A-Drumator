@@ -7,7 +7,7 @@ Fixture& fa23Kit(Fixture& f){
 DrumatorView& fa23Open(Fixture& f){
  f.open();auto* view=IntegrationAccess::view(*f.c,0);
  // Direct row EDIT action opens the WAV modal without opening the sample popup.
- click(*view,316.,168.);
+ click(*view,240.,128.);
  check(IntegrationAccess::sampleEditorOpen(*view),"FA23 actual WAV editor did not open");
  return *view;
 }
