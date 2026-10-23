@@ -874,7 +874,7 @@ bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
    ready= a->setInt("Revision",revision)==Steinberg::kResultOk;
  const bool success=ready&&sendEditMessage(msg)==Steinberg::kResultOk;
  
- if(success)notifyViews(false);
+ if(success){try {notifyViews(false);}catch(const std::bad_alloc&){ /* committed state remains authoritative */ }}
  return success;
  }catch(const std::bad_alloc&){return false;}
 }

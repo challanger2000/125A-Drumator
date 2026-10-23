@@ -1950,6 +1950,8 @@ int main(int argc,char** argv){
  run("FA23-08 interpolation respects trim bounds",testFa23TrimInterpolation);
  run("FA23-09 audition deactivation",testFa23AuditionDeactivate);
  run("FA23-10 waveform query OOM",testFa23QueryOOM);
+ run("FR01 stop ordering after consumed start",testFr01StopAfterStartConsumed);
+ run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::collectedNotices=nullptr;

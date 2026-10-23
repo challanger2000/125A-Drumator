@@ -3,6 +3,8 @@
 function(reaudit_instrument name variable)
   set(_code "${${variable}}")
   if(name STREQUAL "DrumatorProcessor")
+    qa_replace(_code "const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);"
+      "const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);\n drumator::qa::probe(drumator::qa::auditAfterAuditionStartTaken);")
     qa_replace(_code "std::int32_t cursor=0;"
       "std::int32_t cursor=0;\n   drumator::qa::probe(drumator::qa::auditAfterLengthRead);")
     qa_replace(_code "lengths[activePattern]=audioPatternLengthCache_[activePattern];"

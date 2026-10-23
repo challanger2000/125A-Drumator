@@ -151,3 +151,44 @@ void testFa23QueryOOM(){
        "FA23 Wave attribute copy OOM escaped Processor::notify VST3 ABI");
  check(!auditReturnedKit(*f.p).wav[0].empty(),"FA23 query OOM damaged source");
 }
+
+void testFr01StopAfterStartConsumed(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)),"FR01 preview setup rejected");
+ arm(qa::auditAfterAuditionStartTaken);
+ tresult result=kResultFalse;
+ std::jthread actor([&]{result=f.p->process(audio.data);});
+ waitEntered();
+ f.c->stopSampleEditPreview();
+ releaseProbe();actor.join();
+ check(result==kResultOk&&!probeTimeout,"FR01 stop race did not complete");
+ check(audio.left[80]==0.f&&audio.right[80]==0.f,
+       "FR01 STOP was consumed but stale start still fired");
+ check(f.p->process(audio.data)==kResultOk&&
+       audio.left[80]==0.f&&audio.right[80]==0.f,
+       "FR01 STOP left audition voice alive on following block");
+}
+void testFr02ControllerMessageOOM(){
+ Fixture f;fa23Kit(f);
+ for(long failPoint=0;failPoint<16;++failPoint){
+   bool escaped=false;
+   allocationFail=failPoint;
+   try {(void)f.c->previewSampleEdit(0,SampleEdit::reset(1024));}
+   catch(const std::bad_alloc&){escaped=true;}
+   allocationFail=-1;
+   check(!escaped,"FR02 preview controller attribute OOM escaped UI path");
+   escaped=false;allocationFail=failPoint;
+   try {(void)f.c->commitSampleEdit(0,SampleEdit::reset(1024));}
+   catch(const std::bad_alloc&){escaped=true;}
+   allocationFail=-1;
+   check(!escaped,"FR02 apply controller attribute OOM escaped UI path");
+   SampleEdit edit;std::uint32_t frames=0;
+   std::array<WaveformRange,256> wave{};
+   escaped=false;allocationFail=failPoint;
+   try {(void)f.c->sampleEditorSnapshot(0,edit,frames,wave);}
+   catch(const std::bad_alloc&){escaped=true;}
+   allocationFail=-1;
+   check(!escaped,"FR02 query controller attribute OOM escaped UI path");
+ }
+ check(!auditReturnedKit(*f.p).wav[0].empty(),"FR02 OOM corrupted source");
+}
