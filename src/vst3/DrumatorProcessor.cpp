@@ -124,9 +124,13 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  // callback lock, heap work or mutation is required.
  if(std::strcmp(id,"Drumator.QueryPattern")==0) {
    auto* attributes=msg->getAttributes();
-   return attributes&&attributes->setInt("Selected",
-       static_cast<Steinberg::int64>(selected_.load(std::memory_order_acquire)))==Steinberg::kResultOk
-       ? Steinberg::kResultOk : Steinberg::kResultFalse;
+   if(!attributes)return Steinberg::kResultFalse;
+   // SDK message attribute insertion may allocate: never escape notify().
+   try {
+     return attributes->setInt("Selected",
+         static_cast<Steinberg::int64>(selected_.load(std::memory_order_acquire)))==Steinberg::kResultOk
+         ? Steinberg::kResultOk : Steinberg::kResultFalse;
+   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
  }
 
 

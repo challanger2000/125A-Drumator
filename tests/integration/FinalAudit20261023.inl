@@ -215,6 +215,52 @@ void testRv02AllocationFreeStopAndRetry(){
  check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f,
        "RV02 retried STOP left audition audible");
 }
+void testRv03RecallQueryOOM(){
+ const std::array<qa::AuditMutation,2> faults{
+     qa::AuditMutation::patternQueryOOM,qa::AuditMutation::patternReplyOOM};
+ for(const auto fault:faults)for(const int variant:{0,1,2,3}){
+   Fixture f;
+   auto previous=namedKit('X'),incoming=namedKit('Y');
+   incoming.selected=2;
+   f.kit(previous);
+   const auto encoded=Fixture::encode(incoming);
+   qa::ByteStream processorStream(encoded.data(),encoded.size());
+   check(f.p->setState(&processorStream)==kResultOk,
+         "RV03 target Processor state rejected");
+   check(f.c->setParamNormalized(kPatternParam,1.)==kResultOk,
+         "RV03 host selection setup rejected");
+   std::vector<std::uint8_t> component=encoded;
+   if(variant>0){
+     const std::uint32_t magic=variant==1?0x31524d44u:
+       (variant==2?0x32524d44u:0x33524d44u);
+     component.clear();
+     for(auto number:{magic,std::uint32_t{2}})
+       for(int i=0;i<4;++i)
+         component.push_back(static_cast<std::uint8_t>(number>>(i*8)));
+     if(variant==3)component.push_back(4);
+     if(variant!=1)component.insert(component.end(),kCells,19);
+   }
+   qa::auditMutation=fault;
+   bool escaped=false;tresult result=kResultFalse;
+   try {result=f.recall(component);}
+   catch(const std::bad_alloc&){escaped=true;}
+   qa::auditMutation=qa::AuditMutation::none;
+   check(!escaped&&result==kResultOk,
+         "RV03 query failure escaped or falsely rejected committed recall");
+   check(f.c->currentPattern()==2&&
+         auditReturnedKit(*f.p).selected==2,
+         "RV03 recall pattern diverged from restored Processor");
+   if(variant==0) {
+     check(f.c->velocity(0,0,0)==93&&
+           f.c->label(0)==std::string(40,'Y'),
+           "RV03 full Kit recall changed grid or name after query failure");
+   }else {
+     check(!f.c->hasSample(0)&&f.c->velocity(0,0,0)==
+           (variant==1?127:19),
+           "RV03 legacy recall failed after query OOM");
+   }
+ }
+}
 void testFr02ControllerMessageOOM(){
  Fixture f;fa23Kit(f);
  for(long failPoint=0;failPoint<16;++failPoint){

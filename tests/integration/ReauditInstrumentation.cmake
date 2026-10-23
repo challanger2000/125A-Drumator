@@ -3,6 +3,8 @@
 function(reaudit_instrument name variable)
   set(_code "${${variable}}")
   if(name STREQUAL "DrumatorProcessor")
+    qa_replace(_code "return attributes->setInt(\"Selected\","
+      "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::patternReplyOOM)throw std::bad_alloc{};\n     return attributes->setInt(\"Selected\",")
     qa_replace(_code "if(std::strcmp(id,\"Drumator.EditorPreviewStop\")==0){"
       "if(std::strcmp(id,\"Drumator.EditorPreviewStop\")==0){\n   if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::rejectPreviewStop)\n     return Steinberg::kResultFalse;")
     qa_replace(_code "const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);"
@@ -22,6 +24,8 @@ function(reaudit_instrument name variable)
       "if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;\n if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::zeroPrefix||\n    (drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::muteImportedProcessor&&\n     drumator::qa::auditImportTarget.load()==this)) {\n   const auto auditMutationFrames=drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::zeroPrefix?\n       std::min(Steinberg::int32{32},data.numSamples):data.numSamples;\n   if(left)std::fill_n(left,auditMutationFrames,0.f);if(right)std::fill_n(right,auditMutationFrames,0.f);\n }\n if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::delayImportedProcessor&&\n    drumator::qa::auditImportTarget.load()==this&&drumator::qa::auditDelayCalls.fetch_add(1)<8u)\n   std::this_thread::sleep_for(std::chrono::milliseconds(10));")
     set(_code "#include <chrono>\n${_code}")
   elseif(name STREQUAL "DrumatorController")
+    qa_replace(_code "msg->setMessageID(\"Drumator.QueryPattern\");"
+      "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::patternQueryOOM)throw std::bad_alloc{};\n   msg->setMessageID(\"Drumator.QueryPattern\");")
     qa_replace(_code "if(strokePattern_<kPatterns&&strokeOwner_!=owner)"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::skipPeerCommit&&\n    strokePattern_<kPatterns&&strokeOwner_!=owner)")
     qa_replace(_code "if(!sameName||(!pathsRestoredBeforeComponent_&&"

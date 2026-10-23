@@ -1956,6 +1956,7 @@ int main(int argc,char** argv){
  run("RV01 stop then new preview ordering",testRv01RestartAfterStopDuringAudioStart);
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
  run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
+ run("RV03 full and legacy recall query allocation failures",testRv03RecallQueryOOM);
  run("FR03 legacy sample-present synchronization",testFr03LegacyRecallSamplePresence);
  run("FR08 controller path length consistency",testFr08PathSerializationBoundary);
  run("FR04 waveform border real mouse input",testFr04RealWaveformEdgeMouse);
