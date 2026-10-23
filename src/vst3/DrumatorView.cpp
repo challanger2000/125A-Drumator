@@ -885,6 +885,18 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{815,455,885,491},"STOP");
    drawControl(c,{892,455,955,491},"CANCEL");
    drawControl(c,{962,455,1030,491},"APPLY");
+   // Immediate visual click feedback: overlay the depressed toolbar item
+   // while the mouse is held, release through the normal mouse-up callback.
+   if(sampleEditorPressed_>=0){
+     constexpr double lefts[]={265,344,423,500,621,706,815,892,962};
+     constexpr double rights[]={337,416,493,614,699,808,885,955,1030};
+     const auto i=static_cast<std::size_t>(sampleEditorPressed_);
+     if(i<9){
+       c->setFrameColor(on);c->setLineWidth(2.);
+       c->drawRect({lefts[i],455,rights[i],491},VSTGUI::kDrawStroked);
+       c->setLineWidth(1.);
+     }
+   }
    // Gain below the signal, compact and directly readable at its control.
    c->drawString("GAIN",{558,405,622,428});
    c->setFillColor(off);c->drawRect({615,416,900,430},VSTGUI::kDrawFilled);
@@ -987,7 +999,7 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  }
  sampleEditorEdit_=edit;sampleEditorFrames_=frames;sampleEditorWave_=wave;
  sampleEditorRow_=row;sampleEditorFirst_=0;sampleEditorLast_=frames;
- sampleEditorDrag_=0;sampleEditorOpen_=true;
+ sampleEditorDrag_=0;sampleEditorPressed_=-1;sampleEditorOpen_=true;
  invalid();return true;
 }
 void DrumatorView::setSampleEditorGain(double x) {
@@ -1117,6 +1129,12 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseEventHandled;
    }
    if(y>=455&&y<=491){
+     constexpr double hitL[]={265,344,423,500,621,706,815,892,962};
+     constexpr double hitR[]={337,416,493,614,699,808,885,955,1030};
+     sampleEditorPressed_=-1;
+     for(int i=0;i<9;++i)if(x>=hitL[i]&&x<=hitR[i]){
+       sampleEditorPressed_=i;break;
+     }
      if(x>=265&&x<=337)(void)zoomSampleEditor(true);
      else if(x>=344&&x<=416)(void)zoomSampleEditor(false);
      else if(x>=423&&x<=493)(void)zoomSampleEditor(false,true);
@@ -1164,7 +1182,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          (void)adjustEditorHeight();
        }else status_="APPLY FAILED: SAMPLE CHANGED OR PROCESSOR REJECTED";
      }
-     invalid();return done;
+     invalid();return VSTGUI::kMouseEventHandled;
    }
    return done;
  }
@@ -1579,7 +1597,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
     VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
- if(sampleEditorOpen_){sampleEditorDrag_=0;return VSTGUI::kMouseEventHandled;}
+ if(sampleEditorOpen_){sampleEditorDrag_=0;sampleEditorPressed_=-1;
+   invalid();return VSTGUI::kMouseEventHandled;}
  if(activeKnob_>=0){
    activeKnob_=-1;knobRow_=kRows;
    invalid();return VSTGUI::kMouseEventHandled;
@@ -1593,7 +1612,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
  return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
- sampleEditorDrag_=0;
+ sampleEditorDrag_=0;sampleEditorPressed_=-1;
  activeKnob_=-1;knobRow_=kRows;
  detailDragControl_=-1;detailDragRow_=kRows;
  const bool fresh=laneDragActive_&&
