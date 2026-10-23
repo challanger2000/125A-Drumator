@@ -260,11 +260,11 @@ VSTGUI::DragOperation DrumatorView::onDragEnter(VSTGUI::DragEventData data) {
  const bool hasPath=allowed&&DrumatorDropTarget::extractSamplePath(data.drag,path);
  switch(classifyDrop(allowed,hasPath)) {
    case DropFeedback::TargetBlocked:
-     status_="D&D: VERDECKTES ODER UNGUELTIGES SAMPLE-ZIEL";break;
+     status_="D&D: INVALID OR OBSCURED SAMPLE TARGET";break;
    case DropFeedback::InvalidFilePath:
-     status_="D&D: KEIN GUELTIGER WAV/FLAC-DATEIPFAD";break;
+     status_="D&D: INVALID WAV/FLAC FILE PATH";break;
    case DropFeedback::ValidTarget:
-     status_="D&D: DATEIPFAD ERKANNT - AUF INSTRUMENTENZEILE ZIEHEN";break;
+     status_="D&D: DROP ON INSTRUMENT ROW";break;
  }
  invalid();
  return allowed&&hasPath?VSTGUI::DragOperation::Copy:VSTGUI::DragOperation::None;
@@ -299,7 +299,7 @@ bool DrumatorView::toggleRowVelocity(std::size_t row) {
  if(!adjustEditorHeight()){
    velocityExpanded_[row]=previous;
    (void)adjustEditorHeight();
-   status_="HOST HAT HOEHE FUER VELOCITY ABGELEHNT";
+   status_="HOST REJECTED VELOCITY LANE RESIZE";
    return false;
  }
  return true;
@@ -364,7 +364,7 @@ void DrumatorView::valueChanged(VSTGUI::CControl* control) {
  if(control!=nameEdit_||editingNameRow_>=kRows||
     nameEditGeneration_!=controller_.editGeneration())return;
  const auto text=std::string(nameEdit_->getText().getString());
- if(!controller_.renameRow(editingNameRow_,text))status_="INSTRUMENTENNAME NICHT UEBERNOMMEN";
+ if(!controller_.renameRow(editingNameRow_,text))status_="ROW NAME NOT APPLIED";
  else status_="INSTRUMENTENNAME GESPEICHERT";
  nameEdit_->setVisible(false);
  editingNameRow_=kRows;
@@ -501,7 +501,7 @@ bool DrumatorView::adjustEditorHeight() {
      compactPageRows_=i;
    }
    if(compactPageRows_==0)compactPageRows_=1;
-   status_="HOST-FENSTER ZU KLEIN: ZEILEN MIT < > WECHSELN";
+   status_="HOST WINDOW TOO SMALL: PAGE ROWS WITH ARROWS";
    invalid();return false;
  }
  compactPageRows_=UiCompactLayout::perPage;
@@ -946,39 +946,39 @@ bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
  case Controller::LoadStatus::Accepted:
      status_="SAMPLE ANGENOMMEN - WIEDERGABE AB NAECHSTEM AUDIOBLOCK";break;
  case Controller::LoadStatus::InvalidRow:
-     status_="FEHLER: UNGUELTIGE INSTRUMENTENZEILE";break;
+     status_="ERROR: INVALID INSTRUMENT ROW";break;
  case Controller::LoadStatus::NotFound:
-     status_="DATEI NICHT GEFUNDEN";break;
+     status_="FILE NOT FOUND";break;
  case Controller::LoadStatus::TooLarge:
      status_="SAMPLE ZU GROSS (MAX. 16 MiB)";break;
  case Controller::LoadStatus::ReadError:
-     status_="SAMPLE KONNTE NICHT GELESEN WERDEN";break;
+     status_="SAMPLE READ FAILED";break;
  case Controller::LoadStatus::Unsupported:
      status_="UNTERSTUETZT: WAV PCM/FLOAT UND FLAC, MONO/STEREO";break;
  case Controller::LoadStatus::NoProcessorConnection:
-     status_="HOST HAT CONTROLLER UND AUDIOPROZESSOR NICHT VERBUNDEN";break;
+     status_="HOST DID NOT CONNECT CONTROLLER AND PROCESSOR";break;
  case Controller::LoadStatus::Rejected:
-     status_="PROZESSOR HAT SAMPLE ABGELEHNT - RATE/LAST PRUEFEN";break;
+     status_="PROCESSOR REJECTED SAMPLE";break;
  }
  invalid();
  return outcome==Controller::LoadStatus::Accepted;
 }
 bool DrumatorView::acceptFileDrop(VSTGUI::DragEventData data) {
  if(!data.drag) {
-   status_="D&D FEHLER: KEINE DATEN VOM HOST";invalid();return false;
+   status_="D&D ERROR: NO HOST DATA";invalid();return false;
  }
  const auto position=data.pos;
  if(!sampleDropTargetAt(position.x,position.y)) {
-   status_="D&D FEHLER: AUSSERHALB DER INSTRUMENTENZEILEN";
+   status_="D&D ERROR: OUTSIDE INSTRUMENT ROWS";
    invalid();return false;
  }
  const auto row=firstRow_+UiCompactLayout::rowAt(position.y,firstRow_,displayedRows(),velocityExpanded_);
  if(row>=kRows) {
-   status_="D&D FEHLER: ZEILE NICHT VORHANDEN";invalid();return false;
+   status_="D&D ERROR: INVALID ROW";invalid();return false;
  }
  std::string path;
  if(!DrumatorDropTarget::extractSamplePath(data.drag,path)) {
-   status_="D&D FEHLER: HOST UEBERGIBT KEINEN WAV/FLAC-DATEIPFAD";
+   status_="D&D ERROR: NO WAV/FLAC PATH";
    invalid();return false;
  }
  return loadPath(row,path);
@@ -989,7 +989,7 @@ void DrumatorView::load(std::size_t row) {
  if(!frame)return;
  auto* picker=VSTGUI::CNewFileSelector::create(frame,
                                             VSTGUI::CNewFileSelector::kSelectFile);
- if(!picker) {status_="DATEIDIALOG NICHT VERFUEGBAR";invalid();return;}
+ if(!picker) {status_="FILE PICKER UNAVAILABLE";invalid();return;}
  picker->addFileExtension(VSTGUI::CFileExtension("WAV PCM/FLOAT","wav","audio/wav"));
  picker->addFileExtension(VSTGUI::CFileExtension("FLAC","flac","audio/flac"));
  picker->setTitle("125A Drumator - WAV/FLAC-Sample auswaehlen");
@@ -1017,7 +1017,7 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  constexpr double editorHeight=620.;
  if(getViewSize().getHeight()<editorHeight){
    if(!editor_.requestResize({1280.*scale,editorHeight*scale})){
-     status_="WAV-EDITOR: HOST HAT FENSTERHOEHE ABGELEHNT";
+     status_="SAMPLE EDITOR: HOST REJECTED WINDOW HEIGHT";
      invalid();return false;
    }
    if(auto* parent=getParentView())parent->setViewSize({0,0,1280,editorHeight});
@@ -1050,7 +1050,7 @@ bool DrumatorView::zoomSampleEditor(bool in,bool full) {
  if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,frames,wave,
                                       nextFirst,nextFirst+nextSpan,nullptr,
                                       &right,&stereo)||
-    frames!=sampleEditorFrames_){status_="ZOOM: WAVEFORM NICHT LESBAR";return false;}
+    frames!=sampleEditorFrames_){status_="ZOOM: WAVEFORM UNAVAILABLE";return false;}
  sampleEditorFirst_=nextFirst;sampleEditorLast_=nextFirst+nextSpan;
  sampleEditorWave_=wave;sampleEditorWaveRight_=right;sampleEditorStereo_=stereo;
  invalid();return true;
@@ -1114,7 +1114,7 @@ bool DrumatorView::scrollEditorWave(double x) {
  bool stereo=sampleEditorStereo_;
  SampleEdit ignored;std::uint32_t count=0;
  if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,count,wave,next,next+span,nullptr,&right,&stereo)||
-    count!=sampleEditorFrames_){status_="SCROLL: WAVEFORM NICHT LESBAR";return false;}
+    count!=sampleEditorFrames_){status_="SCROLL: WAVEFORM UNAVAILABLE";return false;}
  sampleEditorFirst_=next;sampleEditorLast_=next+span;sampleEditorWave_=wave;
  sampleEditorWaveRight_=right;sampleEditorStereo_=stereo;
  invalid();return true;
@@ -1209,7 +1209,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         const auto factor=UiCompactLayout::userZooms[option];
         if(static_cast<DrumatorEditor&>(editor_).setZoomChecked(factor))
           controller_.rememberZoom(factor);
-        else {status_="HOST HAT ZOOM ABGELEHNT";ok=false;}
+        else {status_="HOST REJECTED ZOOM";ok=false;}
         acted=true;
       }
    }else if(kind==2&&x>=782&&x<968&&y>=86&&y<268) {
@@ -1255,7 +1255,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        }
      }
    }
-   if(acted&&!ok)status_="AUSWAHL VOM PROZESSOR / HOST ABGELEHNT";
+   if(acted&&!ok)status_="HOST OR PROCESSOR REJECTED SELECTION";
    invalid();return done;
  }
  if(fillMenuRow_>=0) {
@@ -1270,7 +1270,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
            RowFill::Gallop,RowFill::SnareGhost};
        if(selected<9&&y<top+selected*25.+24.&&
           !controller_.fillRow(target,fills[selected]))
-          status_="FILL NICHT UEBERNOMMEN";
+          status_="FILL NOT APPLIED";
      }
    }
    invalid();return done;
@@ -1280,14 +1280,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    const bool wantOne=x<364;
    const bool isOne=controller_.patternLength(controller_.currentPattern())==16;
    if(wantOne!=isOne&&!controller_.togglePatternLength(controller_.currentPattern()))
-     status_="PATTERN-LAENGE NICHT UEBERNOMMEN";
+     status_="PATTERN LENGTH NOT APPLIED";
    invalid();return done;
  }
  // Global controls: Rotary, direct pattern buttons, Song and two menus.
  if(x>=1120&&x<1250&&y>=7&&y<35){popup_=1;invalid();return done;}
  if(x>=782&&x<901&&y>=52&&y<82){popup_=2;invalid();return done;}
  if(x>=910&&x<991&&y>=52&&y<82) {
-   if(!controller_.toggleSongMode())status_="SONG-MODUS NICHT UEBERNOMMEN";
+   if(!controller_.toggleSongMode())status_="SONG MODE NOT APPLIED";
    invalid();return done;
  }
  if(x>=998&&x<1098&&y>=52&&y<82) {
@@ -1301,7 +1301,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(x>=kPatternX+idx*kPatternWidth+49.)return VSTGUI::kMouseEventNotHandled;
    const bool ok=(buttons&VSTGUI::kShift)?
       controller_.togglePatternLength(idx):controller_.changePattern(idx);
-   if(!ok)status_="PATTERN NICHT UEBERNOMMEN";
+   if(!ok)status_="PATTERN NOT APPLIED";
    invalid();return done;
  }
  for(int i=4;i<=6;++i){
@@ -1313,7 +1313,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       if((buttons&VSTGUI::kControl)||(buttons&VSTGUI::kDoubleClick)) {
         if(previous!=UiCompactLayout::defaultValue(i)&&
            !changeKnobValue(i,0,UiCompactLayout::defaultValue(i)))
-           status_="REGLER RESET NICHT UEBERNOMMEN";
+           status_="CONTROL RESET NOT APPLIED";
         invalid();return done;
       }
       activeKnob_=i;knobRow_=kRows;knobStartY_=y;knobStartValue_=previous;
@@ -1381,7 +1381,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        }
      }
    }
-   if(!ok)status_="SONG-EINTRAG NICHT UEBERNOMMEN";
+   if(!ok)status_="SONG ENTRY NOT APPLIED";
    invalid();return VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  }
 
@@ -1395,7 +1395,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
           [&](){return controller_.addRow();},
           [&](){return adjustEditorHeight();},
           [&](){return controller_.restoreVisibleRows(count);});
-       if(result!=RowResizeResult::Applied)status_="ZEILE KONNTE NICHT HINZUGEFUEGT WERDEN";
+       if(result!=RowResizeResult::Applied)status_="COULD NOT ADD ROW";
      }
      invalid();return done;
    }
@@ -1406,7 +1406,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         [&](){return adjustEditorHeight();},
         [&](){return controller_.restoreVisibleRows(count);});
      if(result!=RowResizeResult::Applied)
-       status_="NUR LEERE LETZTE ZEILE ENTFERNBAR";
+       status_="ONLY AN EMPTY LAST ROW CAN BE REMOVED";
      invalid();return done;
    }
    if(controller_.visibleRows()>displayedRows()&&x>=1068&&x<1229){
@@ -1445,7 +1445,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         // Editing a blank velocity bar must never activate a new note.
         // Notes are created with the dedicated Step buttons above the lane.
         if(controller_.velocity(controller_.currentPattern(),row,velocityStep_)==0){
-          status_="LEERER STEP: ZUERST IM RASTER AKTIVIEREN";
+          status_="EMPTY STEP: ACTIVATE IT IN GRID FIRST";
           invalid();return done;
         }
         laneDragPattern_=controller_.currentPattern();
@@ -1454,14 +1454,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         laneDragActive_=true;laneErase_=(buttons&VSTGUI::kControl)!=0;
         if(!controller_.setStepVelocity(laneDragPattern_,row,velocityStep_,
                UiCompactLayout::velocityAt(y,top,laneErase_),this))
-          status_="VELOCITY NICHT UEBERNOMMEN";
+          status_="VELOCITY NOT APPLIED";
         invalid();return VSTGUI::kMouseEventHandled;
       }
       return done;
    }
    if(!UiCompactLayout::mainHit(y,top))return done;
    if(x>=16&&x<74) {
-     velocityRow_=row;status_="INSTRUMENT AUSGEWAEHLT";
+     velocityRow_=row;status_="INSTRUMENT SELECTED";
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::velocityToggle)&&
@@ -1479,33 +1479,33 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    if(UiCompactLayout::hit(x,UiCompactLayout::sample)&&y>=top+5&&y<top+35){
      if(buttons&VSTGUI::kShift)editName(row);
      else if(buttons&VSTGUI::kAlt){
-       if(!controller_.clearSample(row))status_="SAMPLE NICHT ENTFERNT";
+       if(!controller_.clearSample(row))status_="SAMPLE NOT REMOVED";
      }else load(row);
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::previous)&&y>=top+5&&y<top+35){
      if(controller_.stepSample(row,-1)!=Controller::LoadStatus::Accepted)
-       status_="KEIN VORHERIGES SAMPLE";
+       status_="NO PREVIOUS SAMPLE";
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::next)&&y>=top+5&&y<top+35){
      if(controller_.stepSample(row,1)!=Controller::LoadStatus::Accepted)
-       status_="KEIN NAECHSTES SAMPLE";
+       status_="NO NEXT SAMPLE";
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::preview)&&y>=top+5&&y<top+35){
-     if(!controller_.previewSample(row))status_="SAMPLE NICHT VORHOERBAR";
+     if(!controller_.previewSample(row))status_="SAMPLE PREVIEW FAILED";
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::fill)&&y>=top+5&&y<top+35){
      fillMenuRow_=static_cast<int>(row);invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::mute)&&y>=top+5&&y<top+35){
-     if(!controller_.toggleRowGate(row,false))status_="MUTE NICHT UEBERNOMMEN";
+     if(!controller_.toggleRowGate(row,false))status_="MUTE NOT APPLIED";
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::solo)&&y>=top+5&&y<top+35){
-     if(!controller_.toggleRowGate(row,true))status_="SOLO NICHT UEBERNOMMEN";
+     if(!controller_.toggleRowGate(row,true))status_="SOLO NOT APPLIED";
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::choke)&&y>=top+54&&y<top+86){
@@ -1525,14 +1525,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        const bool ok=(buttons&VSTGUI::kShift)?
          controller_.cycleStepVelocity(controller_.currentPattern(),row,velocityStep_):
          controller_.toggleStep(controller_.currentPattern(),row,velocityStep_);
-       if(!ok)status_="STEP NICHT UEBERNOMMEN";
+       if(!ok)status_="STEP NOT APPLIED";
        invalid();return done;
      }
    }
    if(controller_.rowRandomVelocity(row)==0&&x>=448&&x<544&&
       y>=top+52&&y<top+84){
      if(!controller_.randomizeRowVelocity(row))
-       status_="RANDOM VEL: KEINE NOTEN ODER EDIT ABGELEHNT";
+       status_="RANDOM VELOCITY: NO NOTES OR EDIT REJECTED";
      invalid();return done;
    }
    for(int i=0;i<4;++i){
@@ -1546,7 +1546,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        if((buttons&VSTGUI::kControl)||(buttons&VSTGUI::kDoubleClick)){
          const auto def=UiCompactLayout::defaultValue(i);
          if(previous!=def&&!changeKnobValue(i,row,def))
-           status_="KLANGREGLER RESET NICHT UEBERNOMMEN";
+           status_="KLANGCONTROL RESET NOT APPLIED";
          invalid();return done;
        }
        activeKnob_=i;knobRow_=row;knobStartY_=y;knobStartValue_=previous;
@@ -1577,7 +1577,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
    const auto requested=UiCompactLayout::knobValueForSlot(
         activeKnob_,knobStartY_,pos.y,knobStartValue_,knobFine_);
    if(!changeKnobValue(activeKnob_,knobRow_,requested))
-      status_="REGLERWERT NICHT UEBERNOMMEN";
+      status_="CONTROL VALUE NOT APPLIED";
    invalid();return VSTGUI::kMouseEventHandled;
  }
  if(!laneDragActive_)return VSTGUI::kMouseEventNotHandled;
@@ -1605,7 +1605,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
    return VSTGUI::kMouseEventHandled;
  const auto value=UiCompactLayout::velocityAt(pos.y,rowTopOnPage(idx),laneErase_);
  if(!controller_.setStepVelocity(laneDragPattern_,velocityRow_,velocityStep_,value,this))
-   status_="VELOCITY-ZIEHEN NICHT UEBERNOMMEN";
+   status_="VELOCITY DRAG NOT APPLIED";
  invalid();return VSTGUI::kMouseEventHandled;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
