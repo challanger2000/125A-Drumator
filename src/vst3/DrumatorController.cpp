@@ -793,10 +793,12 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
  if(row>=kRows)return false;
  auto* msg=allocateMessage();
  if(!msg)return false;
+ struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
+ try {
  msg->setMessageID("Drumator.SampleEditorQuery");
  auto* a=msg->getAttributes();
  if(!a||a->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk){
-   msg->release();return false;
+   return false;
  }
  const auto result=sendMessage(msg);
  bool ok=false;
@@ -824,7 +826,7 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
        if(candidate.end==0)candidate=SampleEdit::reset(count);
        if(candidate.valid(count)) {
          if(last==0)last=count;
-         if(first>=last||last>count){msg->release();return false;}
+         if(first>=last||last>count){return false;}
          for(std::size_t i=0;i<envelope.size();++i) {
            const auto binFirst=static_cast<std::size_t>(first)+
                          (static_cast<std::size_t>(last-first)*i)/envelope.size();
@@ -848,13 +850,16 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
      }
    }
  }
- msg->release();
+ 
  return ok;
+ }catch(const std::bad_alloc&){return false;}
 }
 bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
                                   std::uint32_t revision) {
  if(row>=kRows||!edit.end)return false;
  auto* msg=allocateMessage();if(!msg)return false;
+ struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
+ try {
  msg->setMessageID("Drumator.SampleEditorCommit");
  auto* a=msg->getAttributes();
  std::uint32_t bits=0;std::memcpy(&bits,&edit.gain,sizeof(bits));
@@ -868,9 +873,10 @@ bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
  if(ready&&revision!=UINT32_MAX)
    ready= a->setInt("Revision",revision)==Steinberg::kResultOk;
  const bool success=ready&&sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();
+ 
  if(success)notifyViews(false);
  return success;
+ }catch(const std::bad_alloc&){return false;}
 }
 
 
@@ -878,6 +884,8 @@ bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
                                    std::uint32_t revision){
  if(row>=kRows||edit.end==0)return false;
  auto* msg=allocateMessage();if(!msg)return false;
+ struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
+ try {
  msg->setMessageID("Drumator.EditorPreview");
  auto* a=msg->getAttributes();std::uint32_t bits=0;
  std::memcpy(&bits,&edit.gain,sizeof(bits));
@@ -890,7 +898,8 @@ bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
  if(ready&&revision!=UINT32_MAX)
    ready=a->setInt("Revision",revision)==Steinberg::kResultOk;
  const bool ok=ready&&sendMessage(msg)==Steinberg::kResultOk;
- msg->release();return ok;
+ return ok;
+ }catch(const std::bad_alloc&){return false;}
 }
 void Controller::stopSampleEditPreview(){
  auto* msg=allocateMessage();if(!msg)return;
