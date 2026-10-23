@@ -45,6 +45,14 @@ void testFa23PreviewPublication(){
  check(first||second,"FA23 accepted preview consumed Start before adopting its prepared asset");
 }
 void testFa23ModalDrop(){
+ // An empty row must not enable direct EDIT or open a modal.
+ { Fixture emptyFixture;KitState emptyKit;emptyKit.grid.fill(0);emptyKit.visible=4;
+   emptyFixture.kit(emptyKit);emptyFixture.open();
+   auto* emptyView=IntegrationAccess::view(*emptyFixture.c,0);
+   check(!emptyFixture.c->hasSample(0),"UI empty row falsely enables EDIT");
+   click(*emptyView,240.,128.);
+   check(!IntegrationAccess::sampleEditorOpen(*emptyView),"UI EDIT opened an empty row");
+ }
  FinalAuditFiles files;Fixture f;fa23Kit(f);auto& view=fa23Open(f);
  const auto before=auditReturnedKit(*f.p).wav[0];
  AuditFilePackage package(files.write("replacement.wav",constantStereo(-.125f,.375f)));

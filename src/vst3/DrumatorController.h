@@ -35,6 +35,7 @@ public:
                   const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
                   VSTGUI::VST3Editor*) override;
 
+ bool hasSample(std::size_t row) const noexcept {return row<kRows&&samplePresent_[row];}
  bool clearSample(std::size_t row);
  bool previewSample(std::size_t row);
  bool previewSampleEdit(std::size_t row,const SampleEdit& edit,
@@ -147,6 +148,7 @@ private:
                      std::uint8_t requestedLength=0);
  void rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next);
  std::array<std::string,kRows> labels_{};
+ std::array<bool,kRows> samplePresent_{};
  std::array<std::string,kRows> customNames_{};
  // Filesystem navigation is session-only. Embedded WAV data remains self-contained.
  std::array<std::string,kRows> samplePaths_{};

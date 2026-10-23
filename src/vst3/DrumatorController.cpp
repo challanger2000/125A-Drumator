@@ -221,6 +221,8 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     grid_=candidate.grid;
     patternLengths_=candidate.patternLengths;
     stagedNames.commit(customNames_,labels_);
+    for(std::size_t row=0;row<kRows;++row)
+      samplePresent_[row]=!candidate.wav[row].empty();
     undo_.reset();
     clipboardValid_=false;
     // Component-only recall MUST NOT inherit a stale same-named sample origin.
@@ -918,7 +920,8 @@ bool Controller::clearSample(std::size_t row) {
  attrs->setInt("Row",static_cast<Steinberg::int64>(row));
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok){labels_[row].swap(emptyLabel);samplePaths_[row].clear();notifyViews(false);}
+ if(ok){labels_[row].swap(emptyLabel);samplePaths_[row].clear();
+        samplePresent_[row]=false;notifyViews(false);}
  return ok;
 }
 bool Controller::setRowOutput(std::size_t row,unsigned requested) {
@@ -1106,6 +1109,7 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  // next audio block; no claim is made that the buffer has already rendered.
  labels_[row].swap(name);
  samplePaths_[row].swap(stagedPath);
+ samplePresent_[row]=true;
  originIdentity_[row]=wavIdentity(data);
  originIdentityValid_[row]=true;
  pathsRestoredBeforeComponent_=false;

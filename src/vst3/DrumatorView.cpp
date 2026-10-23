@@ -631,7 +631,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(letters);
    c->drawString(fitted.c_str(),{UiCompactLayout::sample.left+5,y+5,UiCompactLayout::sample.right-2,y+35},VSTGUI::kLeftText);
    drawControl(c,{275,y+5,301,y+35},"...");
-    drawControl(c,{UiCompactLayout::edit.left,y+5,UiCompactLayout::edit.right,y+35},"EDIT");
+    drawControl(c,{UiCompactLayout::edit.left,y+5,UiCompactLayout::edit.right,y+35},"EDIT",false,controller_.hasSample(row));
    drawControl(c,{303,y+5,329,y+35},"<");
    drawControl(c,{332,y+5,358,y+35},">");
    drawControl(c,{362,y+5,398,y+35},"PLAY");
@@ -1511,7 +1511,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      (void)toggleRowVelocity(row);invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::edit)&&y>=top+5&&y<top+35){
-      (void)openSampleEditor(row);invalid();return done;
+      if(controller_.hasSample(row))(void)openSampleEditor(row);
+      invalid();return done;
     }
     if(UiCompactLayout::hit(x,UiCompactLayout::sampleMenu)&&
       y>=top+5&&y<top+35){
