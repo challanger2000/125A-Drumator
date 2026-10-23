@@ -791,7 +791,8 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
                                      std::array<WaveformRange,256>* rightEnvelope,
                                      bool* stereo) {
  if(row>=kRows)return false;
- auto* msg=allocateMessage();
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
  if(!msg)return false;
  struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
  try {
@@ -857,7 +858,9 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
 bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
                                   std::uint32_t revision) {
  if(row>=kRows||!edit.end)return false;
- auto* msg=allocateMessage();if(!msg)return false;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
+ if(!msg)return false;
  struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
  try {
  msg->setMessageID("Drumator.SampleEditorCommit");
@@ -883,7 +886,9 @@ bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
 bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
                                    std::uint32_t revision){
  if(row>=kRows||edit.end==0)return false;
- auto* msg=allocateMessage();if(!msg)return false;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
+ if(!msg)return false;
  struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
  try {
  msg->setMessageID("Drumator.EditorPreview");
