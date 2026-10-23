@@ -529,8 +529,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
  c->drawString("PATTERN",{180,13,276,33},VSTGUI::kLeftText);
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
- drawControl(c,{280,8,364,34},"1 BAR",oneBar);
- drawControl(c,{372,8,456,34},"2 BARS",!oneBar);
+ drawControl(c,{UiCompactLayout::barOne.left,8,UiCompactLayout::barOne.right,34},"1 BAR",oneBar);
+ drawControl(c,{UiCompactLayout::barTwo.left,8,UiCompactLayout::barTwo.right,34},"2 BARS",!oneBar);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    char label[12]{};
    std::snprintf(label,sizeof(label),"%c %uT",static_cast<char>('A'+pattern),
@@ -591,7 +591,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(letters);
    c->drawString(fitted.c_str(),{83,y+5,270,y+35},VSTGUI::kLeftText);
    drawControl(c,{275,y+5,301,y+35},"...");
-    drawControl(c,{275,y+54,358,y+84},"EDIT");
+    drawControl(c,{UiCompactLayout::edit.left,y+54,UiCompactLayout::edit.right,y+84},"EDIT");
    drawControl(c,{303,y+5,329,y+35},"<");
    drawControl(c,{332,y+5,358,y+35},">");
    drawControl(c,{362,y+5,398,y+35},"PLAY");
@@ -1276,8 +1276,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    invalid();return done;
  }
  // Explicit pattern-length choice, independent of the operation popup.
- if(y>=8&&y<34&&((x>=280&&x<364)||(x>=372&&x<456))){
-   const bool wantOne=x<364;
+ if(y>=8&&y<34&&(UiCompactLayout::hit(x,UiCompactLayout::barOne)||
+                  UiCompactLayout::hit(x,UiCompactLayout::barTwo))){
+   const bool wantOne=UiCompactLayout::hit(x,UiCompactLayout::barOne);
    const bool isOne=controller_.patternLength(controller_.currentPattern())==16;
    if(wantOne!=isOne&&!controller_.togglePatternLength(controller_.currentPattern()))
      status_="PATTERN LENGTH NOT APPLIED";
@@ -1469,7 +1470,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      velocityRow_=row;
      (void)toggleRowVelocity(row);invalid();return done;
    }
-   if(x>=275&&x<358&&y>=top+54&&y<top+84){
+   if(UiCompactLayout::hit(x,UiCompactLayout::edit)&&y>=top+54&&y<top+84){
       (void)openSampleEditor(row);invalid();return done;
     }
     if(UiCompactLayout::hit(x,UiCompactLayout::sampleMenu)&&
