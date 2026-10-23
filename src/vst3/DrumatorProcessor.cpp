@@ -650,7 +650,14 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  try {auditionLeft_.resize(static_cast<std::size_t>(setup.maxSamplesPerBlock));
       auditionRight_.resize(static_cast<std::size_t>(setup.maxSamplesPerBlock));}
  catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
- auditionVoices_.reset();auditionStart_.store(false);auditionStop_.store(false);
+ // Host reconfiguration is an audition discontinuity, even when no STOP
+ // callback has been rendered. Old prepared asset ownership stays in the
+ // SampleExchange until safely reclaimed by the control thread.
+ auditionVoices_.reset();
+ (void)auditionVoices_.setRow(0,RowSound{});
+ lastAudioAuditionCommand_=auditionCommand_.load(std::memory_order_acquire);
+ auditionStart_.store(false,std::memory_order_release);
+ auditionStop_.store(false,std::memory_order_release);
  if(!voices_.setOutputRate(setup.sampleRate)||
     !masterRamp_.prepare(setup.sampleRate))return Steinberg::kResultFalse;
  masterRamp_.reset(masterVolume_.load(std::memory_order_relaxed)/100.f);

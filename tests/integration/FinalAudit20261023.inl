@@ -221,6 +221,55 @@ void testRv01OutputlessPreviewRetirement(){
        f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
        "RV01 fresh preview failed after outputless interval");
 }
+void testA04PreviewRateLifecycle(){
+ // Real processor/controller, including pending and previously audible
+ // previews. Check both paths across two legal host-rate transitions.
+ for(const bool adoptOld:{false,true}){
+   Fixture f;fa23Kit(f);AuditAudioBlock audio;
+   check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)),
+        "A04 cannot publish preview at 48k");
+   if(adoptOld) {
+     check(f.p->process(audio.data)==kResultOk &&
+           audio.left[80]==.25f && audio.right[80]==-.5f,
+           "A04 initial 48k preview not audible");
+   }
+   check(f.p->setProcessing(false)==kResultOk &&
+         f.p->setActive(false)==kResultOk,
+         "A04 stop before reconfigure failed");
+   ProcessSetup changed{};changed.sampleRate=44100.;
+   changed.maxSamplesPerBlock=256;changed.symbolicSampleSize=kSample32;
+   changed.processMode=kRealtime;
+   check(f.p->setupProcessing(changed)==kResultOk &&
+         f.p->setActive(true)==kResultOk &&
+         f.p->setProcessing(true)==kResultOk,
+         "A04 48k-to-44.1k processing restart rejected");
+   check(f.p->process(audio.data)==kResultOk &&
+         audio.left[80]==0.f && audio.right[80]==0.f,
+         "A04 old preview sounded after 44.1k setup");
+   check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)),
+         "A04 new-rate preview rejected");
+   check(f.p->process(audio.data)==kResultOk &&
+         std::isfinite(audio.left[80]) &&
+         audio.left[80]>.20f && audio.left[80]<.30f &&
+         audio.right[80]<-.40f && audio.right[80]>-.60f,
+         "A04 new-rate preview did not render fresh sinc kernel");
+   check(f.p->setProcessing(false)==kResultOk &&
+         f.p->setActive(false)==kResultOk,
+         "A04 stop before second reconfigure rejected");
+   changed.sampleRate=48000.;
+   check(f.p->setupProcessing(changed)==kResultOk &&
+         f.p->setActive(true)==kResultOk &&
+         f.p->setProcessing(true)==kResultOk,
+         "A04 44.1k-to-48k processing restart rejected");
+   check(f.p->process(audio.data)==kResultOk &&
+         audio.left[80]==0.f && audio.right[80]==0.f,
+         "A04 preview from prior sample rate revived");
+   check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)) &&
+         f.p->process(audio.data)==kResultOk &&
+         audio.left[80]==.25f && audio.right[80]==-.5f,
+         "A04 fresh 48k preview after two reconfigurations failed");
+ }
+}
 void testRv02AllocationFreeStopAndRetry(){
  Fixture f;fa23Kit(f);AuditAudioBlock audio;
  check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)) &&

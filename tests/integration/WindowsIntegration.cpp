@@ -1956,6 +1956,7 @@ int main(int argc,char** argv){
  run("RV01 stop then new preview ordering",testRv01RestartAfterStopDuringAudioStart);
  run("RV01 asset+command publication ordering",testRv01AssetCommandPublication);
  run("RV01 preview retirement across outputless callback",testRv01OutputlessPreviewRetirement);
+ run("A04 preview lifecycle across 48k / 44.1k / 48k",testA04PreviewRateLifecycle);
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
  run("RV02 transient STOP rejection during native editor close",testRv02NativeEditorCloseTransientReject);
  run("RV02 rejected STOP leaves Apply uncommitted",testRv02ApplyRejectKeepsEdit);
