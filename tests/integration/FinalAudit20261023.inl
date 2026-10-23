@@ -291,6 +291,27 @@ void testFr06ModalErrorPixels(){
  const auto with=frGuiPixels(view,265,556,1020,585);
  check(with!=without,"FR06 actual modal error text not visible on native GUI pixels");
 }
+// RV05 independent raster oracle: the actual circle must be centered on
+// the layout hit center. A return to old painted x=80/178/1178 fails.
+void testRv05GlobalKnobPaintCenters(){
+ Fixture f;fa23Kit(f);f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ for(const double center:UiCompactLayout::globalKnobCenters){
+   const auto left=static_cast<unsigned>(center-24.);
+   const auto pixels=frGuiPixels(*view,left,61,left+48,63);
+   const auto backgroundColor=pixels[0];
+   double sum=0.,count=0.;
+   for(unsigned y=0;y<2;++y)
+     for(unsigned x=0;x<48;++x){
+       if(pixels[y*48+x]==backgroundColor)continue;
+       sum+=static_cast<double>(left+x);
+       count+=1.;
+     }
+   check(count>=2.,"RV05 visible rotary outline missing from pixel capture");
+   check(std::abs(sum/count-center)<0.85,
+         "RV05 painted rotary center does not match input hit center");
+ }
+}
 void testFr10GlobalKnobEdgeHit(){
  Fixture f;fa23Kit(f);f.open();
  auto* view=IntegrationAccess::view(*f.c,0);
