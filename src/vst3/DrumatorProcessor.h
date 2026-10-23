@@ -114,6 +114,9 @@ private:
  std::atomic<std::uint64_t> auditionStopGeneration_{0};
  // Latest Preview/STOP command is published as one atomic transaction.
  std::atomic<std::uint64_t> auditionCommand_{0};
+ // Even = completed sample/START transaction; odd = publishing sample.
+ // Audio checks the sequence before and after adoption to protect identity.
+ std::atomic<std::uint64_t> auditionPublishSequence_{0};
  std::uint64_t lastAudioAuditionCommand_{0};
  std::vector<float> auditionLeft_{},auditionRight_{};
  TriggerBatch triggers_{};

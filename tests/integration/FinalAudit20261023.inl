@@ -188,6 +188,39 @@ void testRv01RestartAfterStopDuringAudioStart(){
  check(bNow||bNext,
        "RV01 superseded audio A was played or newer source B was lost");
 }
+void testRv01AssetCommandPublication(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ const auto editA=SampleEdit::reset(1024);
+ auto editB=editA;editB.gain=.5f;
+ check(f.c->previewSampleEdit(0,editA),"RV01 asset pairing A rejected");
+ arm(qa::auditAfterAuditionAssetPublished);
+ bool preparedB=false;
+ std::jthread publisher([&]{preparedB=f.c->previewSampleEdit(0,editB);});
+ waitEntered(); // B published but not yet announced by START command
+ check(f.p->process(audio.data)==kResultOk&&
+       audio.left[80]==0.f&&audio.right[80]==0.f,
+       "RV01 older START fired against newly published B asset");
+ releaseProbe();publisher.join();
+ check(preparedB&&!probeTimeout,"RV01 publisher did not finish");
+ check(f.p->process(audio.data)==kResultOk&&
+       audio.left[80]==.125f&&audio.right[80]==-.25f,
+       "RV01 B preview did not fire with its matching source");
+}
+void testRv01OutputlessPreviewRetirement(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)),
+       "RV01 outputless initial preview rejected");
+ audio.data.numOutputs=0;audio.data.outputs=nullptr;
+ check(f.p->process(audio.data)==kResultOk,
+       "RV01 outputless callback rejected");
+ audio.data.numOutputs=1;audio.data.outputs=&audio.output;
+ check(f.p->process(audio.data)==kResultOk&&
+       audio.left[80]==0.f&&audio.right[80]==0.f,
+       "RV01 preview restarted after outputless interval");
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024))&&
+       f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "RV01 fresh preview failed after outputless interval");
+}
 void testRv02AllocationFreeStopAndRetry(){
  Fixture f;fa23Kit(f);AuditAudioBlock audio;
  check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)) &&

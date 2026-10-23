@@ -1954,6 +1954,8 @@ int main(int argc,char** argv){
  run("FA23-10 waveform query OOM",testFa23QueryOOM);
  run("FR01 stop ordering after consumed start",testFr01StopAfterStartConsumed);
  run("RV01 stop then new preview ordering",testRv01RestartAfterStopDuringAudioStart);
+ run("RV01 asset+command publication ordering",testRv01AssetCommandPublication);
+ run("RV01 preview retirement across outputless callback",testRv01OutputlessPreviewRetirement);
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
  run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
  run("RV03 full and legacy recall query allocation failures",testRv03RecallQueryOOM);
