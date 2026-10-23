@@ -1212,16 +1212,16 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          else status_="PREVIEW STARTED";
          break;
        case 4:
-         controller_.stopSampleEditPreview();status_="PREVIEW STOPPED";break;
+         status_=controller_.stopSampleEditPreview()?"PREVIEW STOPPED":"PREVIEW STOP FAILED";break;
        case 5:
          sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);break;
        case 6:
-         controller_.stopSampleEditPreview();
+         if(!controller_.stopSampleEditPreview()){status_="PREVIEW STOP FAILED";break;}
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
          (void)adjustEditorHeight();break;
        case 7:
          if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_)){
-           controller_.stopSampleEditPreview();
+           if(!controller_.stopSampleEditPreview()){status_="EDIT APPLIED; PREVIEW STOP FAILED";break;}
            sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
            (void)adjustEditorHeight();
          }else status_="APPLY FAILED: SAMPLE CHANGED OR PROCESSOR REJECTED";
