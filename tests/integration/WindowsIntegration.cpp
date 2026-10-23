@@ -1953,6 +1953,7 @@ int main(int argc,char** argv){
  run("FA23-09 audition deactivation",testFa23AuditionDeactivate);
  run("FA23-10 waveform query OOM",testFa23QueryOOM);
  run("FR01 stop ordering after consumed start",testFr01StopAfterStartConsumed);
+ run("RV01 stop then new preview ordering",testRv01RestartAfterStopDuringAudioStart);
  run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
  run("FR03 legacy sample-present synchronization",testFr03LegacyRecallSamplePresence);
  run("FR08 controller path length consistency",testFr08PathSerializationBoundary);
