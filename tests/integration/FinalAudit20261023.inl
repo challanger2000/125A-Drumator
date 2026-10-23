@@ -189,6 +189,11 @@ void testFr02ControllerMessageOOM(){
    catch(const std::bad_alloc&){escaped=true;}
    allocationFail=-1;
    check(!escaped,"FR02 query controller attribute OOM escaped UI path");
+   escaped=false;allocationFail=failPoint;
+   try {f.c->stopSampleEditPreview();}
+   catch(const std::bad_alloc&){escaped=true;}
+   allocationFail=-1;
+   check(!escaped,"FR02 STOP message OOM escaped UI path");
  }
  check(!auditReturnedKit(*f.p).wav[0].empty(),"FR02 OOM corrupted source");
 }
