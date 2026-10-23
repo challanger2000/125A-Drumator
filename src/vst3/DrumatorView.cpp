@@ -814,6 +814,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // transients without inventing audio or filtering source PCM.
    c->setFillColor(panel);c->drawRect({284,155,994,382},VSTGUI::kDrawFilled);
    c->setFrameColor(border);c->drawLine({284,268},{994,268});
+   if(sampleEditorStereo_)c->drawLine({284,326},{994,326});
    const auto n=sampleEditorWave_.size();
    for(int pixel=0;pixel<710;++pixel){
      const double scaled=(static_cast<double>(pixel)+0.5)*n/710.;
@@ -826,9 +827,23 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
            static_cast<double>(b.minimum),0.});
      const double hi=std::max({static_cast<double>(a.maximum),
            static_cast<double>(b.maximum),0.});
-     const double upper=std::clamp(268.-hi*104.,156.,381.);
-     const double lower=std::clamp(268.-lo*104.,156.,381.);
+     const double mid=sampleEditorStereo_?213.:268.;
+     const double amp=sampleEditorStereo_?48.:104.;
+     const double upper=std::clamp(mid-hi*amp,sampleEditorStereo_?156.:156.,
+                                   sampleEditorStereo_?264.:381.);
+     const double lower=std::clamp(mid-lo*amp,sampleEditorStereo_?156.:156.,
+                                   sampleEditorStereo_?264.:381.);
      c->setFrameColor(accent);c->drawLine({284.+pixel,upper},{284.+pixel,lower});
+     if(sampleEditorStereo_){
+       const auto& rightA=sampleEditorWaveRight_[idx];
+       const auto& rightB=sampleEditorWaveRight_[next];
+       const double rlo=std::min({static_cast<double>(rightA.minimum),
+                                static_cast<double>(rightB.minimum),0.});
+       const double rhi=std::max({static_cast<double>(rightA.maximum),
+                                static_cast<double>(rightB.maximum),0.});
+       c->drawLine({284.+pixel,std::clamp(326.-rhi*48.,273.,381.)},
+                   {284.+pixel,std::clamp(326.-rlo*48.,273.,381.)});
+     }
      (void)fraction;
    }
    const auto visible=static_cast<double>(sampleEditorLast_-sampleEditorFirst_);
@@ -983,7 +998,8 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  // Verify a usable source BEFORE any host resize. Opening an empty row
  // must not enlarge the entire plug-in window.
  if(!controller_.sampleEditorSnapshot(row,edit,frames,wave,0,0,
-                                      &sampleEditorRevision_)||frames==0){
+                                      &sampleEditorRevision_,&sampleEditorWaveRight_,
+                                      &sampleEditorStereo_)||frames==0){
    status_="WAV-EDITOR: KEIN GUELTIGES SAMPLE";
    invalid();return false;
  }
@@ -1019,12 +1035,15 @@ bool DrumatorView::zoomSampleEditor(bool in,bool full) {
  const auto first=center>nextSpan/2?center-nextSpan/2:0;
  const auto nextFirst=std::min(first,sampleEditorFrames_-nextSpan);
  auto wave=sampleEditorWave_;
+ auto right=sampleEditorWaveRight_;bool stereo=sampleEditorStereo_;
  SampleEdit ignored;std::uint32_t frames=0;
  if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,frames,wave,
-                                      nextFirst,nextFirst+nextSpan)||
+                                      nextFirst,nextFirst+nextSpan,nullptr,
+                                      &right,&stereo)||
     frames!=sampleEditorFrames_){status_="ZOOM: WAVEFORM NICHT LESBAR";return false;}
  sampleEditorFirst_=nextFirst;sampleEditorLast_=nextFirst+nextSpan;
- sampleEditorWave_=wave;invalid();return true;
+ sampleEditorWave_=wave;sampleEditorWaveRight_=right;sampleEditorStereo_=stereo;
+ invalid();return true;
 }
 void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  if(!sampleEditorOpen_||sampleEditorFrames_<2)return;
@@ -1036,11 +1055,14 @@ void DrumatorView::moveSampleMarker(double x,bool endMarker) {
    const auto nextFirst=x>994.?std::min(sampleEditorFrames_-span,oldFirst+step):
        (oldFirst>step?oldFirst-step:0);
    if(nextFirst!=oldFirst){
-     auto wave=sampleEditorWave_;SampleEdit saved;std::uint32_t frames=0;
+     auto wave=sampleEditorWave_;auto right=sampleEditorWaveRight_;
+     bool stereo=sampleEditorStereo_;SampleEdit saved;std::uint32_t frames=0;
      if(controller_.sampleEditorSnapshot(sampleEditorRow_,saved,frames,wave,
-           nextFirst,nextFirst+span)&&frames==sampleEditorFrames_){
+           nextFirst,nextFirst+span,nullptr,&right,&stereo)&&
+           frames==sampleEditorFrames_){
        sampleEditorFirst_=nextFirst;sampleEditorLast_=nextFirst+span;
-       sampleEditorWave_=wave;
+       sampleEditorWave_=wave;sampleEditorWaveRight_=right;
+       sampleEditorStereo_=stereo;
      }
    }
  }
@@ -1078,11 +1100,13 @@ bool DrumatorView::scrollEditorWave(double x) {
  const auto start=center>span/2?center-span/2:0u;
  const auto next=std::min(start,sampleEditorFrames_-span);
  if(next==sampleEditorFirst_)return true;
- auto wave=sampleEditorWave_;
+ auto wave=sampleEditorWave_;auto right=sampleEditorWaveRight_;
+ bool stereo=sampleEditorStereo_;
  SampleEdit ignored;std::uint32_t count=0;
- if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,count,wave,next,next+span)||
+ if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,count,wave,next,next+span,nullptr,&right,&stereo)||
     count!=sampleEditorFrames_){status_="SCROLL: WAVEFORM NICHT LESBAR";return false;}
  sampleEditorFirst_=next;sampleEditorLast_=next+span;sampleEditorWave_=wave;
+ sampleEditorWaveRight_=right;sampleEditorStereo_=stereo;
  invalid();return true;
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseDown(

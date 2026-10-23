@@ -784,7 +784,9 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
                                      std::uint32_t& frames,
                                      std::array<WaveformRange,256>& envelope,
                                      std::uint32_t first,std::uint32_t last,
-                                     std::uint32_t* revision) {
+                                     std::uint32_t* revision,
+                                     std::array<WaveformRange,256>* rightEnvelope,
+                                     bool* stereo) {
  if(row>=kRows)return false;
  auto* msg=allocateMessage();
  if(!msg)return false;
@@ -830,12 +832,15 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
            if(decoded.channels==2) {
              const auto other=waveformRange(decoded.right.data(),decoded.right.size(),
                           binFirst,std::max(binFirst+std::size_t{1},binLast));
-             bounds.minimum=std::min(bounds.minimum,other.minimum);
-             bounds.maximum=std::max(bounds.maximum,other.maximum);
+             if(rightEnvelope)(*rightEnvelope)[i]=other;
+             else {bounds.minimum=std::min(bounds.minimum,other.minimum);
+                   bounds.maximum=std::max(bounds.maximum,other.maximum);}
            }
            envelope[i]=bounds;
          }
-         edit=candidate;frames=count;if(revision)*revision=static_cast<std::uint32_t>(version);ok=true;
+         edit=candidate;frames=count;
+         if(stereo)*stereo=decoded.channels==2;
+         if(revision)*revision=static_cast<std::uint32_t>(version);ok=true;
        }
      }
    }

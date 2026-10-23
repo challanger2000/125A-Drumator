@@ -43,7 +43,9 @@ public:
  bool sampleEditorSnapshot(std::size_t row,SampleEdit& edit,std::uint32_t& frames,
                            std::array<WaveformRange,256>& envelope,
                            std::uint32_t first=0,std::uint32_t last=0,
-                           std::uint32_t* revision=nullptr);
+                           std::uint32_t* revision=nullptr,
+                           std::array<WaveformRange,256>* rightEnvelope=nullptr,
+                           bool* stereo=nullptr);
  bool commitSampleEdit(std::size_t row,const SampleEdit& edit,
                        std::uint32_t revision=UINT32_MAX);
  bool toggleRowGate(std::size_t row,bool solo);
