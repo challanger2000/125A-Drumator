@@ -312,7 +312,7 @@ bool DrumatorView::changeKnobValue(int slot,std::size_t row,int value) {
  return false;
 }
 bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
- if(songEditorOpen_||popup_!=0||fillMenuRow_>=0)return false;
+ if(sampleEditorOpen_||songEditorOpen_||popup_!=0||fillMenuRow_>=0)return false;
  const auto index=UiCompactLayout::rowAt(y,firstRow_,displayedRows(),velocityExpanded_);
  if(index>=displayedRows())return false;
  const auto top=rowTopOnPage(index);
@@ -816,7 +816,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      const auto& wavePeak=sampleEditorWave_[i];
      const double x=284.+710.*static_cast<double>(i)/sampleEditorWave_.size();
      c->setFrameColor(accent);
-     c->drawLine({x,278.-wavePeak.maximum*96.},{x,278.-wavePeak.minimum*96.});
+     c->drawLine({x,std::clamp(278.-wavePeak.maximum*96.,175.,382.)},
+                 {x,std::clamp(278.-wavePeak.minimum*96.,175.,382.)});
    }
    const auto visible=static_cast<double>(sampleEditorLast_-sampleEditorFirst_);
    const auto sx=284.+710.*(static_cast<double>(sampleEditorEdit_.start)-sampleEditorFirst_)/visible;
@@ -836,11 +837,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    if(ex>=284.&&fadeOutX<=994.)
      c->drawLine({std::clamp(fadeOutX,284.,994.),180},
                  {std::clamp(ex,284.,994.),278});
-   if(fadeInX>=289.&&fadeInX<=989.){
-     c->setFillColor(on);c->drawRect({fadeInX-5,175,fadeInX+5,188},VSTGUI::kDrawFilled);
+   if(fadeInX>=284.&&fadeInX<=994.){
+     const auto handle=std::clamp(fadeInX,289.,989.);
+     c->setFillColor(on);c->drawRect({handle-5,175,handle+5,188},VSTGUI::kDrawFilled);
    }
-   if(fadeOutX>=289.&&fadeOutX<=989.){
-     c->setFillColor(letters);c->drawRect({fadeOutX-5,175,fadeOutX+5,188},VSTGUI::kDrawFilled);
+   if(fadeOutX>=284.&&fadeOutX<=994.){
+     const auto handle=std::clamp(fadeOutX,289.,989.);
+     c->setFillColor(letters);c->drawRect({handle-5,175,handle+5,188},VSTGUI::kDrawFilled);
    }
    c->setLineWidth(1.);
    // Scrollbar is proportional to the visible source-frame interval.
@@ -880,6 +883,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{375,540,465,584},"STOP");
    drawControl(c,{568,540,765,584},"ABBRECHEN");
    drawControl(c,{785,540,1000,584},"UEBERNEHMEN");
+   c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
+   c->drawString(status_.c_str(),{265,588,1020,610});
  }
  setDirty(false);
 }

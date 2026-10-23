@@ -236,7 +236,8 @@ public:
                 // Interior samples have no boundary padding. Hoist this
                 // condition out of the tap loop without changing tap order,
                 // coefficients, or the floating-point accumulation sequence.
-                if(first>=0&&static_cast<std::uint64_t>(first)+taps<=voice.sample.frames) {
+                if(first>=static_cast<std::int64_t>(voice.edit.start)&&
+                   static_cast<std::uint64_t>(first)+taps<=voice.edit.end) {
                     const auto* srcL=voice.sample.left+static_cast<std::size_t>(first);
                     const auto* srcR=voice.sample.right?
                         voice.sample.right+static_cast<std::size_t>(first):srcL;
@@ -248,7 +249,8 @@ public:
                 }else {
                     for(std::size_t i=0;i<taps;++i) {
                         const auto index=first+static_cast<std::int64_t>(i);
-                        if(index<0||static_cast<std::size_t>(index)>=voice.sample.frames)
+                        if(index<static_cast<std::int64_t>(voice.edit.start)||
+                           static_cast<std::uint64_t>(index)>=voice.edit.end)
                             continue; // identical zero-padding at sample boundaries
                         const auto w=static_cast<double>(coeff[i]);
                         const auto at=static_cast<std::size_t>(index);

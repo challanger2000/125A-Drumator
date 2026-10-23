@@ -526,9 +526,12 @@ bool Controller::duplicateCurrentPattern(bool* selectedCopy){
 bool Controller::clearCurrentPattern(){return replacePattern(currentPattern(),{});}
 bool Controller::undoCurrentPattern(){
  const auto p=currentPattern();
+ if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);
  const auto* old=undo_.snapshot(p);
  if(!old)return false;
- if(!replacePattern(p,*old,false,undo_.snapshotLength(p)))return false;
+ const PatternSteps immutable=*old;
+ const auto length=undo_.snapshotLength(p);
+ if(!replacePattern(p,immutable,false,length))return false;
  undo_.consume(p);
  return true;
 }

@@ -90,14 +90,18 @@ Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 s
 }
 Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
-             previewPending_.store(0,std::memory_order_release);}
+             previewPending_.store(0,std::memory_order_release);
+             auditionStart_.store(false,std::memory_order_release);
+             auditionStop_.store(true,std::memory_order_release);}
  return AudioEffect::setActive(state);
 }
 Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
  // Steinberg's AudioEffect default returns kNotImplemented. A real host
  // may invoke this independently of setActive; honor the lifecycle.
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
-             previewPending_.store(0,std::memory_order_release);}
+             previewPending_.store(0,std::memory_order_release);
+             auditionStart_.store(false,std::memory_order_release);
+             auditionStop_.store(true,std::memory_order_release);}
  return Steinberg::kResultOk;
 }
 // Messages are delivered on the UI thread by the VST3 IConnectionPoint
@@ -132,13 +136,14 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    Steinberg::uint32 gainBits=0;
    static_assert(sizeof(gainBits)==sizeof(edit.gain));
    std::memcpy(&gainBits,&edit.gain,sizeof(gainBits));
-   return attrs->setBinary("Wave",wav.data(),static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk&&
+   try {return attrs->setBinary("Wave",wav.data(),static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk&&
           attrs->setInt("Start",edit.start)==Steinberg::kResultOk&&
           attrs->setInt("End",edit.end)==Steinberg::kResultOk&&
           attrs->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
           attrs->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
           attrs->setInt("GainBits",gainBits)==Steinberg::kResultOk
           ?Steinberg::kResultOk:Steinberg::kResultFalse;
+   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
  }
  // The commit is prepared off the audio thread. Active voices retain the
  // old immutable PreparedSample via SampleExchange retirement.
@@ -322,6 +327,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
                              std::memory_order_acq_rel);
    kit_.wav[static_cast<std::size_t>(index)].clear();
    kit_.names[static_cast<std::size_t>(index)].clear();
+   kit_.sampleEdits[static_cast<std::size_t>(index)]=SampleEdit{};
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.SongConfig")==0) {
@@ -1075,6 +1081,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
  if(auditionStop_.exchange(false,std::memory_order_acq_rel))auditionVoices_.reset();
  const bool fire=auditionStart_.exchange(false,std::memory_order_acq_rel);
+ if(fire)auditionVoices_.reset();
  Trigger one{};one.row=0;one.velocity=127;
  const auto audition=auditionVoices_.render(fire?&one:nullptr,fire?1:0,
     auditionLeft_.data(),auditionRight_.data(),static_cast<std::uint32_t>(data.numSamples));
