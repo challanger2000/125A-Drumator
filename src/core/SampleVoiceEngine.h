@@ -239,25 +239,47 @@ public:
                 if(first>=static_cast<std::int64_t>(voice.edit.start)&&
                    static_cast<std::uint64_t>(first)+taps<=voice.edit.end) {
                     const auto* srcL=voice.sample.left+static_cast<std::size_t>(first);
-                    const auto* srcR=voice.sample.right?
-                        voice.sample.right+static_cast<std::size_t>(first):srcL;
-                    for(std::size_t i=0;i<taps;++i) {
-                        const auto w=static_cast<double>(coeff[i]);
-                        vl+=static_cast<double>(srcL[i])*w;
-                        vr+=static_cast<double>(srcR[i])*w;
+                    if(voice.sample.right) {
+                        const auto* srcR=voice.sample.right+
+                            static_cast<std::size_t>(first);
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto w=static_cast<double>(coeff[i]);
+                            vl+=static_cast<double>(srcL[i])*w;
+                            vr+=static_cast<double>(srcR[i])*w;
+                        }
+                    }else {
+                        // Mono source: L and R convolutions are IDENTICAL.
+                        // Share the exact double-precision result, not the
+                        // coefficients/taps/accumulation order. Zero DSP loss.
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto w=static_cast<double>(coeff[i]);
+                            vl+=static_cast<double>(srcL[i])*w;
+                        }
+                        vr=vl;
                     }
                 }else {
-                    for(std::size_t i=0;i<taps;++i) {
-                        const auto index=first+static_cast<std::int64_t>(i);
-                        if(index<static_cast<std::int64_t>(voice.edit.start)||
-                           static_cast<std::uint64_t>(index)>=voice.edit.end)
-                            continue; // identical zero-padding at sample boundaries
-                        const auto w=static_cast<double>(coeff[i]);
-                        const auto at=static_cast<std::size_t>(index);
-                        vl+=static_cast<double>(voice.sample.left[at])*w;
-                        vr+=static_cast<double>(voice.sample.right?
-                                                 voice.sample.right[at]:
-                                                 voice.sample.left[at])*w;
+                    if(voice.sample.right) {
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto index=first+static_cast<std::int64_t>(i);
+                            if(index<static_cast<std::int64_t>(voice.edit.start)||
+                               static_cast<std::uint64_t>(index)>=voice.edit.end)
+                                continue;
+                            const auto w=static_cast<double>(coeff[i]);
+                            const auto at=static_cast<std::size_t>(index);
+                            vl+=static_cast<double>(voice.sample.left[at])*w;
+                            vr+=static_cast<double>(voice.sample.right[at])*w;
+                        }
+                    }else {
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto index=first+static_cast<std::int64_t>(i);
+                            if(index<static_cast<std::int64_t>(voice.edit.start)||
+                               static_cast<std::uint64_t>(index)>=voice.edit.end)
+                                continue;
+                            const auto w=static_cast<double>(coeff[i]);
+                            vl+=static_cast<double>(voice.sample.left[
+                                static_cast<std::size_t>(index)])*w;
+                        }
+                        vr=vl; // Same zero-padding and arithmetic as mono L.
                     }
                 }
                 }

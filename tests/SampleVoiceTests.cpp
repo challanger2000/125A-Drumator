@@ -325,6 +325,41 @@ static void testRejectedChokeDoesNotFadeVoices() {
  require(engine.active()==64,"N09 rejection changed prior voices");
  near(l[180],8.0,0.08,"N09 rejection choked a prior voice");
 }
+static void testMonoSincBitIdentityWithDualMonoStereo(){
+ // The optimization must never modify sound, including trim/zero-padding.
+ // The independent stereo path receives identical input samples on both
+ // channels, and acts as a bit-for-bit arithmetic reference for mono.
+ for(const double ratio:{1.5,4.0,16.0}) {
+   std::vector<float> audio(16384);
+   for(std::size_t n=0;n<audio.size();++n)
+     audio[n]=static_cast<float>(
+       std::sin(static_cast<double>(n)*.13)*.38+
+       std::cos(static_cast<double>(n)*.047)*.27);
+   SincKernel kernel;require(kernel.prepare(ratio),"Mono SIMD-free reference kernel");
+   SampleVoiceEngine mono,stereo;
+   require(mono.setOutputRate(48000.)&&stereo.setOutputRate(48000.),
+           "Mono/stereo ratio engine rate");
+   RowSound m;m.sample={audio.data(),nullptr,audio.size()};m.kernel=&kernel;
+   RowSound s=m;s.sample.right=audio.data();
+   m.edit={96,15000,91,112,1.f};
+   s.edit=m.edit;
+   require(mono.setRow(0,m)&&stereo.setRow(0,s),
+           "Mono/stereo source fixture rejected");
+   std::array<float,256> ml{},mr{},sl{},sr{};
+   const Trigger trigger{0,0,0,127,0};
+   for(int block=0;block<4;++block) {
+     auto x=mono.render(block==0?&trigger:nullptr,block==0?1:0,
+                        ml.data(),mr.data(),256);
+     auto y=stereo.render(block==0?&trigger:nullptr,block==0?1:0,
+                          sl.data(),sr.data(),256);
+     require(x.status==RenderStatus::Ok&&y.status==RenderStatus::Ok,
+             "Mono/stereo render rejected");
+     for(std::size_t i=0;i<ml.size();++i)
+       require(ml[i]==sl[i]&&mr[i]==sr[i]&&ml[i]==mr[i],
+               "Mono convolution differs from identical stereo PCM at a sample");
+   }
+ }
+}
 static void testHighRatio64VoiceStress() {
  const auto started=std::chrono::steady_clock::now();
  std::vector<double> blockMillis;
@@ -392,45 +427,47 @@ static void testHighRatio64VoiceStress() {
  require(elapsed<20.0,"F14 stress exceeded 20-second CI safety ceiling");
 }
 static void testRatioPerformanceComparison() {
- // Diagnostic only: compare identical 64-voice / 256-frame workloads
- // across actual polyphase-sinc tap counts, not a realtime certification.
+ // Identical 64-voice/256-frame workloads: mono and true 2-channel
+ // separately, not just mono results extrapolated to all sample types.
  constexpr std::size_t frames=256;
  constexpr unsigned blocks=32;
- for(const double ratio : {1.0,4.0,16.0}) {
+ for(const double ratio:{1.0,4.0,16.0}) {
    const std::size_t sourceFrames=static_cast<std::size_t>(ratio)*frames*(blocks+2);
    std::vector<float> source(sourceFrames,.125f);
-   SincKernel kernel;
-   require(kernel.prepare(ratio),"F15 ratio kernel");
-   SampleVoiceEngine engine;
-   require(engine.setOutputRate(48000),"F15 engine rate");
-   RowSound row;
-   row.sample={source.data(),nullptr,source.size()};
-   row.kernel=&kernel;
-   for(std::size_t i=0;i<kRows;++i)
-     require(engine.setRow(i,row),"F15 setup rows");
-   std::array<Trigger,64> hits{};
-   for(std::size_t i=0;i<hits.size();++i)
-     hits[i]={0,static_cast<std::uint8_t>(i%kRows),0,127,0};
-   std::array<float,frames> l{},r{};
-   std::vector<double> timings;
-   timings.reserve(blocks);
-   for(unsigned block=0;block<blocks;++block) {
-     const auto begin=std::chrono::steady_clock::now();
-     const auto result=engine.render(block==0?hits.data():nullptr,
-                                     block==0?hits.size():0,
-                                     l.data(),r.data(),frames);
-     const auto finish=std::chrono::steady_clock::now();
-     require(result.status==RenderStatus::Ok&&result.activeVoices==64,
-             "F15 unequal active polyphony");
-     timings.push_back(std::chrono::duration<double,std::milli>(finish-begin).count());
+   SincKernel kernel;require(kernel.prepare(ratio),"F15 ratio kernel");
+   for(const bool stereo:{false,true}) {
+     SampleVoiceEngine engine;require(engine.setOutputRate(48000),"F15 engine rate");
+     RowSound row;row.sample={source.data(),stereo?source.data():nullptr,source.size()};
+     row.kernel=&kernel;
+     for(std::size_t i=0;i<kRows;++i)
+       require(engine.setRow(i,row),"F15 setup rows");
+     std::array<Trigger,64> hits{};
+     for(std::size_t i=0;i<hits.size();++i)
+       hits[i]={0,static_cast<std::uint8_t>(i%kRows),0,127,0};
+     std::array<float,frames> l{},r{};
+     std::vector<double> timings;timings.reserve(blocks);
+     for(unsigned block=0;block<blocks;++block) {
+       const auto begin=std::chrono::steady_clock::now();
+       const auto result=engine.render(block==0?hits.data():nullptr,
+                                       block==0?hits.size():0,
+                                       l.data(),r.data(),frames);
+       const auto finish=std::chrono::steady_clock::now();
+       require(result.status==RenderStatus::Ok&&result.activeVoices==64,
+               "F15 unequal active polyphony");
+       timings.push_back(std::chrono::duration<double,std::milli>(finish-begin).count());
+     }
+     std::sort(timings.begin(),timings.end());
+     const auto p99=timings[static_cast<std::size_t>(std::ceil(blocks*.99))-1];
+     constexpr double budget=256.0/48000.0*1000.0;
+     const auto misses=std::count_if(timings.begin(),timings.end(),
+            [](double value){return value>budget;});
+     std::cout<<"::notice title=125A Drumator ratio diagnostic::F15 64 voices, "
+              <<ratio<<"x, "<<(stereo?"stereo":"mono")<<", taps="<<kernel.taps()
+              <<", 48k/256, 32 blocks: p99="<<p99
+              <<"ms max="<<timings.back()<< "ms, deadline misses="
+              <<misses<<"/"<<blocks
+              <<" (offline CI, not realtime qualification)\n";
    }
-   std::sort(timings.begin(),timings.end());
-   const auto p99=timings[static_cast<std::size_t>(std::ceil(blocks*.99))-1];
-   std::cout<<"::notice title=125A Drumator ratio diagnostic::F15 64 voices, "
-            <<ratio<<"x, taps="<<kernel.taps()
-            <<", 48k/256, 32 blocks: p99="<<p99
-            <<"ms max="<<timings.back()
-            <<"ms (offline CI, not realtime qualification)\n";
  }
 }
 static void testUnityRateExactPCM() {
@@ -592,7 +629,7 @@ int main() {
   }
   testNondestructiveSampleEdits();testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testChokeSplitBlockEquivalence();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
-  testUnityRateExactPCM();testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
+  testUnityRateExactPCM();testMonoSincBitIdentityWithDualMonoStereo();testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
   std::cout<<"::notice title=125A Drumator voice QA::Sample-voice test sequence completed PASS\n";
   return 0;
  } catch(const std::exception& ex) {
