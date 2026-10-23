@@ -1,5 +1,6 @@
 #include "DrumatorView.h"
 #include "BrandLogoGeometry.h"
+#include "core/UiWaveEditorLayout.h"
 #include "vstgui/lib/cgraphicspath.h"
 #include <cstdlib>
 #include "DrumatorEditor.h"
@@ -53,6 +54,9 @@ const VSTGUI::CColor accent{104,175,203,255};
 // Exact 125A vector logo from the authoritative brand master, rendered
 // natively through VSTGUI (SVG paths contain only M, L, Z commands).
 // The source master is 1774x887; keep its proportions unchanged.
+VSTGUI::CRect editorRect(const UiWaveEditorLayout::Rect& r){
+ return {r.left,r.top,r.right,r.bottom};
+}
 void drawBrandLogo(VSTGUI::CDrawContext* c) {
  constexpr double scale=32./887.;
  constexpr double x0=16.,y0=2.;
@@ -939,28 +943,23 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
         static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
    c->drawString(info,{270,508,1020,532});
-   // Marker grips and a compact toolbar make permanent instruction text unnecessary.
-   // Compact single-row toolbar. Apply / Cancel remain consistently right.
-   drawControl(c,{265,455,337,491},"ZOOM +");
-   drawControl(c,{344,455,416,491},"ZOOM -");
-   drawControl(c,{423,455,493,491},"FIT");
-   drawControl(c,{500,455,589,491},"PREVIEW");
-   drawControl(c,{590,455,669,491},"STOP");
-   drawControl(c,{684,455,779,491},"RESET");
-   c->setFrameColor(accent);c->drawRect({498,453,671,493},VSTGUI::kDrawStroked);
-   drawControl(c,{892,455,955,491},"CANCEL");
-   drawControl(c,{962,455,1030,491},"APPLY");
-   // Immediate visual click feedback: overlay the depressed toolbar item
-   // while the mouse is held, release through the normal mouse-up callback.
-   if(sampleEditorPressed_>=0){
-     constexpr double lefts[]={265,344,423,500,590,684,892,962};
-     constexpr double rights[]={337,416,493,589,669,779,955,1030};
-     const auto i=static_cast<std::size_t>(sampleEditorPressed_);
-     if(i<8){
-       c->setFrameColor(on);c->setLineWidth(2.);
-       c->drawRect({lefts[i],455,rights[i],491},VSTGUI::kDrawStroked);
-       c->setLineWidth(1.);
-     }
+   // All eight controls use the same rect for paint, hit-test and press.
+   drawControl(c,editorRect(UiWaveEditorLayout::zoomIn),"ZOOM +");
+   drawControl(c,editorRect(UiWaveEditorLayout::zoomOut),"ZOOM -");
+   drawControl(c,editorRect(UiWaveEditorLayout::fit),"FIT");
+   drawControl(c,editorRect(UiWaveEditorLayout::preview),"PREVIEW");
+   drawControl(c,editorRect(UiWaveEditorLayout::stop),"STOP");
+   drawControl(c,editorRect(UiWaveEditorLayout::reset),"RESET");
+   c->setFrameColor(accent);
+   c->drawRect(editorRect(UiWaveEditorLayout::previewGroup),VSTGUI::kDrawStroked);
+   drawControl(c,editorRect(UiWaveEditorLayout::cancel),"CANCEL");
+   drawControl(c,editorRect(UiWaveEditorLayout::apply),"APPLY");
+   if(sampleEditorPressed_>=0&&
+      sampleEditorPressed_<static_cast<int>(UiWaveEditorLayout::toolbar.size())){
+     c->setFrameColor(on);c->setLineWidth(2.);
+     c->drawRect(editorRect(UiWaveEditorLayout::toolbar[
+       static_cast<std::size_t>(sampleEditorPressed_)]),VSTGUI::kDrawStroked);
+     c->setLineWidth(1.);
    }
    // Gain below the signal, compact and directly readable at its control.
    c->drawString("GAIN",{558,405,622,428});
@@ -1166,10 +1165,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
 
  if(sampleEditorOpen_) {
-   if(x>=284&&x<=994&&y>=385&&y<=405){
+   if(UiWaveEditorLayout::scrollbar.hit(x,y)){
      sampleEditorDrag_=3;scrollEditorWave(x);return VSTGUI::kMouseEventHandled;
    }
-   if(x>=284&&x<=994&&y>=175&&y<=382){
+   if(UiWaveEditorLayout::waveform.hit(x,y)){
      const auto visible=static_cast<double>(sampleEditorLast_-sampleEditorFirst_);
      const auto startX=284.+710.*(static_cast<double>(sampleEditorEdit_.start)-sampleEditorFirst_)/visible;
      const auto endX=284.+710.*(static_cast<double>(sampleEditorEdit_.end)-sampleEditorFirst_)/visible;
@@ -1198,40 +1197,41 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      moveSampleMarker(x,sampleEditorDrag_==2);
      return VSTGUI::kMouseEventHandled;
    }
-   if(x>=615&&x<=900&&y>=405&&y<=442){
+   if(UiWaveEditorLayout::gain.hit(x,y)){
      if((buttons&VSTGUI::kControl)||(buttons&VSTGUI::kDoubleClick)){
        sampleEditorEdit_.gain=1.f;sampleEditorDrag_=0;invalid();return done;
      }
      sampleEditorDrag_=6;setSampleEditorGain(x);
      return VSTGUI::kMouseEventHandled;
    }
-   if(y>=455&&y<=491){
-     constexpr double hitL[]={265,344,423,500,590,684,892,962};
-     constexpr double hitR[]={337,416,493,589,669,779,955,1030};
-     sampleEditorPressed_=-1;
-     for(int k=0;k<8;++k)if(x>=hitL[k]&&x<=hitR[k]){
-       sampleEditorPressed_=k;break;
-     }
-     if(x>=265&&x<=337)(void)zoomSampleEditor(true);
-     else if(x>=344&&x<=416)(void)zoomSampleEditor(false);
-     else if(x>=423&&x<=493)(void)zoomSampleEditor(false,true);
-     else if(x>=500&&x<=589){
-       if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_))
-         status_="PREVIEW FAILED";
-       else status_="PREVIEW STARTED";
-     }else if(x>=590&&x<=669){
-       controller_.stopSampleEditPreview();status_="PREVIEW STOPPED";
-     }else if(x>=684&&x<=779)sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);
-     else if(x>=892&&x<=955){
-       controller_.stopSampleEditPreview();
-       sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
-       (void)adjustEditorHeight();
-     }else if(x>=962&&x<=1030){
-       if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_)){
+   if(y>=UiWaveEditorLayout::zoomIn.top&&y<=UiWaveEditorLayout::zoomIn.bottom){
+     const int action=UiWaveEditorLayout::buttonAt(x,y);
+     sampleEditorPressed_=action;
+     switch(action){
+       case 0: (void)zoomSampleEditor(true);break;
+       case 1: (void)zoomSampleEditor(false);break;
+       case 2: (void)zoomSampleEditor(false,true);break;
+       case 3:
+         if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_))
+           status_="PREVIEW FAILED";
+         else status_="PREVIEW STARTED";
+         break;
+       case 4:
+         controller_.stopSampleEditPreview();status_="PREVIEW STOPPED";break;
+       case 5:
+         sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);break;
+       case 6:
          controller_.stopSampleEditPreview();
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
-         (void)adjustEditorHeight();
-       }else status_="APPLY FAILED: SAMPLE CHANGED OR PROCESSOR REJECTED";
+         (void)adjustEditorHeight();break;
+       case 7:
+         if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_)){
+           controller_.stopSampleEditPreview();
+           sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
+           (void)adjustEditorHeight();
+         }else status_="APPLY FAILED: SAMPLE CHANGED OR PROCESSOR REJECTED";
+         break;
+       default:break;
      }
      invalid();return VSTGUI::kMouseEventHandled;
    }
