@@ -158,11 +158,19 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  if(!zoomRecallIsAtomic(needed))return Steinberg::kResultFalse;
  if(target&&!target->applyZoomFromState(requested))return Steinberg::kResultFalse;
  preferredZoom_=requested;
- samplePaths_.swap(candidatePaths);
  // A component restored immediately before this controller stream completes
  // the other legal host order. Never leave a one-shot origin permission armed.
- pathsRestoredBeforeComponent_=!componentStatePendingController_;
+ // A fresh explicit DZM3 origin must not be consumed by an unrelated
+ // earlier Component-only restore. Once a new controller-origin stream
+ // differs from the prior component's retained paths, the following
+ // Component stream belongs to the new project recall.
+ const bool newExplicitOrigin=magic==kPathState&&
+      std::any_of(candidatePaths.begin(),candidatePaths.end(),
+                  [](const auto& p){return !p.empty();})&&
+      candidatePaths!=samplePaths_;
+ pathsRestoredBeforeComponent_=!componentStatePendingController_||newExplicitOrigin;
  componentStatePendingController_=false;
+ samplePaths_.swap(candidatePaths);
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {

@@ -884,7 +884,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{568,540,765,584},"ABBRECHEN");
    drawControl(c,{785,540,1000,584},"UEBERNEHMEN");
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   c->drawString(status_.c_str(),{265,588,1020,610});
+   c->drawString(status_.c_str(),{265,585,1020,603});
  }
  setDirty(false);
 }
