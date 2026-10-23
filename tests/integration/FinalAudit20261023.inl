@@ -53,7 +53,21 @@ void testFa23ModalDrop(){
    click(*emptyView,240.,128.);
    check(!IntegrationAccess::sampleEditorOpen(*emptyView),"UI EDIT opened an empty row");
  }
- FinalAuditFiles files;Fixture f;fa23Kit(f);auto& view=fa23Open(f);
+ FinalAuditFiles files;
+ // Positive control: the same row coordinate must accept a drop without a modal.
+ // Without this assertion a broken modal guard can leave the negative test green.
+ { Fixture positive;fa23Kit(positive);positive.open();
+   auto* target=IntegrationAccess::view(*positive.c,0);
+   const auto replacement=constantStereo(-.125f,.375f);
+   AuditFilePackage source(files.write("positive-drop.wav",replacement));
+   VSTGUI::DragEventData drop{};drop.drag=&source;drop.pos={150.,128.};
+   const auto allowed=target->onDragEnter(drop);
+   const bool changed=target->onDrop(drop);
+   check(allowed!=VSTGUI::DragOperation::None&&changed&&
+         auditReturnedKit(*positive.p).wav[0]==replacement,
+         "FA23 positive control: valid sample target did not accept unblocked drop");
+ }
+ Fixture f;fa23Kit(f);auto& view=fa23Open(f);
  const auto before=auditReturnedKit(*f.p).wav[0];
  AuditFilePackage package(files.write("replacement.wav",constantStereo(-.125f,.375f)));
  VSTGUI::DragEventData drag{};drag.drag=&package;drag.pos={150.,128.};
