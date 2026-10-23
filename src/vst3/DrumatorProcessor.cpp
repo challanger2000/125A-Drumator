@@ -845,6 +845,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  }
  // Adopt only complete prepared assets, without deleting on audio.
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
+ const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);
  auditionExchange_.audioAdopt(auditionVoices_,processSetup.sampleRate);
  triggers_.clear();
  // Collect MIDI A-H and host automation before scheduling. Fixed storage
@@ -1080,10 +1081,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
  if(auditionStop_.exchange(false,std::memory_order_acq_rel))auditionVoices_.reset();
- const bool fire=auditionStart_.exchange(false,std::memory_order_acq_rel);
- if(fire)auditionVoices_.reset();
+ if(fireAudition)auditionVoices_.reset();
  Trigger one{};one.row=0;one.velocity=127;
- const auto audition=auditionVoices_.render(fire?&one:nullptr,fire?1:0,
+ const auto audition=auditionVoices_.render(fireAudition?&one:nullptr,fireAudition?1:0,
     auditionLeft_.data(),auditionRight_.data(),static_cast<std::uint32_t>(data.numSamples));
  auditionExchange_.audioCollect(auditionVoices_);
  if(audition.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
