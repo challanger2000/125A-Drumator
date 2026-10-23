@@ -112,6 +112,9 @@ private:
  SampleVoiceEngine auditionVoices_{};
  std::atomic<bool> auditionStart_{false},auditionStop_{false};
  std::atomic<std::uint64_t> auditionStopGeneration_{0};
+ // Latest Preview/STOP command is published as one atomic transaction.
+ std::atomic<std::uint64_t> auditionCommand_{0};
+ std::uint64_t lastAudioAuditionCommand_{0};
  std::vector<float> auditionLeft_{},auditionRight_{};
  TriggerBatch triggers_{};
  PatternEventTimeline patternTimeline_{};
