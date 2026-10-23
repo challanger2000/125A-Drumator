@@ -967,31 +967,46 @@ bool Controller::stopSampleEditPreview(){
 }
 bool Controller::previewSample(std::size_t row) {
  if(row>=visibleRows_)return false;
- auto* msg=allocateMessage();if(!msg)return false;
- msg->setMessageID("Drumator.PreviewRow");
- auto* attrs=msg->getAttributes();
- if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk) {
-   msg->release();return false;
- }
- // A preview must not mark the DAW project dirty.
- const auto result=sendMessage(msg);
- msg->release();
- return result==Steinberg::kResultOk;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}
+ catch(const std::bad_alloc&) {return false;}
+ if(!msg)return false;
+ struct MessageOwner {Steinberg::Vst::IMessage* p;~MessageOwner(){p->release();}} owner{msg};
+ try {
+   msg->setMessageID("Drumator.PreviewRow");
+   auto* attrs=msg->getAttributes();
+   if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk)
+     return false;
+   // A preview must not mark the DAW project dirty.
+   return sendMessage(msg)==Steinberg::kResultOk;
+ }catch(const std::bad_alloc&) {return false;}
 }
 bool Controller::clearSample(std::size_t row) {
  if(row>=kRows)return false;
  std::string emptyLabel;
  try {emptyLabel="EMPTY - LOAD WAV";}
  catch(const std::bad_alloc&) {return false;}
- auto* msg=allocateMessage();if(!msg)return false;
- msg->setMessageID("Drumator.ClearSample");
- auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
- attrs->setInt("Row",static_cast<Steinberg::int64>(row));
- const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();
- if(ok){labels_[row].swap(emptyLabel);samplePaths_[row].clear();
-        samplePresent_[row]=false;notifyViews(false);}
- return ok;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}
+ catch(const std::bad_alloc&) {return false;}
+ if(!msg)return false;
+ struct MessageOwner {Steinberg::Vst::IMessage* p;~MessageOwner(){p->release();}} owner{msg};
+ bool accepted=false;
+ try {
+   msg->setMessageID("Drumator.ClearSample");
+   auto* attrs=msg->getAttributes();
+   if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk)
+     return false;
+   accepted=sendEditMessage(msg)==Steinberg::kResultOk;
+ }catch(const std::bad_alloc&) {return false;}
+ if(accepted) {
+   // Processor accepted: commit metadata without further allocations.
+   labels_[row].swap(emptyLabel);samplePaths_[row].clear();
+   samplePresent_[row]=false;
+   try {notifyViews(false);}
+   catch(const std::bad_alloc&) { /* committed state must not be reported as rejection */ }
+ }
+ return accepted;
 }
 bool Controller::setRowOutput(std::size_t row,unsigned requested) {
  if(row>=kRows||requested>=kRows)return false;

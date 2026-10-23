@@ -1960,6 +1960,8 @@ int main(int argc,char** argv){
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
  run("RV02 transient STOP rejection during native editor close",testRv02NativeEditorCloseTransientReject);
  run("RV02 rejected STOP leaves Apply uncommitted",testRv02ApplyRejectKeepsEdit);
+ run("A03 permanent STOP refusal and recovery",testA03PersistentStopRejectionRecovery);
+ run("R05 sample menu allocation failures",testR05SampleMenuAllocationFailures);
  run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
  run("RV03 full and legacy recall query allocation failures",testRv03RecallQueryOOM);
  run("FR03 legacy sample-present synchronization",testFr03LegacyRecallSamplePresence);

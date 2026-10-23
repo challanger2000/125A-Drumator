@@ -342,6 +342,55 @@ void testRv02ApplyRejectKeepsEdit(){
  check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f,
        "RV02 successful Apply left audible preview");
 }
+void testA03PersistentStopRejectionRecovery(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ (void)fa23Open(f);
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024))&&
+       f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "A03 initial audition absent");
+ qa::auditMutation=qa::AuditMutation::rejectPreviewStop;
+ f.closeLast(); // host closes Editor despite rejected STOP
+ check(!f.c->previewSampleEdit(0,SampleEdit::reset(1024)),
+       "A03 unresolved STOP allowed an overtaking new audition");
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "A03 persistent rejection did not exercise audible one-shot");
+ for(int block=0;block<4;++block)
+   check(f.p->process(audio.data)==kResultOk,
+         "A03 one-shot processing after view close failed");
+ check(audio.left[80]==0.f&&audio.right[80]==0.f,
+       "A03 failed STOP left a completed one-shot audibly stuck");
+ qa::auditMutation=qa::AuditMutation::none;
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024))&&
+       f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "A03 recovery did not retry the pending STOP before new preview");
+ // A disconnected host cannot guarantee immediate silence; only natural
+ // one-shot end and refusal of new START are proven by this case.
+}
+void testR05SampleMenuAllocationFailures(){
+ Fixture f;fa23Kit(f);
+ for(long failPoint=0;failPoint<14;++failPoint){
+   bool escaped=false;
+   allocationFail=failPoint;
+   try {(void)f.c->previewSample(0);}
+   catch(const std::bad_alloc&){escaped=true;}
+   allocationFail=-1;
+   check(!escaped,"R05 preview-row OOM escaped Controller boundary");
+   KitState candidate;candidate.grid.fill(0);candidate.visible=4;
+   candidate.names[0]="source.wav";candidate.wav[0]=constantStereo(.25f,-.5f);
+   f.kit(candidate);
+   bool accepted=false;escaped=false;
+   allocationFail=failPoint;
+   try {accepted=f.c->clearSample(0);}
+   catch(const std::bad_alloc&){escaped=true;}
+   allocationFail=-1;
+   check(!escaped,"R05 clear-sample OOM escaped Controller boundary");
+   const auto saved=auditReturnedKit(*f.p);
+   check(accepted?saved.wav[0].empty():!saved.wav[0].empty(),
+         "R05 clear rejection altered processor sample");
+   check(f.c->hasSample(0)==!saved.wav[0].empty(),
+         "R05 Controller and Processor disagree on sample presence");
+ }
+}
 void testRv03RecallQueryOOM(){
  const std::array<qa::AuditMutation,2> faults{
      qa::AuditMutation::patternQueryOOM,qa::AuditMutation::patternReplyOOM};
