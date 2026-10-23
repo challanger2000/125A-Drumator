@@ -186,7 +186,7 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
  for(std::size_t p=0;p<kPatterns;++p)
    for(std::size_t step=0;step<kSteps;step+=4)
      grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
- for(auto& name:labels_)name="LEER - WAV LADEN";
+ for(auto& name:labels_)name="EMPTY - LOAD WAV";
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
  return Steinberg::kResultOk;
@@ -627,7 +627,7 @@ bool Controller::fillRow(std::size_t row,RowFill mode){
 bool Controller::canHideLast() const noexcept {
  if(visibleRows_<=1||visibleRows_>kRows)return false;
  const auto row=static_cast<std::size_t>(visibleRows_-1);
- if(labels_[row]!="LEER - WAV LADEN"||!customNames_[row].empty()||solo_[row])return false;
+ if(labels_[row]!="EMPTY - LOAD WAV"||!customNames_[row].empty()||solo_[row])return false;
  struct GridView {
   const Controller& ctrl;
   std::uint8_t get(std::size_t p,std::size_t r,std::size_t s) const noexcept {
@@ -912,7 +912,7 @@ bool Controller::previewSample(std::size_t row) {
 bool Controller::clearSample(std::size_t row) {
  if(row>=kRows)return false;
  std::string emptyLabel;
- try {emptyLabel="LEER - WAV LADEN";}
+ try {emptyLabel="EMPTY - LOAD WAV";}
  catch(const std::bad_alloc&) {return false;}
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.ClearSample");

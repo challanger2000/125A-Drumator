@@ -404,7 +404,7 @@ void DrumatorView::valueChanged(VSTGUI::CControl* control) {
     nameEditGeneration_!=controller_.editGeneration())return;
  const auto text=std::string(nameEdit_->getText().getString());
  if(!controller_.renameRow(editingNameRow_,text))status_="ROW NAME NOT APPLIED";
- else status_="INSTRUMENTENNAME GESPEICHERT";
+ else status_="ROW NAME SAVED";
  nameEdit_->setVisible(false);
  editingNameRow_=kRows;
  nameEditGeneration_=0;
@@ -724,7 +724,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"ADD ROW");
  drawControl(c,{UiCompactLayout::rowRemove.left,bottom+5,UiCompactLayout::rowRemove.right,bottom+34},"REMOVE ROW",false,controller_.canHideLast());
  char range[64]{};
- std::snprintf(range,sizeof(range),"%u-%u / %u INSTRUMENTE",
+ std::snprintf(range,sizeof(range),"%u-%u / %u INSTRUMENTS",
    static_cast<unsigned>(firstRow_+1),static_cast<unsigned>(firstRow_+displayedRows()),
    static_cast<unsigned>(controller_.visibleRows()));
  c->setFontColor(accent);c->setFont(VSTGUI::kNormalFont,12);
@@ -766,7 +766,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        std::snprintf(cell,sizeof(cell),"%02u   %c   %s",
            static_cast<unsigned>(index+1),static_cast<char>('A'+entry.pattern),
            entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS");
-     }else std::snprintf(cell,sizeof(cell),"%02u   + EINTRAG",
+     }else std::snprintf(cell,sizeof(cell),"%02u   + ENTRY",
              static_cast<unsigned>(index+1));
      drawControl(c,{sx,sy,sx+UiSongLayout::cellWidth,sy+UiSongLayout::cellHeight},
                  cell,index==songSlot_&&index<count);
@@ -774,8 +774,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
    char selectionLabel[80]{};
    if(selectionVisible)
-     std::snprintf(selectionLabel,sizeof(selectionLabel),"POSITION %02u AUSGEWAEHLT",static_cast<unsigned>(songSlot_+1));
-   else std::snprintf(selectionLabel,sizeof(selectionLabel),"ZUERST EINTRAG HINZUFUEGEN ODER WAEHLEN");
+     std::snprintf(selectionLabel,sizeof(selectionLabel),"POSITION %02u SELECTED",static_cast<unsigned>(songSlot_+1));
+   else std::snprintf(selectionLabel,sizeof(selectionLabel),"ADD OR SELECT AN ENTRY FIRST");
    c->drawString(selectionLabel,{16,246,490,272},VSTGUI::kLeftText);
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
    c->drawString("PATTERN:",VSTGUI::CRect(16,277,120,301),VSTGUI::kLeftText);
@@ -786,7 +786,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      drawControl(c,{bx,277,bx+50,303},letter,chosen,selectionVisible);
    }
    c->setFontColor(accent);
-   c->drawString("LAENGE:",VSTGUI::CRect(594,277,681,303),VSTGUI::kLeftText);
+   c->drawString("LENGTH:",VSTGUI::CRect(594,277,681,303),VSTGUI::kLeftText);
    const char* lenNames[]={"1/2 BAR","1 BAR","2 BARS"};
    const std::uint8_t lenSteps[]={8,16,32};
    for(int idx=0;idx<3;++idx) {
@@ -984,17 +984,17 @@ bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
  const auto outcome=controller_.loadWav(row,path);
  switch(outcome) {
  case Controller::LoadStatus::Accepted:
-     status_="SAMPLE ANGENOMMEN - WIEDERGABE AB NAECHSTEM AUDIOBLOCK";break;
+     status_="SAMPLE LOADED - AUDIO ACTIVE ON NEXT BLOCK";break;
  case Controller::LoadStatus::InvalidRow:
      status_="ERROR: INVALID INSTRUMENT ROW";break;
  case Controller::LoadStatus::NotFound:
      status_="FILE NOT FOUND";break;
  case Controller::LoadStatus::TooLarge:
-     status_="SAMPLE ZU GROSS (MAX. 16 MiB)";break;
+     status_="SAMPLE TOO LARGE (MAX 16 MiB)";break;
  case Controller::LoadStatus::ReadError:
      status_="SAMPLE READ FAILED";break;
  case Controller::LoadStatus::Unsupported:
-     status_="UNTERSTUETZT: WAV PCM/FLOAT UND FLAC, MONO/STEREO";break;
+     status_="SUPPORTED: WAV PCM/FLOAT AND FLAC, MONO/STEREO";break;
  case Controller::LoadStatus::NoProcessorConnection:
      status_="HOST DID NOT CONNECT CONTROLLER AND PROCESSOR";break;
  case Controller::LoadStatus::Rejected:
@@ -1032,7 +1032,7 @@ void DrumatorView::load(std::size_t row) {
  if(!picker) {status_="FILE PICKER UNAVAILABLE";invalid();return;}
  picker->addFileExtension(VSTGUI::CFileExtension("WAV PCM/FLOAT","wav","audio/wav"));
  picker->addFileExtension(VSTGUI::CFileExtension("FLAC","flac","audio/flac"));
- picker->setTitle("125A Drumator - WAV/FLAC-Sample auswaehlen");
+ picker->setTitle("125A Drumator - Select WAV/FLAC sample");
  const bool selected=picker->runModal();
  if(selected&&picker->getNumSelectedFiles()>0) {
    const auto* file=picker->getSelectedFile(0);
@@ -1429,7 +1429,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  const double bottom=gridBottom();
  if(y>=bottom+5&&y<bottom+34){
    if(UiCompactLayout::hit(x,UiCompactLayout::rowAdd)){
-     if(controller_.visibleRows()>=kRows)status_="MAXIMAL 16 INSTRUMENTE";
+     if(controller_.visibleRows()>=kRows)status_="MAXIMUM 16 INSTRUMENTS";
      else {
        const auto count=controller_.visibleRows();
        const auto result=tryRowResizeTransaction(
@@ -1588,7 +1588,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        if((buttons&VSTGUI::kControl)||(buttons&VSTGUI::kDoubleClick)){
          const auto def=UiCompactLayout::defaultValue(i);
          if(previous!=def&&!changeKnobValue(i,row,def))
-           status_="KLANGCONTROL RESET NOT APPLIED";
+           status_="SOUND CONTROL RESET NOT APPLIED";
          invalid();return done;
        }
        activeKnob_=i;knobRow_=row;knobStartY_=y;knobStartValue_=previous;

@@ -101,7 +101,7 @@ private:
  bool changeKnobValue(int slot,std::size_t row,int value);
  void closeTransientMenus() noexcept;
 
- std::string status_{"LEER: WAV KLICKEN ODER DATEI AUF ZEILE ZIEHEN"};
+ std::string status_{"EMPTY: CLICK SAMPLE OR DROP A WAV/FLAC"};
  void load(std::size_t row);
  bool openSampleEditor(std::size_t row);
  void moveSampleMarker(double x,bool endMarker);
