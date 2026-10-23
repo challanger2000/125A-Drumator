@@ -955,7 +955,8 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  std::array<WaveformRange,256> wave{};
  // Verify a usable source BEFORE any host resize. Opening an empty row
  // must not enlarge the entire plug-in window.
- if(!controller_.sampleEditorSnapshot(row,edit,frames,wave)||frames==0){
+ if(!controller_.sampleEditorSnapshot(row,edit,frames,wave,0,0,
+                                      &sampleEditorRevision_)||frames==0){
    status_="WAV-EDITOR: KEIN GUELTIGES SAMPLE";
    invalid();return false;
  }
@@ -1126,7 +1127,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
        (void)adjustEditorHeight();
      }else if(x>=785&&x<1000){
-       if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_)){
+       if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_)){
          controller_.stopSampleEditPreview();
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
          (void)adjustEditorHeight();

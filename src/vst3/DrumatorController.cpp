@@ -775,7 +775,8 @@ bool Controller::adjustSwing(int delta) {
 bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
                                      std::uint32_t& frames,
                                      std::array<WaveformRange,256>& envelope,
-                                     std::uint32_t first,std::uint32_t last) {
+                                     std::uint32_t first,std::uint32_t last,
+                                     std::uint32_t* revision) {
  if(row>=kRows)return false;
  auto* msg=allocateMessage();
  if(!msg)return false;
@@ -788,13 +789,14 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
  bool ok=false;
  if(result==Steinberg::kResultOk) {
    const void* bytes=nullptr;Steinberg::uint32 length=0;
-   Steinberg::int64 start=0,end=0,fadeIn=0,fadeOut=0,gainBits=0;
+   Steinberg::int64 start=0,end=0,fadeIn=0,fadeOut=0,gainBits=0,version=-1;
    if(a->getBinary("Wave",bytes,length)==Steinberg::kResultOk&&bytes&&
       a->getInt("Start",start)==Steinberg::kResultOk&&
       a->getInt("End",end)==Steinberg::kResultOk&&
       a->getInt("FadeIn",fadeIn)==Steinberg::kResultOk&&
       a->getInt("FadeOut",fadeOut)==Steinberg::kResultOk&&
-      a->getInt("GainBits",gainBits)==Steinberg::kResultOk) {
+      a->getInt("GainBits",gainBits)==Steinberg::kResultOk&&
+      a->getInt("Revision",version)==Steinberg::kResultOk&&version>=0&&version<=UINT32_MAX) {
      DecodedWav decoded;
      if(WavPcm16Decoder::decode(static_cast<const std::uint8_t*>(bytes),length,decoded)==WavError::Ok&&
         decoded.left.size()<=UINT32_MAX) {
@@ -825,7 +827,7 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
            }
            envelope[i]=bounds;
          }
-         edit=candidate;frames=count;ok=true;
+         edit=candidate;frames=count;if(revision)*revision=static_cast<std::uint32_t>(version);ok=true;
        }
      }
    }
@@ -833,19 +835,22 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
  msg->release();
  return ok;
 }
-bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit) {
+bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
+                                  std::uint32_t revision) {
  if(row>=kRows||!edit.end)return false;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.SampleEditorCommit");
  auto* a=msg->getAttributes();
  std::uint32_t bits=0;std::memcpy(&bits,&edit.gain,sizeof(bits));
- const bool ready=a&&
+ bool ready=a&&
      a->setInt("Row",static_cast<Steinberg::int64>(row))==Steinberg::kResultOk&&
      a->setInt("Start",edit.start)==Steinberg::kResultOk&&
      a->setInt("End",edit.end)==Steinberg::kResultOk&&
      a->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
      a->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
      a->setInt("GainBits",bits)==Steinberg::kResultOk;
+ if(ready&&revision!=UINT32_MAX)
+   ready= a->setInt("Revision",revision)==Steinberg::kResultOk;
  const bool success=ready&&sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
  if(success)notifyViews(false);

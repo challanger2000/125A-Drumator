@@ -95,6 +95,8 @@ private:
  // Version and selected program share one atomic CAS arbitration word.
  std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
+ // Control-thread-only per-row source/edit generation (never serialized).
+ std::array<std::uint32_t,kRows> editorRevisions_{};
  SongMailbox songMailbox_{};
  SongChain audioSongChain_{};
  bool audioSongEnabled_{false};

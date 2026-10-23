@@ -66,6 +66,7 @@ private:
  bool sampleEditorOpen_{false};
  std::size_t sampleEditorRow_{kRows};
  SampleEdit sampleEditorEdit_{};
+ std::uint32_t sampleEditorRevision_{0};
  std::uint32_t sampleEditorFrames_{0};
  std::uint32_t sampleEditorFirst_{0},sampleEditorLast_{0};
  std::array<WaveformRange,256> sampleEditorWave_{};

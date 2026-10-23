@@ -133,6 +133,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    const auto& wav=kit_.wav[row];
    if(wav.empty()||wav.size()>kMaxSingleWav)return Steinberg::kResultFalse;
    const auto& edit=kit_.sampleEdits[row];
+   const auto revision=editorRevisions_[row];
    Steinberg::uint32 gainBits=0;
    static_assert(sizeof(gainBits)==sizeof(edit.gain));
    std::memcpy(&gainBits,&edit.gain,sizeof(gainBits));
@@ -141,7 +142,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
           attrs->setInt("End",edit.end)==Steinberg::kResultOk&&
           attrs->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
           attrs->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
-          attrs->setInt("GainBits",gainBits)==Steinberg::kResultOk
+          attrs->setInt("GainBits",gainBits)==Steinberg::kResultOk&&
+          attrs->setInt("Revision",revision)==Steinberg::kResultOk
           ?Steinberg::kResultOk:Steinberg::kResultFalse;
    }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
  }
@@ -190,7 +192,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  }
  if(std::strcmp(id,"Drumator.SampleEditorCommit")==0) {
    auto* attrs=msg->getAttributes();
-   Steinberg::int64 index=-1,start=-1,end=-1,fadeIn=-1,fadeOut=-1,gainBits=-1;
+   Steinberg::int64 index=-1,start=-1,end=-1,fadeIn=-1,fadeOut=-1,gainBits=-1,expectedRevision=-1;
    if(!attrs||attrs->getInt("Row",index)!=Steinberg::kResultOk||
       attrs->getInt("Start",start)!=Steinberg::kResultOk||
       attrs->getInt("End",end)!=Steinberg::kResultOk||
@@ -211,6 +213,9 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    std::memcpy(&edit.gain,&bits,sizeof(bits));
    std::lock_guard<std::mutex> guard(kitMutex_);
    const auto row=static_cast<std::size_t>(index);
+   if(attrs->getInt("Revision",expectedRevision)==Steinberg::kResultOk&&
+      (expectedRevision<0||expectedRevision!=editorRevisions_[row]))
+     return Steinberg::kResultFalse;
    if(kit_.wav[row].empty())return Steinberg::kResultFalse;
    DecodedWav decoded;
    const auto& wav=kit_.wav[row];
@@ -234,6 +239,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    (void)previous;
    if(!exchange_.publish(row,prepared))return Steinberg::kResultFalse;
    kit_.sampleEdits[row]=edit;
+   ++editorRevisions_[row];
    return Steinberg::kResultOk;
  }
 
@@ -328,6 +334,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    kit_.wav[static_cast<std::size_t>(index)].clear();
    kit_.names[static_cast<std::size_t>(index)].clear();
    kit_.sampleEdits[static_cast<std::size_t>(index)]=SampleEdit{};
+   ++editorRevisions_[static_cast<std::size_t>(index)];
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.SongConfig")==0) {
@@ -578,6 +585,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
                               std::memory_order_acq_rel);
     kit_.wav[static_cast<std::size_t>(row)].swap(retained);
     kit_.sampleEdits[static_cast<std::size_t>(row)]=SampleEdit{};
+    ++editorRevisions_[static_cast<std::size_t>(row)];
     kit_.names[static_cast<std::size_t>(row)].swap(fileName);
  }
  return Steinberg::kResultOk;
@@ -1224,6 +1232,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
        return Steinberg::kResultFalse;
     previewPending_.store(0,std::memory_order_release);
     kit_=std::move(candidate);
+    for(auto& revision:editorRevisions_)++revision;
     for(std::size_t i=0;i<kPatterns;++i)
       patternLengths_[i].store(kit_.patternLengths[i],std::memory_order_relaxed);
     songMailbox_.publish(kit_.chain,kit_.songEnabled!=0);

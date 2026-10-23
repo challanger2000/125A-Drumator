@@ -41,8 +41,10 @@ public:
  void stopSampleEditPreview();
  bool sampleEditorSnapshot(std::size_t row,SampleEdit& edit,std::uint32_t& frames,
                            std::array<WaveformRange,256>& envelope,
-                           std::uint32_t first=0,std::uint32_t last=0);
- bool commitSampleEdit(std::size_t row,const SampleEdit& edit);
+                           std::uint32_t first=0,std::uint32_t last=0,
+                           std::uint32_t* revision=nullptr);
+ bool commitSampleEdit(std::size_t row,const SampleEdit& edit,
+                       std::uint32_t revision=UINT32_MAX);
  bool toggleRowGate(std::size_t row,bool solo);
  bool cycleRowChoke(std::size_t row,int direction=1);
  bool setRowChoke(std::size_t row,unsigned group);
