@@ -168,6 +168,24 @@ void testFr01StopAfterStartConsumed(){
        audio.left[80]==0.f&&audio.right[80]==0.f,
        "FR01 STOP left audition voice alive on following block");
 }
+void testRv01RestartAfterStopDuringAudioStart(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ const auto edit=SampleEdit::reset(1024);
+ check(f.c->previewSampleEdit(0,edit),"RV01 initial preview rejected");
+ arm(qa::auditAfterAuditionStartTaken);
+ tresult result=kResultFalse;
+ std::jthread actor([&]{result=f.p->process(audio.data);});
+ waitEntered();
+ check(f.c->stopSampleEditPreview(),"RV01 STOP not delivered");
+ check(f.c->previewSampleEdit(0,edit),"RV01 newer preview rejected");
+ releaseProbe();actor.join();
+ check(result==kResultOk&&!probeTimeout,"RV01 competing preview interleave did not finish");
+ const bool heardNow=audio.left[80]!=0.f||audio.right[80]!=0.f;
+ check(f.p->process(audio.data)==kResultOk,"RV01 followup process rejected");
+ const bool heardNext=audio.left[80]!=0.f||audio.right[80]!=0.f;
+ check(heardNow||heardNext,
+       "RV01 newer preview was lost after completed STOP");
+}
 void testFr02ControllerMessageOOM(){
  Fixture f;fa23Kit(f);
  for(long failPoint=0;failPoint<16;++failPoint){
