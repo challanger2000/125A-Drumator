@@ -527,10 +527,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
  c->drawString("125A DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
- c->drawString("PATTERN",{330,13,460,33},VSTGUI::kLeftText);
+ c->drawString("PATTERN",{180,13,276,33},VSTGUI::kLeftText);
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
- drawControl(c,{430,8,514,34},"1 BAR",oneBar);
- drawControl(c,{522,8,606,34},"2 BARS",!oneBar);
+ drawControl(c,{280,8,364,34},"1 BAR",oneBar);
+ drawControl(c,{372,8,456,34},"2 BARS",!oneBar);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    char label[12]{};
    std::snprintf(label,sizeof(label),"%c %uT",static_cast<char>('A'+pattern),
@@ -1276,8 +1276,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    invalid();return done;
  }
  // Explicit pattern-length choice, independent of the operation popup.
- if(y>=8&&y<34&&((x>=430&&x<514)||(x>=522&&x<606))){
-   const bool wantOne=x<514;
+ if(y>=8&&y<34&&((x>=280&&x<364)||(x>=372&&x<456))){
+   const bool wantOne=x<364;
    const bool isOne=controller_.patternLength(controller_.currentPattern())==16;
    if(wantOne!=isOne&&!controller_.togglePatternLength(controller_.currentPattern()))
      status_="PATTERN-LAENGE NICHT UEBERNOMMEN";
