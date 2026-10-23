@@ -248,6 +248,22 @@ void testRv02AllocationFreeStopAndRetry(){
  check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f,
        "RV02 retried STOP left audition audible");
 }
+void testRv02NativeEditorCloseTransientReject(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ auto& view=fa23Open(f);
+ check(IntegrationAccess::sampleEditorOpen(view),
+       "RV02 no native WAV editor to close");
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024))&&
+       f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "RV02 closing preview must first be audible");
+ qa::auditMutation=qa::AuditMutation::rejectPreviewStopOnce;
+ f.closeLast(); // real VSTGUI removed/destroy, no later view to retry
+ check(qa::auditMutation.load()==qa::AuditMutation::none,
+       "RV02 close did not exercise exactly one STOP rejection");
+ check(f.p->process(audio.data)==kResultOk&&
+       audio.left[80]==0.f&&audio.right[80]==0.f,
+       "RV02 transient STOP rejection left audio alive after editor close");
+}
 void testRv03RecallQueryOOM(){
  const std::array<qa::AuditMutation,2> faults{
      qa::AuditMutation::patternQueryOOM,qa::AuditMutation::patternReplyOOM};

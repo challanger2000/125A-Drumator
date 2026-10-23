@@ -950,16 +950,19 @@ bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
  }catch(const std::bad_alloc&){return false;}
 }
 bool Controller::stopSampleEditPreview(){
- // Reusing the reserved IMessage avoids any STOP-time SDK allocation.
- // The pending flag keeps a rejected command eligible for a later retry.
- if(!reservedPreviewStop_)return true; // no preview was ever accepted
+ // The STOP message is prepared before Preview, so retries do not allocate.
+ // A bounded second attempt covers one transient host rejection while an
+ // editor is being destroyed. STOP is idempotent in the processor.
+ if(!reservedPreviewStop_)return true; // no editor preview accepted
  previewStopPending_=true;
- try {
-   if(sendMessage(reservedPreviewStop_)==Steinberg::kResultOk) {
-     previewStopPending_=false;
-     return true;
-   }
- }catch(const std::bad_alloc&) { /* retain pending STOP on rejected delivery */ }
+ for(unsigned attempt=0;attempt<2;++attempt) {
+   try {
+     if(sendMessage(reservedPreviewStop_)==Steinberg::kResultOk) {
+       previewStopPending_=false;
+       return true;
+     }
+   }catch(const std::bad_alloc&) { /* retry without allocating */ }
+ }
  return false;
 }
 bool Controller::previewSample(std::size_t row) {
