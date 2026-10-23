@@ -104,6 +104,8 @@ namespace drumator {
 struct IntegrationAccess {
  static bool sampleEditorOpen(const DrumatorView& view){return view.sampleEditorOpen_;}
  static SampleEdit sampleEditorDraft(const DrumatorView& view){return view.sampleEditorEdit_;}
+ static void setSampleEditorDraft(DrumatorView& view,const SampleEdit& edit){view.sampleEditorEdit_=edit;}
+ static void setStatusText(DrumatorView& view,const std::string& status){view.status_=status;}
  static void seedTransportClock(Processor& p) {
    p.haveExpectedPpq_=true;
    p.expectedNextPpq_=19.5;
@@ -1954,6 +1956,10 @@ int main(int argc,char** argv){
  run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
  run("FR03 legacy sample-present synchronization",testFr03LegacyRecallSamplePresence);
  run("FR08 controller path length consistency",testFr08PathSerializationBoundary);
+ run("FR04 waveform border real mouse input",testFr04RealWaveformEdgeMouse);
+ run("FR05 one-frame Fade Out native pixel contract",testFr05ShortFadePixelsMatchAudioContract);
+ run("FR06 modal error message native pixels",testFr06ModalErrorPixels);
+ run("FR10 global knob right-edge mouse input",testFr10GlobalKnobEdgeHit);
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::collectedNotices=nullptr;

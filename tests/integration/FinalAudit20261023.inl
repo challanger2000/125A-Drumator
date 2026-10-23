@@ -218,3 +218,71 @@ void testFr08PathSerializationBoundary(){
  check(auditReturnedKit(*f.p).wav[0]==old,
        "FR08 rejected path changed embedded audio");
 }
+
+std::vector<std::uint32_t> frGuiPixels(DrumatorView& view,
+                                     unsigned x0,unsigned y0,
+                                     unsigned x1,unsigned y1){
+ const auto size=view.getViewSize();
+ auto bitmap=VSTGUI::renderBitmapOffscreen(
+     VSTGUI::CPoint(size.getWidth(),size.getHeight()),1.0,
+     [&](VSTGUI::CDrawContext& ctx){view.draw(&ctx);});
+ check(bitmap!=nullptr,"FR GUI offscreen draw unavailable");
+ auto* pixels=VSTGUI::CBitmapPixelAccess::create(bitmap.get(),false);
+ check(pixels!=nullptr,"FR GUI offscreen pixel access unavailable");
+ check(x1<=pixels->getBitmapWidth()&&y1<=pixels->getBitmapHeight(),
+       "FR GUI capture bounds outside editor");
+ std::vector<std::uint32_t> result;
+ result.reserve(static_cast<std::size_t>(x1-x0)*(y1-y0));
+ for(unsigned y=y0;y<y1;++y)
+   for(unsigned x=x0;x<x1;++x){
+     check(pixels->setPosition(x,y),"FR GUI pixel coordinate invalid");
+     VSTGUI::CColor color{};pixels->getColor(color);
+     result.push_back((static_cast<std::uint32_t>(color.red)<<16)|
+                      (static_cast<std::uint32_t>(color.green)<<8)|color.blue);
+   }
+ pixels->forget();return result;
+}
+void testFr04RealWaveformEdgeMouse(){
+ Fixture f;fa23Kit(f);auto& view=fa23Open(f);
+ check(IntegrationAccess::sampleEditorDraft(view).start==0,
+       "FR04 original marker state wrong");
+ click(view,500.,165.);
+ check(IntegrationAccess::sampleEditorDraft(view).start>0,
+       "FR04 top 20px waveform strip not interactive");
+}
+void testFr05ShortFadePixelsMatchAudioContract(){
+ Fixture f;fa23Kit(f);auto& view=fa23Open(f);
+ const SampleEdit zeroOnLastFrame{511,512,0,1,1.f};
+ check(zeroOnLastFrame.valid(1024)&&zeroOnLastFrame.amplitude(511)==0.f,
+       "FR05 one-frame Fade Out PCM contract");
+ IntegrationAccess::setSampleEditorDraft(view,zeroOnLastFrame);
+ const auto faded=frGuiPixels(view,300,157,980,381);
+ auto silent=zeroOnLastFrame;silent.gain=0.f;
+ IntegrationAccess::setSampleEditorDraft(view,silent);
+ const auto silentPixels=frGuiPixels(view,300,157,980,381);
+ check(faded==silentPixels,
+       "FR05 one-frame Fade Out graphic differs from its silent DSP envelope");
+ IntegrationAccess::setSampleEditorDraft(view,SampleEdit::reset(1024));
+ const auto full=frGuiPixels(view,300,157,980,381);
+ check(full!=silentPixels,
+       "FR05 negative control: live waveform renderer never shows audible signal");
+}
+void testFr06ModalErrorPixels(){
+ Fixture f;fa23Kit(f);auto& view=fa23Open(f);
+ IntegrationAccess::setStatusText(view,"");
+ const auto without=frGuiPixels(view,265,556,1020,585);
+ IntegrationAccess::setStatusText(view,"ZOOM: WAVEFORM UNAVAILABLE");
+ const auto with=frGuiPixels(view,265,556,1020,585);
+ check(with!=without,"FR06 actual modal error text not visible on native GUI pixels");
+}
+void testFr10GlobalKnobEdgeHit(){
+ Fixture f;fa23Kit(f);f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ check(f.c->swingPercent()==0,"FR10 fixture swing should default to zero");
+ VSTGUI::CPoint point(UiCompactLayout::globalKnobCenters[0]+16.5,76.);
+ view->onMouseDown(point,VSTGUI::CButtonState(VSTGUI::kLButton));
+ point.y-=25.;
+ view->onMouseMoved(point,VSTGUI::CButtonState(VSTGUI::kLButton));
+ view->onMouseUp(point,{});
+ check(f.c->swingPercent()>0,"FR10 visible Swing knob edge is not draggable");
+}
