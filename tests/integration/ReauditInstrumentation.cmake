@@ -37,7 +37,7 @@ function(reaudit_instrument name variable)
     # baseline), including its missing Gain factor and its float endpoint.
     # Run only in the generated QA translation unit.
     qa_replace(_code "const double fade=static_cast<double>(e.amplitude(
-            static_cast<std::uint32_t>(std::floor(sourceFrame))));"
+           static_cast<std::uint32_t>(std::floor(sourceFrame))));"
       "double fade=static_cast<double>(e.amplitude(
             static_cast<std::uint32_t>(std::floor(sourceFrame))));
       if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::oldFadeRenderer) {
