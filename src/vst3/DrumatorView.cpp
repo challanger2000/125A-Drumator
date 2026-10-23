@@ -324,7 +324,7 @@ DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
- if(sampleEditorOpen_){controller_.stopSampleEditPreview();sampleEditorOpen_=false;
+ if(sampleEditorOpen_){controller_.stopSampleEditPreview();sampleEditorPreviewing_=false;sampleEditorOpen_=false;
    sampleEditorRow_=kRows;sampleEditorDrag_=0;}
  if(laneDragActive_){controller_.endVelocityStroke(false,this);laneDragActive_=false;}
  detailDragControl_=-1;detailDragRow_=kRows;
@@ -405,7 +405,7 @@ void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
 }
 void DrumatorView::discardTransientEditsForRecall() noexcept {
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
- sampleEditorOpen_=false;sampleEditorRow_=kRows;sampleEditorDrag_=0;
+ sampleEditorOpen_=false;sampleEditorPreviewing_=false;sampleEditorRow_=kRows;sampleEditorDrag_=0;
  // Nothrow logical invalidation before the new kit commit. Do not call
  // VSTGUI/Win32 here: closing an EDIT HWND may invoke allocating callbacks.
  laneDragActive_=false;
@@ -853,10 +853,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{265,455,337,491},"ZOOM +");
    drawControl(c,{344,455,416,491},"ZOOM -");
    drawControl(c,{423,455,533,491},"GANZES WAV");
-   // Gain from 0 to 200%, unity clearly marked and directly draggable.
+   // Gain from 0 to 400%, matching the SampleEdit engine and stored kits.
    c->drawString("GAIN",{558,455,622,477});
    c->setFillColor(off);c->drawRect({615,466,900,480},VSTGUI::kDrawFilled);
-   const auto gainX=615.+285.*std::clamp(static_cast<double>(sampleEditorEdit_.gain)/2.,0.,1.);
+   const auto gainX=615.+285.*std::clamp(static_cast<double>(sampleEditorEdit_.gain)/4.,0.,1.);
    c->setFillColor(accent);c->drawRect({615,466,gainX,480},VSTGUI::kDrawFilled);
    c->setFillColor(letters);c->drawRect({gainX-4,459,gainX+4,487},VSTGUI::kDrawFilled);
    char gainText[36]{};
@@ -959,7 +959,7 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
 void DrumatorView::setSampleEditorGain(double x) {
  if(!sampleEditorOpen_)return;
  const auto value=std::clamp((x-615.)/285.,0.,1.);
- sampleEditorEdit_.gain=static_cast<float>(std::round(value*200.)/100.);
+ sampleEditorEdit_.gain=static_cast<float>(std::round(value*400.)/100.);
  invalid();
 }
 bool DrumatorView::zoomSampleEditor(bool in,bool full) {
