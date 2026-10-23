@@ -6,7 +6,8 @@ extern thread_local bool legacyTriggerOrdering; // regression negative, test EXE
 enum class AuditMutation { none, suppressZeroStop, staleDuration, skipPeerCommit,
  basenameOnly, delayMidiOne, dropMidi, doubleMidi, zeroPrefix,
  skipImport, muteImportedProcessor, delayImportedProcessor,
- rejectPreviewStop, rejectPreviewStopOnce, patternQueryOOM, patternReplyOOM };
+ rejectPreviewStop, rejectPreviewStopOnce, patternQueryOOM, patternReplyOOM,
+ oldFadeRenderer, oldKnobDrawCenters };
 extern std::atomic<AuditMutation> auditMutation;
 extern std::atomic<const void*> auditImportTarget;
 extern std::atomic<unsigned> auditImportCalls,auditDelayCalls;

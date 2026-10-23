@@ -1968,6 +1968,14 @@ int main(int argc,char** argv){
  run("FR06 modal error message native pixels",testFr06ModalErrorPixels);
  run("FR10 global knob right-edge mouse input",testFr10GlobalKnobEdgeHit);
  run("RV05 all global knob rendered centers",testRv05GlobalKnobPaintCenters);
+ run("RM14 historical Fade renderer regression killed",[]{
+   expectMutationKilled(qa::AuditMutation::oldFadeRenderer,"RV04 historical Fade/Gain formula",
+                        testFr05ShortFadePixelsMatchAudioContract);
+ });
+ run("RM15 historical knob draw offsets killed",[]{
+   expectMutationKilled(qa::AuditMutation::oldKnobDrawCenters,"RV05 original 80/178/1178 draw centers",
+                        testRv05GlobalKnobPaintCenters);
+ });
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
  drumator::qa::collectedNotices=nullptr;
