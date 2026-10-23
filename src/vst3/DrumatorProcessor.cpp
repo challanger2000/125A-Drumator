@@ -174,7 +174,11 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    const auto gainBits=static_cast<std::uint32_t>(bits);
    std::memcpy(&edit.gain,&gainBits,sizeof(gainBits));
    std::lock_guard<std::mutex> lock(kitMutex_);
-   const auto& wav=kit_.wav[static_cast<std::size_t>(row)];
+   const auto idx=static_cast<std::size_t>(row);
+   Steinberg::int64 expected=-1;
+   if(a->getInt("Revision",expected)==Steinberg::kResultOk&&
+      (expected<0||expected!=editorRevisions_[idx]))return Steinberg::kResultFalse;
+   const auto& wav=kit_.wav[idx];
    if(wav.empty())return Steinberg::kResultFalse;
    const auto rate=outputRate_.load(std::memory_order_acquire);
    if(!(rate>0.)||!std::isfinite(rate))return Steinberg::kResultFalse;

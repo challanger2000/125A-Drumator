@@ -1118,7 +1118,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        // Every click restarts a one-shot, even if its previous playback
        // already ended naturally. The button does not pretend to know
        // whether the audio thread is still sounding.
-       if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_))
+       if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_))
          status_="VORHOEREN FEHLGESCHLAGEN";
      }else if(x>=375&&x<465){
        controller_.stopSampleEditPreview();

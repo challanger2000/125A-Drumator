@@ -858,18 +858,21 @@ bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
 }
 
 
-bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit){
+bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
+                                   std::uint32_t revision){
  if(row>=kRows||edit.end==0)return false;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.EditorPreview");
  auto* a=msg->getAttributes();std::uint32_t bits=0;
  std::memcpy(&bits,&edit.gain,sizeof(bits));
- const bool ready=a&&a->setInt("Row",static_cast<Steinberg::int64>(row))==Steinberg::kResultOk&&
+ bool ready=a&&a->setInt("Row",static_cast<Steinberg::int64>(row))==Steinberg::kResultOk&&
  a->setInt("Start",edit.start)==Steinberg::kResultOk&&
  a->setInt("End",edit.end)==Steinberg::kResultOk&&
  a->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
  a->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
  a->setInt("GainBits",bits)==Steinberg::kResultOk;
+ if(ready&&revision!=UINT32_MAX)
+   ready=a->setInt("Revision",revision)==Steinberg::kResultOk;
  const bool ok=ready&&sendMessage(msg)==Steinberg::kResultOk;
  msg->release();return ok;
 }
