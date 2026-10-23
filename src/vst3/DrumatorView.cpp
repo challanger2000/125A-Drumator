@@ -829,9 +829,19 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
            static_cast<double>(b.maximum),0.});
      const double mid=sampleEditorStereo_?213.:268.;
      const double amp=sampleEditorStereo_?48.:104.;
-     const double upper=std::clamp(mid-hi*amp,sampleEditorStereo_?156.:156.,
+     const double sourceFrame=sampleEditorFirst_+
+         (pixel+0.5)*static_cast<double>(sampleEditorLast_-sampleEditorFirst_)/710.;
+     const auto& e=sampleEditorEdit_;
+     double fade=1.;
+     if(sourceFrame<e.start||sourceFrame>=e.end)fade=0.;
+     else {
+       if(e.fadeIn>0)fade=std::min(fade,(sourceFrame-e.start)/e.fadeIn);
+       if(e.fadeOut>0)fade=std::min(fade,(e.end-sourceFrame)/e.fadeOut);
+     }
+     fade=std::clamp(fade,0.,1.);
+     const double upper=std::clamp(mid-hi*amp*fade,sampleEditorStereo_?156.:156.,
                                    sampleEditorStereo_?264.:381.);
-     const double lower=std::clamp(mid-lo*amp,sampleEditorStereo_?156.:156.,
+     const double lower=std::clamp(mid-lo*amp*fade,sampleEditorStereo_?156.:156.,
                                    sampleEditorStereo_?264.:381.);
      c->setFrameColor(accent);c->drawLine({284.+pixel,upper},{284.+pixel,lower});
      if(sampleEditorStereo_){
@@ -841,8 +851,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                                 static_cast<double>(rightB.minimum),0.});
        const double rhi=std::max({static_cast<double>(rightA.maximum),
                                 static_cast<double>(rightB.maximum),0.});
-       c->drawLine({284.+pixel,std::clamp(326.-rhi*48.,273.,381.)},
-                   {284.+pixel,std::clamp(326.-rlo*48.,273.,381.)});
+       c->drawLine({284.+pixel,std::clamp(326.-rhi*48.*fade,273.,381.)},
+                   {284.+pixel,std::clamp(326.-rlo*48.*fade,273.,381.)});
      }
      (void)fraction;
    }
@@ -894,19 +904,19 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{265,455,337,491},"ZOOM +");
    drawControl(c,{344,455,416,491},"ZOOM -");
    drawControl(c,{423,455,493,491},"FIT");
-   drawControl(c,{500,455,614,491},"AUTO START");
-   drawControl(c,{621,455,699,491},"RESET");
-   drawControl(c,{706,455,808,491},"PREVIEW");
-   drawControl(c,{815,455,885,491},"STOP");
+   drawControl(c,{500,455,589,491},"PREVIEW");
+   drawControl(c,{590,455,669,491},"STOP");
+   drawControl(c,{684,455,779,491},"RESET");
+   c->setFrameColor(accent);c->drawRect({498,453,671,493},VSTGUI::kDrawStroked);
    drawControl(c,{892,455,955,491},"CANCEL");
    drawControl(c,{962,455,1030,491},"APPLY");
    // Immediate visual click feedback: overlay the depressed toolbar item
    // while the mouse is held, release through the normal mouse-up callback.
    if(sampleEditorPressed_>=0){
-     constexpr double lefts[]={265,344,423,500,621,706,815,892,962};
-     constexpr double rights[]={337,416,493,614,699,808,885,955,1030};
+     constexpr double lefts[]={265,344,423,500,590,684,892,962};
+     constexpr double rights[]={337,416,493,589,669,779,955,1030};
      const auto i=static_cast<std::size_t>(sampleEditorPressed_);
-     if(i<9){
+     if(i<8){
        c->setFrameColor(on);c->setLineWidth(2.);
        c->drawRect({lefts[i],455,rights[i],491},VSTGUI::kDrawStroked);
        c->setLineWidth(1.);
@@ -1050,7 +1060,7 @@ void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  // Edge-autoscroll while dragging START/END, without mousewheel or modifiers.
  if((x>994.||x<284.)&&sampleEditorLast_>sampleEditorFirst_){
    const auto span=sampleEditorLast_-sampleEditorFirst_;
-   const auto step=std::max<std::uint32_t>(1,span/16);
+   const auto step=std::max<std::uint32_t>(1,span/128);
    const auto oldFirst=sampleEditorFirst_;
    const auto nextFirst=x>994.?std::min(sampleEditorFrames_-span,oldFirst+step):
        (oldFirst>step?oldFirst-step:0);
@@ -1149,53 +1159,30 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      return VSTGUI::kMouseEventHandled;
    }
    if(x>=615&&x<=900&&y>=405&&y<=442){
+     if((buttons&VSTGUI::kControl)||(buttons&VSTGUI::kDoubleClick)){
+       sampleEditorEdit_.gain=1.f;sampleEditorDrag_=0;invalid();return done;
+     }
      sampleEditorDrag_=6;setSampleEditorGain(x);
      return VSTGUI::kMouseEventHandled;
    }
    if(y>=455&&y<=491){
-     constexpr double hitL[]={265,344,423,500,621,706,815,892,962};
-     constexpr double hitR[]={337,416,493,614,699,808,885,955,1030};
+     constexpr double hitL[]={265,344,423,500,590,684,892,962};
+     constexpr double hitR[]={337,416,493,589,669,779,955,1030};
      sampleEditorPressed_=-1;
-     for(int i=0;i<9;++i)if(x>=hitL[i]&&x<=hitR[i]){
-       sampleEditorPressed_=i;break;
+     for(int k=0;k<8;++k)if(x>=hitL[k]&&x<=hitR[k]){
+       sampleEditorPressed_=k;break;
      }
      if(x>=265&&x<=337)(void)zoomSampleEditor(true);
      else if(x>=344&&x<=416)(void)zoomSampleEditor(false);
      else if(x>=423&&x<=493)(void)zoomSampleEditor(false,true);
-     else if(x>=500&&x<=614){
-       // Whole-source onset detection: never derive it from the current
-       // zoom viewport, which may contain no onset or only trailing audio.
-       const auto firstBefore=sampleEditorFirst_,lastBefore=sampleEditorLast_;
-       std::array<WaveformRange,256> envelope{};
-       SampleEdit ignored;std::uint32_t frames=0;
-       if(controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,frames,envelope,0,
-                                          sampleEditorFrames_)&&frames==sampleEditorFrames_){
-         constexpr float threshold=0.0039810717f; // -48 dBFS
-         std::size_t first=0;
-         while(first<envelope.size()&&
-             std::max(std::abs(envelope[first].minimum),
-                      std::abs(envelope[first].maximum))<threshold)++first;
-         if(first<envelope.size()){
-           const auto frame=static_cast<std::uint32_t>(
-               (static_cast<std::uint64_t>(sampleEditorFrames_)*first)/envelope.size());
-           sampleEditorEdit_.start=std::min(frame,sampleEditorEdit_.end-1);
-           const auto remaining=sampleEditorEdit_.length();
-           sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,remaining);
-           sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
-                                              remaining-sampleEditorEdit_.fadeIn);
-           status_=sampleEditorEdit_.start?"AUTO START: ONSET DETECTED":
-                                            "AUTO START: SIGNAL BEGINS AT ZERO";
-         }else status_="AUTO START: NO SIGNAL FOUND";
-       }else status_="AUTO START: WAVEFORM UNAVAILABLE";
-       (void)firstBefore;(void)lastBefore;
-     }else if(x>=621&&x<=699)sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);
-     else if(x>=706&&x<=808){
+     else if(x>=500&&x<=589){
        if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_))
          status_="PREVIEW FAILED";
        else status_="PREVIEW STARTED";
-     }else if(x>=815&&x<=885){
+     }else if(x>=590&&x<=669){
        controller_.stopSampleEditPreview();status_="PREVIEW STOPPED";
-     }else if(x>=892&&x<=955){
+     }else if(x>=684&&x<=779)sampleEditorEdit_=SampleEdit::reset(sampleEditorFrames_);
+     else if(x>=892&&x<=955){
        controller_.stopSampleEditPreview();
        sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
        (void)adjustEditorHeight();
