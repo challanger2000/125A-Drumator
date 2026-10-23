@@ -79,17 +79,28 @@ Steinberg::tresult PLUGIN_API Controller::setParamNormalized(
  return result;
 }
 bool Controller::processorConfirmsPattern(unsigned requested) {
- auto* msg=allocateMessage();
- if(!msg)return false;
- msg->setMessageID("Drumator.QueryPattern");
- const auto result=sendMessage(msg);
- Steinberg::int64 selected=-1;
- auto* attrs=msg->getAttributes();
- const bool confirmed=result==Steinberg::kResultOk&&attrs&&
-     attrs->getInt("Selected",selected)==Steinberg::kResultOk&&
-     selected==static_cast<Steinberg::int64>(requested);
- msg->release();
- return confirmed;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {
+   msg=allocateMessage();
+   if(!msg)return false;
+   // Host allocation and message dispatch can fail even after recall commits.
+   // Always release the message and fall back to the recalled pattern.
+   struct MessageOwner {
+     Steinberg::Vst::IMessage* value;
+     ~MessageOwner(){if(value)value->release();}
+   } owner{msg};
+   msg->setMessageID("Drumator.QueryPattern");
+   const auto result=sendMessage(msg);
+   Steinberg::int64 selected=-1;
+   auto* attrs=msg->getAttributes();
+   return result==Steinberg::kResultOk&&attrs&&
+       attrs->getInt("Selected",selected)==Steinberg::kResultOk&&
+       selected==static_cast<Steinberg::int64>(requested);
+ }catch(const std::bad_alloc&) {
+   // Only allocation failure before owner construction needs manual cleanup.
+   // A post-commit query failure must not escape the VST3 recall callback.
+   return false;
+ }
 }
 Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
  const auto result=sendMessage(message);
