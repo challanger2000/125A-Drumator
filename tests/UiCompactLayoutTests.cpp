@@ -34,6 +34,17 @@ int main(){
  EXPECT(UiCompactLayout::hit(275.,UiCompactLayout::sampleMenu));
  EXPECT(!UiCompactLayout::hit(274.9,UiCompactLayout::sampleMenu));
  EXPECT(!UiCompactLayout::hit(301.,UiCompactLayout::sampleMenu));
+ // Reusable component family geometry: paired choices and EDIT must
+ // remain fixed-width, non-overlapping, and use the same hit logic as draw.
+ EXPECT(UiCompactLayout::barOne.right-UiCompactLayout::barOne.left==84.);
+ EXPECT(UiCompactLayout::barTwo.right-UiCompactLayout::barTwo.left==84.);
+ EXPECT(UiCompactLayout::barOne.right<UiCompactLayout::barTwo.left);
+ EXPECT(UiCompactLayout::barTwo.right<465.); // centered title begins x=465
+ EXPECT(UiCompactLayout::edit.right-UiCompactLayout::edit.left==64.);
+ EXPECT(UiCompactLayout::sample.right<UiCompactLayout::edit.left);
+ EXPECT(UiCompactLayout::edit.right<UiCompactLayout::sampleMenu.left);
+ EXPECT(UiCompactLayout::hit(240.,UiCompactLayout::edit));
+ EXPECT(!UiCompactLayout::hit(240.,UiCompactLayout::sample));
  EXPECT(UiCompactLayout::sample.right<UiCompactLayout::sampleMenu.left);
  EXPECT(UiCompactLayout::sampleMenu.right<UiCompactLayout::previous.left);
  EXPECT(UiCompactLayout::output.right-UiCompactLayout::output.left>=80.);
