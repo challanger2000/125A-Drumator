@@ -809,7 +809,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(background);c->drawRect({230,100,1050,605},VSTGUI::kDrawFilled);
    c->setFrameColor(accent);c->drawRect({230,100,1050,605},VSTGUI::kDrawStroked);
    c->setFont(VSTGUI::kNormalFont,18);c->setFontColor(letters);
-   c->drawString("WAV EDITOR - SAMPLE BEARBEITEN",{260,114,1000,148});
+   c->drawString("SAMPLE EDITOR",{260,114,1000,148});
    c->setFillColor(panel);c->drawRect({284,175,994,382},VSTGUI::kDrawFilled);
    c->setFrameColor(border);c->drawLine({284,278},{994,278});
    for(std::size_t i=0;i<sampleEditorWave_.size();++i) {
@@ -856,17 +856,16 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(accent);
    c->drawRect({thumbX,387,thumbX+thumbWidth,402},VSTGUI::kDrawFilled);
    char info[180]{};
-   std::snprintf(info,sizeof(info),"START %u   ENDE %u   FADE IN %u   FADE OUT %u   GAIN %u%%",
+   std::snprintf(info,sizeof(info),"START %u   END %u   FADE IN %u   FADE OUT %u   GAIN %u%%",
         sampleEditorEdit_.start,sampleEditorEdit_.end,
         sampleEditorEdit_.fadeIn,sampleEditorEdit_.fadeOut,
         static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
    c->drawString(info,{270,406,1020,430});
-   c->drawString("START / ENDE ZIEHEN   |   FADE-GRIFFE OBEN ZIEHEN",
-                 {275,430,1020,451});
+   // Marker grips and a compact toolbar make permanent instruction text unnecessary.
    drawControl(c,{265,455,337,491},"ZOOM +");
    drawControl(c,{344,455,416,491},"ZOOM -");
-   drawControl(c,{423,455,533,491},"GANZES WAV");
+   drawControl(c,{423,455,533,491},"FIT");
    // Gain from 0 to 400%, matching the SampleEdit engine and stored kits.
    c->drawString("GAIN",{558,455,622,477});
    c->setFillColor(off);c->drawRect({615,466,900,480},VSTGUI::kDrawFilled);
@@ -879,10 +878,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString(gainText,{911,454,1001,488});
    drawControl(c,{265,501,375,532},"AUTO START");
    drawControl(c,{382,501,492,532},"RESET");
-   drawControl(c,{265,540,365,584},"VORHOEREN");
+   drawControl(c,{265,540,365,584},"PREVIEW");
    drawControl(c,{375,540,465,584},"STOP");
-   drawControl(c,{568,540,765,584},"ABBRECHEN");
-   drawControl(c,{785,540,1000,584},"UEBERNEHMEN");
+   drawControl(c,{568,540,765,584},"CANCEL");
+   drawControl(c,{785,540,1000,584},"APPLY");
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
    c->drawString(status_.c_str(),{265,585,1020,603});
  }
@@ -1001,7 +1000,23 @@ bool DrumatorView::zoomSampleEditor(bool in,bool full) {
 }
 void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  if(!sampleEditorOpen_||sampleEditorFrames_<2)return;
- const auto frame=waveformFrameAt(x-284.,710.,sampleEditorFirst_,sampleEditorLast_);
+ // Edge-autoscroll while dragging START/END, without mousewheel or modifiers.
+ if((x>994.||x<284.)&&sampleEditorLast_>sampleEditorFirst_){
+   const auto span=sampleEditorLast_-sampleEditorFirst_;
+   const auto step=std::max<std::uint32_t>(1,span/16);
+   const auto oldFirst=sampleEditorFirst_;
+   const auto nextFirst=x>994.?std::min(sampleEditorFrames_-span,oldFirst+step):
+       (oldFirst>step?oldFirst-step:0);
+   if(nextFirst!=oldFirst){
+     auto wave=sampleEditorWave_;SampleEdit saved;std::uint32_t frames=0;
+     if(controller_.sampleEditorSnapshot(sampleEditorRow_,saved,frames,wave,
+           nextFirst,nextFirst+span)&&frames==sampleEditorFrames_){
+       sampleEditorFirst_=nextFirst;sampleEditorLast_=nextFirst+span;
+       sampleEditorWave_=wave;
+     }
+   }
+ }
+ const auto frame=waveformFrameAt(std::clamp(x,284.,994.)-284.,710.,sampleEditorFirst_,sampleEditorLast_);
  if(endMarker)sampleEditorEdit_.end=std::clamp(frame,
                              sampleEditorEdit_.start+1,sampleEditorFrames_);
  else sampleEditorEdit_.start=std::min(frame,sampleEditorEdit_.end-1);
@@ -1014,7 +1029,7 @@ void DrumatorView::moveSampleMarker(double x,bool endMarker) {
 
 void DrumatorView::moveSampleFade(double x,bool fadeOut) {
  if(!sampleEditorOpen_)return;
- const auto frame=waveformFrameAt(x-284.,710.,sampleEditorFirst_,sampleEditorLast_);
+ const auto frame=waveformFrameAt(std::clamp(x,284.,994.)-284.,710.,sampleEditorFirst_,sampleEditorLast_);
  const auto& e=sampleEditorEdit_;
  if(fadeOut){
    const auto bounded=std::clamp(frame,e.start+e.fadeIn,e.end);
@@ -1110,7 +1125,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,remaining);
        sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
                                          remaining-sampleEditorEdit_.fadeIn);
-     }
+     }else status_="AUTO START: NO SIGNAL FOUND";
      invalid();return done;
    }
    if(y>=540&&y<584) {
@@ -1119,7 +1134,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        // already ended naturally. The button does not pretend to know
        // whether the audio thread is still sounding.
        if(!controller_.previewSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_))
-         status_="VORHOEREN FEHLGESCHLAGEN";
+         status_="PREVIEW FAILED";
      }else if(x>=375&&x<465){
        controller_.stopSampleEditPreview();
      }else if(x>=568&&x<765){
@@ -1131,7 +1146,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          controller_.stopSampleEditPreview();
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
          (void)adjustEditorHeight();
-       }else status_="WAV EDIT: PROZESSOR HAT AENDERUNG ABGELEHNT";
+       }else status_="APPLY FAILED: SAMPLE CHANGED OR PROCESSOR REJECTED";
      }
      invalid();return done;
    }
