@@ -11,7 +11,7 @@ extern std::atomic<const void*> auditImportTarget;
 extern std::atomic<unsigned> auditImportCalls,auditDelayCalls;
 enum Point { none, patternMidWrite, patternReadStarted, restoreSnapshot,
              restoreMidCommit, restoreBeforeSelection, songMidPublish,
-             auditAfterLengthRead };
+             auditAfterLengthRead, auditAfterAuditionAdopt };
 // Inserted only in generated test translation units, never the shipped VST3.
 void probe(Point point) noexcept;
 }
