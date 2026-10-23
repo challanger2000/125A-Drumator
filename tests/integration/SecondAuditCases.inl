@@ -51,18 +51,18 @@ void testSecondAuditViewInvalidation() {
  for(std::size_t row=1;row<kRows;++row){one.names[row].clear();one.displayNames[row].clear();}
  f.kit(one);
  const auto resizeCalls=f.frames[0].calls+f.frames[1].calls;
- bothInvalidated([&]{return f.c->addRow();});
- bothInvalidated([&]{return f.c->addRow();});
+ bothInvalidated("ADD FIRST ROW",[&]{return f.c->addRow();});
+ bothInvalidated("ADD SECOND ROW",[&]{return f.c->addRow();});
  check(f.c->visibleRows()==3&&other->visibleRowsForHit()==2&&
        f.frames[0].calls+f.frames[1].calls==resizeCalls,
        "SA01 peer editor clipped added rows or issued an extra host resize");
  click(*other,1180.,108.+2.*94.+15.);
  check(IntegrationAccess::firstRow(*other)==2&&other->visibleRowsForHit()==1,
        "SA01 newly added row inaccessible in peer compact page");
- bothInvalidated([&]{return f.c->hideLastEmptyRow();});
+ bothInvalidated("HIDE LAST ROW",[&]{return f.c->hideLastEmptyRow();});
  check(f.c->visibleRows()==2&&IntegrationAccess::firstRow(*other)<2,
        "SA01 peer page invalid after row removal");
- bothInvalidated([&]{return f.c->restoreVisibleRows(1);});
+ bothInvalidated("RESTORE ROW COUNT",[&]{return f.c->restoreVisibleRows(1);});
  check(other->visibleRowsForHit()==1,"SA01 row rollback left a stale viewport");
  auto prior=IntegrationAccess::snapshot(*f.c);
  ValidateRect(originalWindow,nullptr);ValidateRect(otherWindow,nullptr);

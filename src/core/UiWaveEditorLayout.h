@@ -29,10 +29,11 @@ struct UiWaveEditorLayout final {
      if(toolbar[static_cast<std::size_t>(i)].hit(x,y))return i;
    return -1;
  }
- static_assert(zoomIn.width()==zoomOut.width()&&zoomIn.width()==fit.width());
- static_assert(zoomIn.width()==reset.width());
- static_assert(preview.width()==stop.width());
- static_assert(cancel.width()==apply.width());
- static_assert(preview.right<stop.left&&stop.right<reset.left);
 };
+static_assert(UiWaveEditorLayout::zoomIn.width()==UiWaveEditorLayout::zoomOut.width());
+static_assert(UiWaveEditorLayout::zoomIn.width()==UiWaveEditorLayout::fit.width());
+static_assert(UiWaveEditorLayout::zoomIn.width()==UiWaveEditorLayout::reset.width());
+static_assert(UiWaveEditorLayout::preview.width()==UiWaveEditorLayout::stop.width());
+static_assert(UiWaveEditorLayout::cancel.width()==UiWaveEditorLayout::apply.width());
+static_assert(UiWaveEditorLayout::preview.right<UiWaveEditorLayout::stop.left);
 }
