@@ -873,11 +873,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
         sampleEditorEdit_.fadeIn,sampleEditorEdit_.fadeOut,
         static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   c->drawString(info,{270,495,1020,520});
+   c->drawString(info,{270,508,1020,532});
    // Marker grips and a compact toolbar make permanent instruction text unnecessary.
-   drawControl(c,{265,455,337,491},"ZOOM +");
-   drawControl(c,{344,455,416,491},"ZOOM -");
-   drawControl(c,{423,455,533,491},"FIT");
    // Compact single-row toolbar. Apply / Cancel remain consistently right.
    drawControl(c,{265,455,337,491},"ZOOM +");
    drawControl(c,{344,455,416,491},"ZOOM -");
@@ -899,7 +896,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                  static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
    c->drawString(gainText,{911,405,1001,439});
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   c->drawString(status_.c_str(),{265,585,1020,603});
+   if(status_.find("FAILED")!=std::string::npos||
+      status_.find("AUTO START:")!=std::string::npos||
+      status_.find("PREVIEW")!=std::string::npos)
+     c->drawString(status_.c_str(),{265,556,1020,585});
  }
  setDirty(false);
 }
