@@ -40,7 +40,7 @@ public:
  bool previewSample(std::size_t row);
  bool previewSampleEdit(std::size_t row,const SampleEdit& edit,
                         std::uint32_t revision=UINT32_MAX);
- void stopSampleEditPreview();
+ bool stopSampleEditPreview();
  bool sampleEditorSnapshot(std::size_t row,SampleEdit& edit,std::uint32_t& frames,
                            std::array<WaveformRange,256>& envelope,
                            std::uint32_t first=0,std::uint32_t last=0,
