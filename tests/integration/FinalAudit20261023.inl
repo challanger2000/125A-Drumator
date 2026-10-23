@@ -56,13 +56,13 @@ void testFa23ModalDrop(){
 }
 void testFa23StaleEditor(){
  FinalAuditFiles files;Fixture f;fa23Kit(f);auto& view=fa23Open(f);
- click(view,650.625,470.);VSTGUI::CPoint point(650.625,470.);view.onMouseUp(point,{});
+ click(view,650.625,420.);VSTGUI::CPoint point(650.625,420.);view.onMouseUp(point,{});
  check(IntegrationAccess::sampleEditorDraft(view).gain==.5f,"FA23 actual gain control fixture");
  const auto replacement=constantStereo(-.125f,.375f);
  check(f.c->loadWav(0,files.write("new-source.wav",replacement))==Controller::LoadStatus::Accepted,
        "FA23 peer replacement rejected");
  check(auditReturnedKit(*f.p).sampleEdits[0].end==0,"FA23 replacement did not reset edit");
- click(view,850.,562.); // Old editor presses UEBERNEHMEN after peer source change.
+ click(view,990.,470.); // New editor APPLY after peer source change.
  const auto saved=auditReturnedKit(*f.p);
  check(saved.wav[0]==replacement&&saved.sampleEdits[0].end==0,
        "FA23 stale draft was silently committed to a different source asset");
