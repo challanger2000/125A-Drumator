@@ -154,6 +154,11 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    auditionStopGeneration_.fetch_add(1,std::memory_order_acq_rel);
    auditionStart_.store(false,std::memory_order_release);
    auditionStop_.store(true,std::memory_order_release);
+   // Publish STOP as one linearized command, not three independent flags.
+   auto current=auditionCommand_.load(std::memory_order_relaxed);
+   while(!auditionCommand_.compare_exchange_weak(
+       current,((current>>1)+1u)<<1,
+       std::memory_order_release,std::memory_order_relaxed)){}
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.EditorPreview")==0){
@@ -193,6 +198,11 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    (void)stale;
    if(!auditionExchange_.publish(0,prepared))return Steinberg::kResultFalse;
    auditionStart_.store(true,std::memory_order_release);
+   // Asset publication precedes a single atomic START generation.
+   auto current=auditionCommand_.load(std::memory_order_relaxed);
+   while(!auditionCommand_.compare_exchange_weak(
+       current,((((current>>1)+1u)<<1)|1u),
+       std::memory_order_release,std::memory_order_relaxed)){}
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.SampleEditorCommit")==0) {
@@ -860,6 +870,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
  const auto auditionGeneration=auditionStopGeneration_.load(std::memory_order_acquire);
  const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);
+ // Keep the legacy probe point for existing FA23/FR01 instrumentation.
+ // The authoritative ordered event is auditionCommand_, never fireAudition.
+ const auto commandBeforeAdopt=auditionCommand_.load(std::memory_order_acquire);
  auditionExchange_.audioAdopt(auditionVoices_,processSetup.sampleRate);
  triggers_.clear();
  // Collect MIDI A-H and host automation before scheduling. Fixed storage
@@ -1094,10 +1107,20 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                                    stemsL.data(),stemsR.data());
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
- if(auditionStop_.exchange(false,std::memory_order_acq_rel))auditionVoices_.reset();
- const bool validAuditionStart=fireAudition&&
-    auditionGeneration==auditionStopGeneration_.load(std::memory_order_acquire);
- if(validAuditionStart)auditionVoices_.reset();
+ (void)auditionGeneration;
+ (void)fireAudition;
+ (void)auditionStop_.exchange(false,std::memory_order_acq_rel);
+ // A command changed during adoption is deferred, never consumed against
+ // an older sample. A later STOP always supersedes earlier START commands.
+ const auto commandNow=auditionCommand_.load(std::memory_order_acquire);
+ const bool stableCommand=commandNow==commandBeforeAdopt;
+ const bool pendingCommand=commandNow!=lastAudioAuditionCommand_;
+ const bool stopCommand=pendingCommand&&(commandNow&1u)==0u;
+ const bool validAuditionStart=stableCommand&&pendingCommand&&
+                                (commandNow&1u)!=0u;
+ if(stopCommand||validAuditionStart)auditionVoices_.reset();
+ if(stopCommand||validAuditionStart)
+    lastAudioAuditionCommand_=commandNow;
  Trigger one{};one.row=0;one.velocity=127;
  const auto audition=auditionVoices_.render(validAuditionStart?&one:nullptr,validAuditionStart?1:0,
     auditionLeft_.data(),auditionRight_.data(),static_cast<std::uint32_t>(data.numSamples));
