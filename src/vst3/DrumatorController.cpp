@@ -25,6 +25,26 @@
 #include <vector>
 
 namespace drumator {
+Controller::~Controller() {
+ if(reservedPreviewStop_) {
+   reservedPreviewStop_->release();
+   reservedPreviewStop_=nullptr;
+ }
+}
+bool Controller::reservePreviewStop() noexcept {
+ if(reservedPreviewStop_)return true;
+ Steinberg::Vst::IMessage* candidate=nullptr;
+ try {
+   candidate=allocateMessage();
+   if(!candidate)return false;
+   candidate->setMessageID("Drumator.EditorPreviewStop");
+   reservedPreviewStop_=candidate;
+   return true;
+ }catch(const std::bad_alloc&) {
+   if(candidate)candidate->release();
+   return false;
+ }
+}
 // FNV-1a used only for control-side asset identity (not a security hash).
 static std::uint64_t wavIdentity(const std::vector<std::uint8_t>& data) noexcept {
  std::uint64_t h=14695981039346656037ull;
@@ -905,6 +925,10 @@ bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
 bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
                                    std::uint32_t revision){
  if(row>=kRows||edit.end==0)return false;
+ // An accepted preview must always have an allocation-free STOP path.
+ // A previous rejected STOP must be delivered before accepting another START.
+ if(previewStopPending_&&!stopSampleEditPreview())return false;
+ if(!reservePreviewStop())return false;
  Steinberg::Vst::IMessage* msg=nullptr;
  try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
  if(!msg)return false;
@@ -926,17 +950,17 @@ bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
  }catch(const std::bad_alloc&){return false;}
 }
 bool Controller::stopSampleEditPreview(){
- Steinberg::Vst::IMessage* msg=nullptr;
+ // Reusing the reserved IMessage avoids any STOP-time SDK allocation.
+ // The pending flag keeps a rejected command eligible for a later retry.
+ if(!reservedPreviewStop_)return true; // no preview was ever accepted
+ previewStopPending_=true;
  try {
-   msg=allocateMessage();
-   if(!msg)return false;
-   struct MessageOwner {Steinberg::Vst::IMessage* value;
-     ~MessageOwner(){if(value)value->release();}} owner{msg};
-   msg->setMessageID("Drumator.EditorPreviewStop");
-   return sendMessage(msg)==Steinberg::kResultOk;
- }catch(const std::bad_alloc&) {
-   return false;
- }
+   if(sendMessage(reservedPreviewStop_)==Steinberg::kResultOk) {
+     previewStopPending_=false;
+     return true;
+   }
+ }catch(const std::bad_alloc&) { /* retain pending STOP on rejected delivery */ }
+ return false;
 }
 bool Controller::previewSample(std::size_t row) {
  if(row>=visibleRows_)return false;

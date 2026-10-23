@@ -5,7 +5,8 @@ namespace drumator::qa {
 extern thread_local bool legacyTriggerOrdering; // regression negative, test EXE only
 enum class AuditMutation { none, suppressZeroStop, staleDuration, skipPeerCommit,
  basenameOnly, delayMidiOne, dropMidi, doubleMidi, zeroPrefix,
- skipImport, muteImportedProcessor, delayImportedProcessor };
+ skipImport, muteImportedProcessor, delayImportedProcessor,
+ rejectPreviewStop };
 extern std::atomic<AuditMutation> auditMutation;
 extern std::atomic<const void*> auditImportTarget;
 extern std::atomic<unsigned> auditImportCalls,auditDelayCalls;

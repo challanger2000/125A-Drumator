@@ -177,14 +177,43 @@ void testRv01RestartAfterStopDuringAudioStart(){
  std::jthread actor([&]{result=f.p->process(audio.data);});
  waitEntered();
  check(f.c->stopSampleEditPreview(),"RV01 STOP not delivered");
- check(f.c->previewSampleEdit(0,edit),"RV01 newer preview rejected");
+ auto editB=edit;
+ editB.gain=.5f; // distinguish the new request from the superseded source
+ check(f.c->previewSampleEdit(0,editB),"RV01 newer preview rejected");
  releaseProbe();actor.join();
  check(result==kResultOk&&!probeTimeout,"RV01 competing preview interleave did not finish");
- const bool heardNow=audio.left[80]!=0.f||audio.right[80]!=0.f;
+ const bool bNow=audio.left[80]==.125f&&audio.right[80]==-.25f;
  check(f.p->process(audio.data)==kResultOk,"RV01 followup process rejected");
- const bool heardNext=audio.left[80]!=0.f||audio.right[80]!=0.f;
- check(heardNow||heardNext,
-       "RV01 newer preview was lost after completed STOP");
+ const bool bNext=audio.left[80]==.125f&&audio.right[80]==-.25f;
+ check(bNow||bNext,
+       "RV01 superseded audio A was played or newer source B was lost");
+}
+void testRv02AllocationFreeStopAndRetry(){
+ Fixture f;fa23Kit(f);AuditAudioBlock audio;
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)) &&
+       f.p->process(audio.data)==kResultOk && audio.left[80]==.25f,
+       "RV02 initial audition failed");
+ // The stop is already reserved: fail the very next potential allocation.
+ allocationFail=0;
+ bool escaped=false,stopped=false;
+ try {stopped=f.c->stopSampleEditPreview();}
+ catch(const std::bad_alloc&){escaped=true;}
+ allocationFail=-1;
+ check(!escaped&&stopped,"RV02 STOP depended on late host allocation");
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f,
+       "RV02 allocation-free STOP did not silence active audition");
+ check(f.c->previewSampleEdit(0,SampleEdit::reset(1024)) &&
+       f.p->process(audio.data)==kResultOk && audio.left[80]==.25f,
+       "RV02 restart audition failed");
+ qa::auditMutation=qa::AuditMutation::rejectPreviewStop;
+ const bool rejected=f.c->stopSampleEditPreview();
+ qa::auditMutation=qa::AuditMutation::none;
+ check(!rejected,"RV02 rejected STOP falsely reported success");
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
+       "RV02 rejected STOP not actually exercised against an active preview");
+ check(f.c->stopSampleEditPreview(),"RV02 pending STOP could not be retried");
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f,
+       "RV02 retried STOP left audition audible");
 }
 void testFr02ControllerMessageOOM(){
  Fixture f;fa23Kit(f);

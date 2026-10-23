@@ -22,6 +22,7 @@ public:
  static Steinberg::FUnknown* createInstance(void*) {
    return static_cast<Steinberg::Vst::IEditController*>(new Controller());
  }
+ ~Controller() override;
  Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream*) SMTG_OVERRIDE;
@@ -130,7 +131,11 @@ public:
 private:
  void notifyViews(bool relayout);
  bool processorConfirmsPattern(unsigned requested);
+ bool reservePreviewStop() noexcept;
  void invalidateTransientEditsForRecall() noexcept;
+ // Reusable STOP command is reserved before any audition can start.
+ Steinberg::Vst::IMessage* reservedPreviewStop_{nullptr};
+ bool previewStopPending_{false};
  std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
