@@ -452,6 +452,53 @@ void testReauditLoadedSwap(){
  check(actualDeadlineMisses==0,
        "RE09 paced 64-voice live imports exceeded 48k/64 audio deadline");
 }
+
+void testA24ComponentFirstDzm3OriginConsumed(){
+ FinalAuditFiles files;
+ const auto first=constantStereo(.25f,-.5f);
+ const auto replacement=constantStereo(-.125f,.375f);
+ const auto oldPath=files.write("kick.wav",first);
+ std::vector<std::uint8_t> processorBytes,controllerBytes;
+ {
+   Fixture source;
+   KitState empty;empty.visible=1;empty.grid.fill(0);
+   source.kit(empty);prepareAudio(*source.p);
+   check(source.c->loadWav(0,oldPath)==Controller::LoadStatus::Accepted,
+         "A24 actual original WAV import");
+   processorBytes=Fixture::encode(auditReturnedKit(*source.p));
+   controllerBytes=finalAuditControllerBytes(*source.c);
+   check(!processorBytes.empty()&&!controllerBytes.empty(),
+         "A24 proper VST3 state sources");
+ }
+ // Both legal host stream orders, using fresh real Processor/Controller.
+ for(const bool componentFirst:{true,false}){
+   Fixture dest;
+   qa::ByteStream proc(processorBytes.data(),processorBytes.size());
+   check(dest.p->setState(&proc)==kResultOk,
+         "A24 fresh host Processor state");
+   if(componentFirst)
+     check(dest.recall(processorBytes)==kResultOk,
+           "A24 paired Component-first restore");
+   check(finalAuditControllerRecall(*dest.c,controllerBytes)==kResultOk,
+         "A24 paired DZM3 Controller restore");
+   if(!componentFirst)
+     check(dest.recall(processorBytes)==kResultOk,
+           "A24 paired Controller-first restore");
+   check(IntegrationAccess::paths(*dest.c)[0]==oldPath,
+         "A24 paired state lost valid WAV folder navigation");
+   // No accompanying DZM3 state this time: a NEW project has a different
+   // embedded WAV with the exact same filename. Its previous folder MUST
+   // not remain an authorized origin for Prev/Next.
+   auto different=auditReturnedKit(*dest.p);
+   different.names[0]="kick.wav";
+   different.wav[0]=replacement;
+   check(dest.recall(Fixture::encode(different))==kResultOk,
+         "A24 independent Component-only new asset recall");
+   check(IntegrationAccess::paths(*dest.c)[0].empty(),
+         "A24 old folder was incorrectly carried to different PCM after paired DZM3");
+ }
+}
+
 void testReauditDeadlineMatrix(){
  using Clock=std::chrono::steady_clock;
  for(std::uint32_t rate:{44100u,48000u})for(std::uint32_t ratio:{4u,16u}){

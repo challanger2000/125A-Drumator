@@ -19,6 +19,8 @@ function(reaudit_instrument name variable)
     # the host-verified Cycle bounds must fail exact native PCM comparison.
     qa_replace(_code "if(explicitStop||(suppliedContext&&"
       "if(explicitStop||((drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::keepCycleOnPartialDisable)&&suppliedContext&&")
+    qa_replace(_code "inferred.projectTimeMusic=partialPpqValid?"
+      "inferred.projectTimeMusic=(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::ignoreValidPartialPpq?false:partialPpqValid)?")
     qa_replace(_code "inferred.tempo=partialTempoValid?suppliedContext->tempo:lastClockTempo_;"
       "inferred.tempo=(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::ignorePartialTempo?false:partialTempoValid)?suppliedContext->tempo:lastClockTempo_;")
     qa_replace(_code "if(haveCycleBounds_) {\n     const double cycleLength"
@@ -69,6 +71,8 @@ function(reaudit_instrument name variable)
       "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::patternQueryOOM)throw std::bad_alloc{};\n   msg->setMessageID(\"Drumator.QueryPattern\");")
     qa_replace(_code "if(strokePattern_<kPatterns&&strokeOwner_!=owner)"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::skipPeerCommit&&\n    strokePattern_<kPatterns&&strokeOwner_!=owner)")
+    qa_replace(_code "pathsRestoredBeforeComponent_=!pairedComponentFirst;"
+      "pathsRestoredBeforeComponent_=!pairedComponentFirst||drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::keepComponentFirstOriginArmed;")
     qa_replace(_code "if(!sameName||(!pathsRestoredBeforeComponent_&&"
       "if(!sameName||(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::basenameOnly&&\n                     !pathsRestoredBeforeComponent_&&")
   elseif(name STREQUAL "DrumatorView")

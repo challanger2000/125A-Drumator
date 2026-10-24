@@ -861,6 +861,51 @@ void testA22SongSnapshotBoundedByHostCallbacks(){
        "A22 Song playback failed to preserve eight genuine overlapped voices");
 }
 
+
+void testA23AuthoritativePpqSurvivesMissingTempo(){
+ constexpr auto full=ProcessContext::kPlaying|
+   ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ for(unsigned mode=0;mode<2;++mode){
+   Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);
+   kit.names[0]="partial-ppq.wav";
+   kit.wav[0]=a14LongConstant(.125f,-.25f);
+   f.kit(kit);prepareAudio(*f.p);
+   AuditAudioBlock audio;audio.clock.state=full;
+   audio.clock.projectTimeMusic=4.;audio.clock.tempo=120.;
+   EventList events;Event note{};note.type=Event::kNoteOnEvent;
+   note.noteOn.pitch=36;note.noteOn.velocity=1.f;note.noteOn.noteId=-1;
+   check(events.addEvent(note)==kResultOk,"A23 real MIDI trigger setup");
+   audio.data.inputEvents=&events;
+   check(f.p->process(audio.data)==kResultOk,"A23 first host clock");
+   check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+         "A23 setup did not start one actual sample voice");
+   // The host still supplies an authoritative PPQ while withholding tempo.
+   // Mode 0: locate four beats, so the old sound MUST be retired.
+   // Mode 1: exactly continuous PPQ, so that tail MUST survive.
+   audio.data.inputEvents=nullptr;
+   audio.clock.state=ProcessContext::kPlaying|
+                     ProcessContext::kProjectTimeMusicValid;
+   audio.clock.tempo=std::numeric_limits<double>::quiet_NaN();
+   audio.clock.projectTimeMusic=mode==0?8.:4.+256./24000.;
+   check(f.p->process(audio.data)==kResultOk,
+         "A23 host PPQ valid but tempo absent");
+   const float left=mode==0?0.f:.125f;
+   for(unsigned i=0;i<256;++i)
+     check(audio.left[i]==left&&audio.right[i]==-2.f*left,
+           "A23 ignored authoritative PPQ during missing-tempo callback");
+   check(IntegrationAccess::activeAudioVoices(*f.p)==(mode==0?0u:1u),
+         "A23 partial clock falsely retained or dropped a sample voice");
+   // Full host-time recovery must not resurrect a previously retired voice.
+   audio.clock.state=full;audio.clock.tempo=120.;
+   audio.clock.projectTimeMusic+=256./24000.;
+   check(f.p->process(audio.data)==kResultOk,
+         "A23 full clock after partial PPQ");
+   for(unsigned i=0;i<256;++i)
+     check(audio.left[i]==left&&audio.right[i]==-2.f*left,
+           "A23 full-host resync altered a correctly preserved PCM tail");
+ }
+}
+
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

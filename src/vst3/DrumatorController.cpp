@@ -204,19 +204,23 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  if(!zoomRecallIsAtomic(needed))return Steinberg::kResultFalse;
  if(target&&!target->applyZoomFromState(requested))return Steinberg::kResultFalse;
  preferredZoom_=requested;
- // A component restored immediately before this controller stream completes
- // the other legal host order. Never leave a one-shot origin permission armed.
- // A fresh explicit DZM3 origin must not be consumed by an unrelated
- // earlier Component-only restore. Once a new controller-origin stream
- // differs from the prior component's retained paths, the following
- // Component stream belongs to the new project recall.
- const bool newExplicitOrigin=magic==kPathState&&
-      std::any_of(candidatePaths.begin(),candidatePaths.end(),
-                  [](const auto& p){return !p.empty();})&&
-      candidatePaths!=samplePaths_;
- pathsRestoredBeforeComponent_=!componentStatePendingController_||newExplicitOrigin;
+ // Both VST3 state orderings are legal. Controller-first allows exactly
+ // ONE forthcoming Component restore to retain DZM3 paths. Component-first
+ // has ALREADY completed that pairing: newly populated paths must never
+ // arm an unrelated future Component-only restore.
+ const bool pairedComponentFirst=componentStatePendingController_;
+ pathsRestoredBeforeComponent_=!pairedComponentFirst;
  componentStatePendingController_=false;
  samplePaths_.swap(candidatePaths);
+ if(pairedComponentFirst) {
+   // The component just provided each row's PCM identity. The paired DZM3
+   // now provides its optional path; associate them so an unchanged
+   // Component-only recall can safely retain the path by identical bytes.
+   for(std::size_t row=0;row<kRows;++row) {
+     if(!samplePresent_[row])samplePaths_[row].clear();
+     originIdentityValid_[row]=!samplePaths_[row].empty();
+   }
+ }
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {

@@ -10,7 +10,8 @@ enum class AuditMutation { none, suppressZeroStop, staleDuration, skipPeerCommit
  oldFadeRenderer, oldKnobDrawCenters, loadRepaintOOM, refreshViewsOOM, disableWaveCache, bypassWaveRangeIndex, suppressMissingContextCarry,
  skipCycleSplit, skipCycleVelocityMap, skipCycleModulo,
  suppressCycleClockCache, freezeCycleTempo,
- keepCycleOnPartialDisable, ignorePartialTempo, repeatSongSnapshots };
+ keepCycleOnPartialDisable, ignorePartialTempo, repeatSongSnapshots,
+ ignoreValidPartialPpq, keepComponentFirstOriginArmed };
 extern std::atomic<AuditMutation> auditMutation;
 extern std::atomic<unsigned> auditSongScheduleCalls;
 extern std::atomic<unsigned> auditSongPatternSnapshots;

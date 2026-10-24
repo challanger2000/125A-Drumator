@@ -935,7 +935,14 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    inferred.state=Steinberg::Vst::ProcessContext::kPlaying|
                   Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
                   Steinberg::Vst::ProcessContext::kTempoValid;
-   inferred.projectTimeMusic=expectedNextPpq_;
+   // Validity flags are independent: a host can locate with valid PPQ
+   // while the tempo field is temporarily unavailable. Never overwrite an
+   // authoritative position with an extrapolated value in that case.
+   const bool partialPpqValid=suppliedContext&&
+     (suppliedContext->state&Steinberg::Vst::ProcessContext::kProjectTimeMusicValid)!=0&&
+     std::isfinite(suppliedContext->projectTimeMusic);
+   inferred.projectTimeMusic=partialPpqValid?
+       suppliedContext->projectTimeMusic:expectedNextPpq_;
    // A host can provide the *current* tempo while PPQ is unavailable.
    // The position at this callback's start was advanced with the previous
    // block's tempo; all samples in this callback use the new valid tempo.
