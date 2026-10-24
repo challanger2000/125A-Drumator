@@ -20,6 +20,7 @@
 #include "core/RowMixControl.h"
 #include "core/Utf8Path.h"
 #include "vstgui/lib/cdrawcontext.h"
+#include "vstgui/lib/cbitmap.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cfont.h"
@@ -363,6 +364,7 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
         x<UiCompactLayout::sample.right;
 }
 DrumatorView::~DrumatorView() {
+ if(backgroundBitmap_){backgroundBitmap_->forget();backgroundBitmap_=nullptr;}
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
  controller_.unregisterView(this);
 }
@@ -561,12 +563,17 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  setMouseEnabled(true);
  // The view itself owns the drop-target interface, as in Phraseator.
  controller_.registerView(this);
+ backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("abstraktes_blaues_metall_mit_sanftem_glanz.png"));
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  const auto bottom=gridBottom();
  const auto fullHeight=getViewSize().getHeight();
  c->setFillColor(background);
  c->drawRect({0,0,1280,fullHeight},VSTGUI::kDrawFilled);
+ // Draw the approved blue metal texture in logical pixels; host zoom transforms it.
+ // The source is 1672x941, larger than the 1280x850 maximum editor area.
+ if(backgroundBitmap_ && backgroundBitmap_->getWidth()>0 && backgroundBitmap_->getHeight()>0)
+   backgroundBitmap_->draw(c,{0,0,1280,fullHeight});
  c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
  c->drawString("125A DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
  drawBrandLogo(c);
