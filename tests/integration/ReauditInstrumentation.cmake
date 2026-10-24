@@ -95,11 +95,11 @@ function(reaudit_instrument name variable)
     # RV05: replay the three historical hard-coded draw centers.
     # Input hit detection retains its corrected shared layout coordinates.
     qa_replace(_code "drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[0],76"
-      "drawRotary(c,(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::oldKnobDrawCenters?80.:UiCompactLayout::globalKnobCenters[0]),76")
+      "drawRotary(c,knobBitmap_,(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::oldKnobDrawCenters?80.:UiCompactLayout::globalKnobCenters[0]),76")
     qa_replace(_code "drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[1],76"
-      "drawRotary(c,(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::oldKnobDrawCenters?178.:UiCompactLayout::globalKnobCenters[1]),76")
+      "drawRotary(c,knobBitmap_,(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::oldKnobDrawCenters?178.:UiCompactLayout::globalKnobCenters[1]),76")
     qa_replace(_code "drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[2],76"
-      "drawRotary(c,(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::oldKnobDrawCenters?1178.:UiCompactLayout::globalKnobCenters[2]),76")
+      "drawRotary(c,knobBitmap_,(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::oldKnobDrawCenters?1178.:UiCompactLayout::globalKnobCenters[2]),76")
   endif()
   set(${variable} "${_code}" PARENT_SCOPE)
 endfunction()
