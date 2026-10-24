@@ -426,6 +426,84 @@ static void testHighRatio64VoiceStress() {
  // qualification. Host-specific scheduling must be measured in Studio One.
  require(elapsed<20.0,"F14 stress exceeded 20-second CI safety ceiling");
 }
+
+static void testSincMemo64VoicesAgainstIndependentScalarPcm(bool stagger) {
+ // Independent scalar reference, no convolution reuse. Four hits/row
+ // either coincide or occur at four distinct sample offsets. The latter
+ // makes accidental reuse across differing source positions audible.
+ constexpr std::size_t sourceFrames=8192,frames=256,voices=64;
+ std::vector<float> leftPcm(kRows*sourceFrames),rightPcm(kRows*sourceFrames);
+ for(std::size_t row=0;row<kRows;++row)
+   for(std::size_t n=0;n<sourceFrames;++n){
+     const auto index=row*sourceFrames+n;
+     leftPcm[index]=static_cast<float>(
+       static_cast<int>((n*17+row*31)%97)-48)/64.f;
+     rightPcm[index]=static_cast<float>(
+       static_cast<int>((n*23+row*19)%83)-41)/64.f;
+   }
+ SincKernel sinc;
+ require(sinc.prepare(16.)&&sinc.taps()==256,
+         "F16 16x prepared sinc kernel");
+ SampleVoiceEngine engine;
+ require(engine.setOutputRate(48000.),"F16 PCM engine setup");
+ std::array<SampleEdit,kRows> edits{};
+ std::array<float,kRows> gains{};
+ for(std::size_t row=0;row<kRows;++row){
+   const auto start=static_cast<std::uint32_t>(row*3);
+   edits[row]={start,6900u,static_cast<std::uint32_t>(32+row),0,
+               static_cast<float>(1.f+static_cast<float>(row%4)*.125f)};
+   gains[row]=static_cast<float>(.5f+static_cast<float>(row%5)*.25f);
+   RowSound sound{};
+   sound.sample={leftPcm.data()+row*sourceFrames,
+                 row%3==0?nullptr:rightPcm.data()+row*sourceFrames,
+                 sourceFrames};
+   sound.edit=edits[row];sound.kernel=&sinc;sound.gain=gains[row];
+   require(engine.setRow(row,sound),"F16 install independent mono/stereo rows");
+ }
+ std::array<Trigger,voices> hits{};
+ for(std::size_t i=0;i<voices;++i)
+   hits[i]={static_cast<std::uint32_t>(stagger?8u*(i/kRows):0u),
+            static_cast<std::uint8_t>(i%kRows),0,127,0};
+ std::array<float,frames> left{},right{};
+ const auto actual=engine.render(hits.data(),hits.size(),
+                                 left.data(),right.data(),frames);
+ require(actual.status==RenderStatus::Ok&&actual.accepted==voices&&
+         actual.activeVoices==voices,
+         "F16 64 overlapping high-ratio voices not active");
+ for(std::size_t frame=0;frame<frames;++frame){
+   double expectedL=0.0,expectedR=0.0;
+   for(std::size_t n=0;n<voices;++n){
+     if(frame<hits[n].sampleOffset)continue;
+     const auto row=n%kRows;
+     const auto& edit=edits[row];
+     const auto base=static_cast<std::int64_t>(
+         edit.start+16u*(frame-hits[n].sampleOffset));
+     const auto first=base-static_cast<std::int64_t>(sinc.taps()/2-1);
+     const auto* srcL=leftPcm.data()+row*sourceFrames;
+     const auto* srcR=row%3==0?nullptr:rightPcm.data()+row*sourceFrames;
+     const auto* coeff=sinc.phase(0);
+     double vl=0.0,vr=0.0;
+     for(std::size_t k=0;k<sinc.taps();++k){
+       const auto index=first+static_cast<std::int64_t>(k);
+       if(index<static_cast<std::int64_t>(edit.start)||
+          static_cast<std::uint64_t>(index)>=edit.end)continue;
+       const auto at=static_cast<std::size_t>(index);
+       const double w=static_cast<double>(coeff[k]);
+       vl+=static_cast<double>(srcL[at])*w;
+       if(srcR)vr+=static_cast<double>(srcR[at])*w;
+     }
+     if(!srcR)vr=vl;
+     const double amp=static_cast<double>(
+       edit.amplitude(static_cast<std::uint32_t>(base)));
+     expectedL+=static_cast<float>(vl*static_cast<double>(gains[row])*amp);
+     expectedR+=static_cast<float>(vr*static_cast<double>(gains[row])*amp);
+   }
+   require(left[frame]==static_cast<float>(expectedL)&&
+           right[frame]==static_cast<float>(expectedR),
+           "F16 per-row sinc memo differs from independent 64-voice PCM");
+ }
+}
+
 static void testRatioPerformanceComparison() {
  // Identical 64-voice/256-frame workloads: mono and true 2-channel
  // separately, not just mono results extrapolated to all sample types.
@@ -629,7 +707,7 @@ int main() {
   }
   testNondestructiveSampleEdits();testMuteSoloPolicy();testHighRatioSincRejection();testKernel();testRowMix();testRetriggerAndMute();testSampleSwapLifetime();
   testChokeAndStereo();testChokeSplitBlockEquivalence();testRejectedChokeDoesNotFadeVoices();testCapacityValidationAndAutomation();testBandlimiting();
-  testUnityRateExactPCM();testMonoSincBitIdentityWithDualMonoStereo();testStressAndRecovery();testHighRatio64VoiceStress();testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
+  testUnityRateExactPCM();testMonoSincBitIdentityWithDualMonoStereo();testStressAndRecovery();testHighRatio64VoiceStress();testSincMemo64VoicesAgainstIndependentScalarPcm(false);testSincMemo64VoicesAgainstIndependentScalarPcm(true);testRatioPerformanceComparison();testStemWithoutMain();testSimultaneousStereoStems();testAssignableOutput();testTwoRowsOneBus();
   std::cout<<"::notice title=125A Drumator voice QA::Sample-voice test sequence completed PASS\n";
   return 0;
  } catch(const std::exception& ex) {

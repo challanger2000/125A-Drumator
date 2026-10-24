@@ -200,9 +200,25 @@ public:
              std::fill_n(stemRight[bus],frames,0.f);
            }
         }
+        // Frame-local interpolation memo: simultaneous retriggers of the
+        // same row can share their *unscaled* sinc convolution when the PCM,
+        // SRC kernel, trim boundaries and fractional source position match.
+        // Envelopes, pan, gain, voice lifetime and output routing remain
+        // per voice. Fixed 16-entry scratch; no allocations or locks.
+        struct SincMemo {
+            const float* left{nullptr};
+            const float* right{nullptr};
+            const SincKernel* kernel{nullptr};
+            double position{0.0}, leftValue{0.0}, rightValue{0.0};
+            std::uint32_t trimStart{0},trimEnd{0};
+            bool valid{false};
+        };
+        std::array<SincMemo,kRows> memo{};
         RenderResult result{};
         std::size_t event=0;
         for(std::uint32_t f=0;f<frames;++f) {
+            // The same frame's convolution can be reused, never across frames.
+            for(auto& entry:memo)entry.valid=false;
             while(event<triggerCount&&triggers[event].sampleOffset==f) {
                 fire(triggers[event],result);
                 ++event;
@@ -226,6 +242,15 @@ public:
                     vr=static_cast<double>(voice.sample.right?
                                            voice.sample.right[at]:
                                            voice.sample.left[at]);
+                }else {
+                auto& cached=memo[voice.row];
+                if(cached.valid&&cached.left==voice.sample.left&&
+                   cached.right==voice.sample.right&&
+                   cached.kernel==voice.kernel&&cached.position==x&&
+                   cached.trimStart==voice.edit.start&&
+                   cached.trimEnd==voice.edit.end) {
+                    vl=cached.leftValue;
+                    vr=cached.rightValue;
                 }else {
                 const double fractional=x-static_cast<double>(base);
                 const auto phase=std::min<std::size_t>(
@@ -281,6 +306,18 @@ public:
                         }
                         vr=vl; // Same zero-padding and arithmetic as mono L.
                     }
+                }
+                // A cache hit skips only the sinc convolution, not envelope
+                // or sample ageing. Keep the original tap accumulation order.
+                cached.left=voice.sample.left;
+                cached.right=voice.sample.right;
+                cached.kernel=voice.kernel;
+                cached.position=x;
+                cached.trimStart=voice.edit.start;
+                cached.trimEnd=voice.edit.end;
+                cached.leftValue=vl;
+                cached.rightValue=vr;
+                cached.valid=true;
                 }
                 }
                 double envelope=1.0;
