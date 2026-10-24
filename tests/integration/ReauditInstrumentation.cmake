@@ -33,7 +33,7 @@ function(reaudit_instrument name variable)
     qa_replace(_code "if(editorWaveRow_==row&&"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::disableWaveCache&&editorWaveRow_==row&&")
     qa_replace(_code "if(!hit) {\n     const void* bytes=nullptr;"
-      "if(!hit) {\n     ++drumator::qa::auditWaveDecodeMisses;\n     const void* bytes=nullptr;"
+      "if(!hit) {\n     ++drumator::qa::auditWaveDecodeMisses;\n     const void* bytes=nullptr;")
     qa_replace(_code "view->refreshFromHost(relayout);"
       "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::refreshViewsOOM){++drumator::qa::auditViewRefreshFaultHits;throw std::bad_alloc{};}view->refreshFromHost(relayout);")
     qa_replace(_code "try {notifyViews(false);}catch(...) { /* committed; next repaint refreshes */ }"
