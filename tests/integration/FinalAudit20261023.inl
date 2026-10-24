@@ -319,6 +319,74 @@ void testA11CycleWrapPreservesSampleTails(){
          "A11 active voices inconsistent with measured PCM");
  }
 }
+
+void testA12CycleWrapMidBlockAndNegativeControls(){
+ // A 2048-frame WAV rings over a 1152-frame loop ending HALF-WAY
+ // through a 256-frame callback. The next real host PPQ must include
+ // the 128-frame overshoot rather than equal the raw cycle start.
+ auto wav=constantStereo(.125f,-.25f);
+ const auto original=wav;
+ wav.insert(wav.end(),original.begin()+44,original.end());
+ auto put32=[&](std::size_t at,std::uint32_t value){
+   for(unsigned i=0;i<4;++i)
+     wav[at+i]=static_cast<std::uint8_t>(value>>(i*8));
+ };
+ put32(4,static_cast<std::uint32_t>(wav.size()-8));
+ put32(40,static_cast<std::uint32_t>(wav.size()-44));
+ constexpr auto playing=ProcessContext::kPlaying|
+     ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ constexpr auto cycle=ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ constexpr double cycleStart=4.0; // bar two / nonzero project position
+ const double trueCycleEnd=cycleStart+1152.0/24000.0;
+ for(unsigned mode=0;mode<4;++mode){
+   // 0: valid cycle with overshoot, 1: cycle flag without valid bounds,
+   // 2: incorrect cycle end, 3: unflagged locate.
+   Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+   kit.grid[0]=127;kit.names[0]="cycle-offset.wav";kit.wav[0]=wav;
+   f.kit(kit);prepareAudio(*f.p);
+   AuditAudioBlock audio;
+   audio.clock.tempo=120.;
+   audio.clock.cycleStartMusic=cycleStart;
+   audio.clock.cycleEndMusic=mode==2?trueCycleEnd-102.0/24000.0:trueCycleEnd;
+   audio.clock.state=playing|(mode==0||mode==2?cycle:
+                                (mode==1?ProcessContext::kCycleActive:0));
+   for(unsigned block=0;block<5;++block){
+     audio.clock.projectTimeMusic=cycleStart+block*256.0/24000.0;
+     check(f.p->process(audio.data)==kResultOk,"A12 before loop PCM");
+     for(unsigned frame=0;frame<256;++frame)
+       check(audio.left[frame]==.125f&&audio.right[frame]==-.25f,
+             "A12 positive old sample tail invalid");
+   }
+   check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+         "A12 sample tail absent before cycle");
+   // The loop began in the previous block, so no grid hit starts at the
+   // next block's slightly offset PPQ. Trigger the new beat via real MIDI
+   // to prove that the old tail truly survives beside the new one.
+   EventList notes;Event hit{};
+   hit.type=Event::kNoteOnEvent;hit.sampleOffset=0;hit.noteOn.pitch=36;
+   hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+   check(notes.addEvent(hit)==kResultOk,"A12 MIDI hit fixture");
+   audio.data.inputEvents=&notes;
+   audio.clock.projectTimeMusic=cycleStart+128.0/24000.0;
+   check(f.p->process(audio.data)==kResultOk,"A12 wrapped block");
+   const bool confirmed=mode==0;
+   for(unsigned frame=0;frame<256;++frame)
+     check(audio.left[frame]==(confirmed?.25f:.125f)&&
+           audio.right[frame]==(confirmed?-.5f:-.25f),
+           "A12 genuine nonaligned Cycle cut tail or invalid Cycle kept tail");
+   check(IntegrationAccess::activeAudioVoices(*f.p)==(confirmed?2u:1u),
+         "A12 PCM and active voices disagree");
+   audio.data.inputEvents=nullptr;
+   audio.clock.state=cycle; // no kPlaying = explicit STOP, even in Cycle
+   check(f.p->process(audio.data)==kResultOk,"A12 explicit STOP");
+   for(unsigned frame=0;frame<256;++frame)
+     check(audio.left[frame]==0.f&&audio.right[frame]==0.f,
+           "A12 actual STOP left a cycle tail audible");
+   check(IntegrationAccess::activeAudioVoices(*f.p)==0,
+         "A12 explicit STOP retained voice state");
+ }
+}
+
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

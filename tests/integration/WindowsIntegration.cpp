@@ -1974,6 +1974,7 @@ int main(int argc,char** argv){
  run("A09 native variable stereo waveform exact reference",testA09WaveformExtremaAgainstNativeReference);
  run("A10 context gap audio and step continuity",testA10MissingContextAudioContinuity);
  run("A11 verified Cycle tail vs Locate",testA11CycleWrapPreservesSampleTails);
+ run("A12 nonaligned Cycle wrap and negative controls",testA12CycleWrapMidBlockAndNegativeControls);
  run("RM18 missing-context old-cutoff regression is killed",[]{expectMutationKilled(qa::AuditMutation::suppressMissingContextCarry,"missing clock truncates hits",testA10MissingContextAudioContinuity);});
  run("RM17 direct-scan mutation is detected",[]{expectMutationKilled(qa::AuditMutation::bypassWaveRangeIndex,"linear scan instead of indexed bins",testA09WaveformExtremaAgainstNativeReference);});
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);

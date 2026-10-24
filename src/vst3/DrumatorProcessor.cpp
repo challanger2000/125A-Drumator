@@ -991,6 +991,16 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    // A genuine VST3 Cycle wrap is not a Locate. Preserve existing one-shot
    // tails at the loop seam, while the new cycle still schedules its notes.
    // Never infer Cycle from an unflagged backward project-position jump.
+   // A host may deliver its next block a few samples AFTER the loop
+   // start when the last processed block crossed the cycle end. Its reported
+   // PPQ then includes exactly that overshoot. Recognize this modular clock
+   // relationship, but reject unrelated locates and bogus cycle metadata.
+   const double cycleOvershoot=suppliedContext&&
+       std::isfinite(suppliedContext->cycleEndMusic)?
+       expectedNextPpq_-suppliedContext->cycleEndMusic:0.0;
+   const double maximumPriorBlockPpq=lastClockTempo_>0.0?
+       static_cast<double>(processSetup.maxSamplesPerBlock)*lastClockTempo_/
+       (60.0*rateForClock):0.0;
    const bool confirmedCycleWrap=transportJump&&suppliedContext&&
        (suppliedContext->state&
            (Steinberg::Vst::ProcessContext::kCycleActive|
@@ -1000,9 +1010,15 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        std::isfinite(suppliedContext->cycleStartMusic)&&
        std::isfinite(suppliedContext->cycleEndMusic)&&
        suppliedContext->cycleEndMusic>suppliedContext->cycleStartMusic&&
+       std::isfinite(maximumPriorBlockPpq)&&maximumPriorBlockPpq>0.0&&
+       std::isfinite(cycleOvershoot)&&
+       cycleOvershoot>=-expectedTolerance&&
+       cycleOvershoot<=maximumPriorBlockPpq+expectedTolerance&&
+       initialPpq>=suppliedContext->cycleStartMusic-expectedTolerance&&
+       initialPpq<suppliedContext->cycleEndMusic+expectedTolerance&&
        expectedNextPpq_>initialPpq&&
-       std::abs(initialPpq-suppliedContext->cycleStartMusic)<=expectedTolerance&&
-       std::abs(expectedNextPpq_-suppliedContext->cycleEndMusic)<=expectedTolerance;
+       std::abs(initialPpq-
+           (suppliedContext->cycleStartMusic+cycleOvershoot))<=expectedTolerance;
    if(transportJump&&!confirmedCycleWrap)voices_.reset();
    if(!haveExpectedPpq_||transportJump) {
       const double initialStep=std::floor(initialPpq*4.0+1e-8);
