@@ -988,7 +988,22 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    // Some hosts stop invoking process() while stopped. A subsequent backward
    // locate/restart must not carry old sample voices into the new timeline.
    // Ordinary continuous blocks and the first playing block are unaffected.
-   if(transportJump)voices_.reset();
+   // A genuine VST3 Cycle wrap is not a Locate. Preserve existing one-shot
+   // tails at the loop seam, while the new cycle still schedules its notes.
+   // Never infer Cycle from an unflagged backward project-position jump.
+   const bool confirmedCycleWrap=transportJump&&suppliedContext&&
+       (suppliedContext->state&
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid))==
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid)&&
+       std::isfinite(suppliedContext->cycleStartMusic)&&
+       std::isfinite(suppliedContext->cycleEndMusic)&&
+       suppliedContext->cycleEndMusic>suppliedContext->cycleStartMusic&&
+       expectedNextPpq_>initialPpq&&
+       std::abs(initialPpq-suppliedContext->cycleStartMusic)<=expectedTolerance&&
+       std::abs(expectedNextPpq_-suppliedContext->cycleEndMusic)<=expectedTolerance;
+   if(transportJump&&!confirmedCycleWrap)voices_.reset();
    if(!haveExpectedPpq_||transportJump) {
       const double initialStep=std::floor(initialPpq*4.0+1e-8);
       phaseOriginStep_=std::isfinite(initialStep)&&

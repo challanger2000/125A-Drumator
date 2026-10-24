@@ -276,6 +276,49 @@ void testA10MissingContextAudioContinuity(){
          "A10 explicit STOP ignored after fallback");
  }
 }
+
+void testA11CycleWrapPreservesSampleTails(){
+ // 2048-frame stereo 48k FLOAT32 WAV outlasts this deliberately short loop.
+ auto wav=constantStereo(.125f,-.25f);
+ const auto original=wav;
+ wav.insert(wav.end(),original.begin()+44,original.end());
+ auto put32=[&](std::size_t at,std::uint32_t n){
+   for(unsigned i=0;i<4;++i)wav[at+i]=static_cast<std::uint8_t>(n>>(i*8));
+ };
+ put32(4,static_cast<std::uint32_t>(wav.size()-8));
+ put32(40,static_cast<std::uint32_t>(wav.size()-44));
+ constexpr auto playing=ProcessContext::kPlaying|
+     ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ constexpr auto cycle=ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ for(unsigned mode=0;mode<3;++mode){
+   // 0: unflagged Locate, 1: confirmed loop, 2: wrong Cycle end.
+   Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+   kit.grid[0]=127;kit.names[0]="cycle-tail.wav";kit.wav[0]=wav;
+   f.kit(kit);prepareAudio(*f.p);
+   AuditAudioBlock audio;
+   audio.clock.tempo=120.;
+   audio.clock.cycleStartMusic=0.;
+   audio.clock.cycleEndMusic=static_cast<double>(mode==2?7:5)*256./24000.;
+   audio.clock.state=playing|(mode==0?0:cycle);
+   for(unsigned block=0;block<5;++block){
+     audio.clock.projectTimeMusic=static_cast<double>(block)*256./24000.;
+     check(f.p->process(audio.data)==kResultOk,"A11 pre-loop render");
+     check(audio.left[80]==.125f&&audio.right[80]==-.25f,
+           "A11 silent/doubled pre-loop positive control");
+   }
+   check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+         "A11 expected tail missing before loop");
+   audio.clock.projectTimeMusic=0.;
+   check(f.p->process(audio.data)==kResultOk,"A11 jump processing");
+   // The new beat overlays its original one-shot tail only for real Cycle.
+   const bool confirmed=mode==1;
+   check(audio.left[80]==(confirmed?.25f:.125f)&&
+         audio.right[80]==(confirmed?-.5f:-.25f),
+         "A11 valid Cycle cut tail or Locate retained stale tail");
+   check(IntegrationAccess::activeAudioVoices(*f.p)==(confirmed?2u:1u),
+         "A11 active voices inconsistent with measured PCM");
+ }
+}
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

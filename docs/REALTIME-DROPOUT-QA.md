@@ -21,3 +21,9 @@ F14 in `tests/SampleVoiceTests.cpp` protokolliert jetzt zusätzlich die **Anzahl
 - Windows-CI-Ergebnis gilt nur für seine konkret ausgeführten Tests.
 - Für eine Aussage „keine Audioaussetzer in Studio One“ sind zusätzlich Hostaufnahme und nachvollziehbare Frist-/Pufferstatistik erforderlich.
 - Solange mindestens einer der drei Owner-Fehler reproduzierbar ist oder seine Ursache nicht überprüft wurde: **SOR04/R01/R03 = OFFEN; Release = NEIN.**
+
+## A11 – regulärer VST3-Cycle-Rücksprung mit ausklingenden Samples (24.10.2026)
+
+Bisher löste jeder abweichende Host-PPQ-Block `voices_.reset()` aus; damit wurden auch beim echten Cycle-Rücksprung laufende One-Shot-Tails abgebrochen. Die Korrektur behält Stimmen ausschließlich bei einem mit `kCycleActive|kCycleValid` markierten und geometrisch gegen die zuletzt erwartete PPQ-Position geprüften Wrap. Sonstige Locates und explizite STOPs behalten ihr Reset-Verhalten.
+
+A11 rendert den echten VST3-Processor mit 2048-Frame Stereo-FLOAT32-WAV gegen einen 1280-Frame-Cycle. Der alte Tail und der neue Trigger müssen am Loop-Start gemeinsam L=0.25/R=-0.5 ergeben. Bei einem unmarkierten Locate oder unpassendem Cycle-Ende muss nur der neue Hit L=0.125/R=-0.25 hörbar sein. Die Tests prüfen außerdem vor dem Sprung den unveränderten Tail und die aktive Stimmenzahl. Bestehende SOR03/A10-Prüfungen laufen weiterhin. **Windows-Testergebnis nur nach Prüfung des zugehörigen exakten Commits; Studio One/ASIO weiterhin NOT RUN.**
