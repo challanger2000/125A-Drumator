@@ -4,7 +4,7 @@ function(reaudit_instrument name variable)
   set(_code "${${variable}}")
   if(name STREQUAL "DrumatorProcessor")
     qa_replace(_code "try {return (sameWaveRevision||"
-      "if(!sameWaveRevision)++drumator::qa::auditWaveFullReplies;\n   try {return (sameWaveRevision||"
+      "if(!sameWaveRevision)++drumator::qa::auditWaveFullReplies;\n   try {return (sameWaveRevision||")
     qa_replace(_code "return attributes->setInt(\"Selected\","
       "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::patternReplyOOM)throw std::bad_alloc{};\n     return attributes->setInt(\"Selected\",")
     qa_replace(_code "if(std::strcmp(id,\"Drumator.EditorPreviewStop\")==0){"

@@ -265,7 +265,8 @@ void testA08WaveEditorRevisionCache(){
  recalled.names[0]="cache-replacement.wav";
  recalled.wav[0]=constantStereo(.0625f,-.1875f);
  const auto bytes=Fixture::encode(recalled);
- check(f.p->setState(&qa::ByteStream(bytes.data(),bytes.size()))==Steinberg::kResultOk,
+ qa::ByteStream memory(bytes.data(),bytes.size());
+ check(f.p->setState(&memory)==Steinberg::kResultOk,
        "A08 processor project recall rejected");
  check(f.c->sampleEditorSnapshot(0,edit,frames,envelope,0,0,&revision,&right,&stereo)&&
        envelope[0].maximum==.0625f&&right[0].minimum==-.1875f&&
