@@ -23,6 +23,8 @@ function(reaudit_instrument name variable)
       "if(finish<=cursor)return;\n      ++drumator::qa::auditSongScheduleCalls;")
     # Exercise the actual generated QA Processor with the repaired Cycle
     # branch deliberately disabled; shipped plugin sources remain pristine.
+    qa_replace(_code "const double ppqPerFrame=tempo/(60.0*rate);"
+      "const double ppqPerFrame=(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::freezeCycleTempo?120.:tempo)/(60.0*rate);")
     qa_replace(_code "const bool splitCycle=cycleFlags&&std::isfinite(cycleStart)&&"
       "const bool splitCycle=(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::skipCycleSplit)&&cycleFlags&&std::isfinite(cycleStart)&&")
     qa_replace(_code "velocityCycleValid=splitCycle;"

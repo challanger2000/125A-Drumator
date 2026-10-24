@@ -642,6 +642,104 @@ void testA17MissingCycleClockKeepsExactPcm(){
  }
 }
 
+
+void testA18CycleBlockPartitionAcrossSampleRates(){
+ constexpr auto flags=ProcessContext::kPlaying|
+   ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid|
+   ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ // 1152 host frames per loop: boundary-aligned for 64/128,
+ // intra-block at offset 128 for 256/512. Compare every stereo sample.
+ for(const unsigned rate:{44100u,48000u})
+ for(const int32 frames:{64,128,256,512}){
+   Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);
+   kit.grid[0]=127;kit.names[0]="partition.wav";
+   kit.wav[0]=reauditLongStereo(.125f,-.25f,rate,8192u);
+   f.kit(kit);
+   std::array<SpeakerArrangement,kRows> buses{};
+   buses.fill(SpeakerArr::kStereo);
+   check(f.p->setBusArrangements(nullptr,0,buses.data(),
+       static_cast<int32>(kRows))==kResultOk,"A18 bus setup");
+   ProcessSetup setup{};setup.sampleRate=rate;setup.maxSamplesPerBlock=512;
+   setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
+   check(f.p->setupProcessing(setup)==kResultOk&&
+         f.p->setActive(true)==kResultOk&&
+         f.p->setProcessing(true)==kResultOk,"A18 actual VST3 setup");
+   std::array<float,512> left{},right{};
+   float* channels[2]{left.data(),right.data()};
+   AudioBusBuffers out{};out.numChannels=2;out.channelBuffers32=channels;
+   ProcessContext clock{};clock.tempo=120.;clock.sampleRate=rate;
+   clock.state=flags;clock.cycleStartMusic=4.;
+   clock.cycleEndMusic=4.+1152.*120./(60.*rate);
+   ProcessData data{};data.symbolicSampleSize=kSample32;
+   data.numOutputs=1;data.outputs=&out;data.processContext=&clock;
+   data.numSamples=frames;
+   constexpr unsigned total=3072;
+   for(unsigned start=0;start<total;start+=static_cast<unsigned>(frames)){
+     clock.projectTimeMusic=4.+
+        static_cast<double>(start%1152)*120./(60.*rate);
+     check(f.p->process(data)==kResultOk,"A18 cycle variable block process");
+     for(int32 i=0;i<frames;++i){
+       const unsigned index=start+static_cast<unsigned>(i);
+       const float voices=static_cast<float>(1+index/1152);
+       check(left[static_cast<std::size_t>(i)]==voices*.125f&&
+             right[static_cast<std::size_t>(i)]==-voices*.25f,
+             "A18 full stereo PCM differs with host callback partition/rate");
+     }
+   }
+   check(IntegrationAccess::activeAudioVoices(*f.p)==3,
+         "A18 rate/partition changed expected number of live voices");
+ }
+}
+void testA19TempoChangeWithinHostCycle(){
+ constexpr auto flags=ProcessContext::kPlaying|
+   ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid|
+   ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ // Tempo 120 -> 240 exactly at sample 512. In PPQ units, this
+ // moves the first loop restart from frame 1152 to frame 832, and
+ // subsequent restarts to 1408, 1984, 2560. No locate or tail reset.
+ for(const int32 frames:{128,256,512}){
+   Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);
+   kit.grid[0]=127;kit.names[0]="tempo-cycle.wav";
+   kit.wav[0]=reauditLongStereo(.125f,-.25f,48000u,8192u);
+   f.kit(kit);
+   std::array<SpeakerArrangement,kRows> buses{};
+   buses.fill(SpeakerArr::kStereo);
+   check(f.p->setBusArrangements(nullptr,0,buses.data(),
+       static_cast<int32>(kRows))==kResultOk,"A19 buses");
+   ProcessSetup setup{};setup.sampleRate=48000.;setup.maxSamplesPerBlock=512;
+   setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
+   check(f.p->setupProcessing(setup)==kResultOk&&
+         f.p->setActive(true)==kResultOk&&
+         f.p->setProcessing(true)==kResultOk,"A19 host setup");
+   std::array<float,512> left{},right{};
+   float* channels[2]{left.data(),right.data()};
+   AudioBusBuffers out{};out.numChannels=2;out.channelBuffers32=channels;
+   ProcessContext clock{};clock.sampleRate=48000.;
+   clock.state=flags;clock.cycleStartMusic=4.;
+   clock.cycleEndMusic=4.+1152.*120./(60.*48000.);
+   ProcessData data{};data.symbolicSampleSize=kSample32;
+   data.numOutputs=1;data.outputs=&out;data.processContext=&clock;
+   data.numSamples=frames;
+   for(unsigned start=0;start<3072;start+=static_cast<unsigned>(frames)){
+     const unsigned scaled=start<512?start:512+2*(start-512);
+     clock.projectTimeMusic=4.+
+       static_cast<double>(scaled%1152)*120./(60.*48000.);
+     clock.tempo=start<512?120.:240.;
+     check(f.p->process(data)==kResultOk,"A19 tempo-changing host callback");
+     for(int32 i=0;i<frames;++i){
+       const unsigned absolute=start+static_cast<unsigned>(i);
+       const unsigned hits=1u+(absolute>=832u)+(absolute>=1408u)+
+                           (absolute>=1984u)+(absolute>=2560u);
+       check(left[static_cast<std::size_t>(i)]==static_cast<float>(hits)*.125f&&
+             right[static_cast<std::size_t>(i)]==-static_cast<float>(hits)*.25f,
+             "A19 VST3 tempo change caused wrong Cycle onset or chopped tail");
+     }
+   }
+   check(IntegrationAccess::activeAudioVoices(*f.p)==5,
+         "A19 tempo adaptation lost an expected audio voice");
+ }
+}
+
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);
