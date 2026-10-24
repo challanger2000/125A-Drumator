@@ -1704,6 +1704,9 @@ void testPacedSampleSwapContinuity(){
  }
  std::atomic<unsigned> blocks{0},badPcm{0},errors{0},misses{0};
  std::atomic<double> maximumMs{0.};
+ // Audio actor owns writes; read only after join. Fixed memory, no
+ // allocations in the callback or measured pacing loop.
+ std::array<double,500> callbackMs{};
  std::jthread actor([&](std::stop_token stop){
    AuditAudioBlock tested,reference;
    EventList events;Event note{};note.type=Event::kNoteOnEvent;
@@ -1716,6 +1719,7 @@ void testPacedSampleSwapContinuity(){
      const auto ok=active.p->process(tested.data);
      const auto end=Clock::now();
      const double ms=std::chrono::duration<double,std::milli>(end-begin).count();
+     callbackMs[n]=ms;
      if(ms>256./48000.*1000.)++misses;
      auto peak=maximumMs.load();
      while(ms>peak&&!maximumMs.compare_exchange_weak(peak,ms)){}
@@ -1746,16 +1750,24 @@ void testPacedSampleSwapContinuity(){
        "PACING imported kit state decode");
  check(importedKit.wav[0]==constantStereo(.125f,-.25f),
        "PACING accepted sample import did not update processor asset");
+ // Compute quantiles off the actor thread. An otherwise green PCM
+ // comparison must never hide measured audio callback overruns.
+ auto sortedCallbackMs=callbackMs;
+ std::sort(sortedCallbackMs.begin(),sortedCallbackMs.end());
+ const double p95=sortedCallbackMs[474],p99=sortedCallbackMs[494];
  qa::workflowNotice("PACING 48k/256 blocks="+std::to_string(blocks.load())+
    " unchanged-row PCM mismatches="+std::to_string(badPcm.load())+
    " deadline-misses="+std::to_string(misses.load())+
+   " p95-ms="+std::to_string(p95)+" p99-ms="+std::to_string(p99)+
    " max-callback-ms="+std::to_string(maximumMs.load())+
-   "; synthetic host pacing, not Studio One or ASIO");
+   "; paced shared Windows runner, NOT Studio One/ASIO certification");
  std::error_code ec;std::filesystem::remove_all(folder,ec);
  active.p->setProcessing(false);active.p->setActive(false);
  baseline.p->setProcessing(false);baseline.p->setActive(false);
  check(blocks.load()==500&&badPcm.load()==0&&errors.load()==0,
        "PACING actual-controller sample swaps disrupted unchanged audio");
+ check(misses.load()==0,
+       "PACING missed an audio deadline despite a previously green PCM result");
 }
 void testComponentOnlySameBasenameRejectsStaleOrigin(){
  Fixture f;

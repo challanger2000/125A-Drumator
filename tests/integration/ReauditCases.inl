@@ -427,9 +427,17 @@ void testReauditLoadedSwap(){
  qa::workflowNotice("RE09 blocks="+std::to_string(blocks.load())+" callbacks-during-import="+
     std::to_string(duringImport.load())+" PCM-errors="+std::to_string(badPcm.load())+
     " audio-new-calls="+std::to_string(allocations.load())+" errors="+std::to_string(errors.load()));
+ const double blockDeadlineMs=64.0/48000.0*1000.0;
+ const auto actualDeadlineMisses=std::count_if(times.begin(),times.end(),
+     [&](double elapsed){return elapsed>blockDeadlineMs;});
+ qa::workflowNotice("RE09 paced 64-voice/12-import deadline-misses="+
+     std::to_string(actualDeadlineMisses)+"/"+std::to_string(times.size())+
+     " at 1.333ms; shared runner is NOT ASIO release evidence");
  f.p->setProcessing(false);f.p->setActive(false);
  check(blocks==500u&&duringImport>0u&&badPcm==0u&&errors==0u&&allocations==0u,
        "RE09 old asset lifetime, audible replacement, Stop/locate or realtime allocation failure");
+ check(actualDeadlineMisses==0,
+       "RE09 paced 64-voice live imports exceeded 48k/64 audio deadline");
 }
 void testReauditDeadlineMatrix(){
  using Clock=std::chrono::steady_clock;
