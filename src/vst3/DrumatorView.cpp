@@ -136,7 +136,7 @@ void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
 void drawPanelScrew(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* bitmap,double x,double y,double angle) {
  if(!bitmap||bitmap->getWidth()!=32.||bitmap->getHeight()!=32.)return;
  VSTGUI::CDrawContext::Transform rotation(*c,
-   VSTGUI::CGraphicsTransform().translate(x,y).rotate(angle).translate(-x,-y));
+   VSTGUI::CGraphicsTransform().translate(-x,-y).rotate(angle).translate(x,y));
  c->fillRectWithBitmap(bitmap,{0.,0.,32.,32.},{x-8.,y-8.,x+8.,y+8.},1.f);
 }
 void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double cy,double fraction,
@@ -154,7 +154,7 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
    // the host's existing logical-coordinate zoom or mouse hit rectangles.
    const double scale=34./125.;
    VSTGUI::CDrawContext::Transform transform(*c,
-     VSTGUI::CGraphicsTransform().translate(cx-17.,cy-17.).scale(scale,scale));
+     VSTGUI::CGraphicsTransform().scale(scale,scale).translate(cx-17.,cy-17.));
    frames->drawFrame(c,frame,{0.,0.});
    if(selected) {
      c->setFrameColor(accent);c->setLineWidth(1.);
