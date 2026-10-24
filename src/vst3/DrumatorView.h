@@ -9,7 +9,7 @@
 #include "core/SequencerCore.h"
 #include "core/SampleEdit.h"
 #include <cstdint>
-namespace VSTGUI {class CTextEdit;}
+namespace VSTGUI {class CTextEdit; class CBitmap;}
 namespace drumator {
 class Controller;
 class DrumatorView final : public VSTGUI::CView, public VSTGUI::IDropTarget,
@@ -47,6 +47,7 @@ public:
  bool sampleDropTargetAt(double x,double y) const noexcept;
 private:
  Controller& controller_;
+ VSTGUI::CBitmap* backgroundBitmap_{nullptr};
  VSTGUI::CTextEdit* nameEdit_{nullptr};
  std::size_t editingNameRow_{kRows};
  std::uint64_t nameEditGeneration_{0};
