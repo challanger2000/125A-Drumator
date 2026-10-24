@@ -221,6 +221,31 @@ void testRv01OutputlessPreviewRetirement(){
        f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
        "RV01 fresh preview failed after outputless interval");
 }
+void testA07NotificationFaultIsolation(){
+ FinalAuditFiles files;
+ Fixture f;KitState initial;initial.visible=2;initial.grid.fill(0);
+ f.kit(initial);prepareAudio(*f.p);f.open();f.open();
+ const auto file=files.write("notification-fault.wav",constantStereo(.125f,-.375f));
+ qa::auditViewRefreshFaultHits=0;
+ qa::auditMutation=qa::AuditMutation::refreshViewsOOM;
+ Controller::LoadStatus loaded=Controller::LoadStatus::ReadError;
+ bool escaped=false;
+ try {loaded=f.c->loadWav(0,file);}catch(...){escaped=true;}
+ qa::auditMutation=qa::AuditMutation::none;
+ check(!escaped&&loaded==Controller::LoadStatus::Accepted,
+       "A07 accepting the WAV escaped or lied about a failing peer-view refresh");
+ check(qa::auditViewRefreshFaultHits.load()==2,
+       "A07 peer-view repaint failure path was not exercised twice");
+ check(auditReturnedKit(*f.p).wav[0]==constantStereo(.125f,-.375f)&&
+       f.c->hasSample(0),
+       "A07 accepted Sample/Controller state diverged");
+ check(IntegrationAccess::pendingDirty(*f.c),
+       "A07 host without dirty handler silently lost post-commit project-dirty request");
+ AuditAudioBlock audio;
+ check(f.c->previewSample(0)&&f.p->process(audio.data)==kResultOk&&
+       audio.left[80]==.125f&&audio.right[80]==-.375f,
+       "A07 accepted sample fails next playable callback after two view failures");
+}
 void testA06CommittedImportSurvivesRepaintFailure(){
  FinalAuditFiles files;
  Fixture f;KitState initial;initial.visible=2;initial.grid.fill(0);

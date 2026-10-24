@@ -74,11 +74,20 @@ void Controller::unregisterView(DrumatorView* view) {
  views_.erase(std::remove(views_.begin(),views_.end(),view),views_.end());
 }
 void Controller::notifyViews(bool relayout) {
- if(dirtyPending_) {
-   dirtyPending_=false;
-   if(componentHandler2)componentHandler2->setDirty(true);
+ // After sendEditMessage() succeeded, the Processor has already committed
+ // the state. A rejecting/throwing host dirty callback or a failed View
+ // refresh must NEVER make the user operation look rejected or crash the host.
+ // Keep the dirty request pending until it is acknowledged by the host.
+ if(dirtyPending_&&componentHandler2) {
+   try {
+     if(componentHandler2->setDirty(true)==Steinberg::kResultOk)
+       dirtyPending_=false;
+   }catch(...) { /* retry on the next host/UI notification */ }
  }
- for(auto* view:views_)if(view)view->refreshFromHost(relayout);
+ for(auto* view:views_)if(view) {
+   try {view->refreshFromHost(relayout);}
+   catch(...) { /* one failed View must not invalidate an accepted edit */ }
+ }
 }
 void Controller::invalidateTransientEditsForRecall() noexcept {
  strokePattern_=kPatterns;
