@@ -705,28 +705,30 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(border);
        c->drawString(index,{sx,y+10,sx+32,y+28},VSTGUI::kLeftText);
      }
-     // FL-style recessed step: dark body, orange-lit face for sounding steps.
-     // Geometry remains inside the existing step hit region (19 logical px).
+     // FL-style tactile step: dark recessed body, orange layered face and gloss.
+     // Keep all geometry inside the unchanged 19-pixel step hit region.
      const bool lit=velocity>0&&!inactive;
      const VSTGUI::CRect outer{sx+1.,y+44.,sx+18.,y+78.};
-     const VSTGUI::CRect face{sx+3.,y+47.,sx+16.,y+75.};
-     c->setFillColor(VSTGUI::CColor{7,20,37,255});
+     c->setFillColor(VSTGUI::CColor{5,17,33,255});
      c->drawRect(outer,VSTGUI::kDrawFilled);
-     c->setFrameColor(step%4==0?VSTGUI::CColor{87,126,161,255}:
-                                  VSTGUI::CColor{38,73,111,255});
+     c->setFrameColor(step%4==0?VSTGUI::CColor{91,139,183,255}:
+                                  VSTGUI::CColor{38,77,117,255});
      c->drawRect(outer,VSTGUI::kDrawStroked);
      c->setFillColor(inactive?VSTGUI::CColor{30,40,51,255}:
-                     lit?VSTGUI::CColor{227,113,29,255}:
-                         VSTGUI::CColor{43,51,65,255});
-     c->drawRect(face,VSTGUI::kDrawFilled);
-     // Thin highlight communicates a tactile button without changing hitboxes.
-     c->setFillColor(inactive?VSTGUI::CColor{52,59,69,255}:
-                     lit?VSTGUI::CColor{255,188,89,255}:
-                         VSTGUI::CColor{91,101,113,255});
+                     lit?VSTGUI::CColor{234,93,12,255}:
+                         VSTGUI::CColor{41,53,69,255});
+     c->drawRect({sx+3.,y+47.,sx+16.,y+75.},VSTGUI::kDrawFilled);
+     c->setFillColor(inactive?VSTGUI::CColor{53,61,72,255}:
+                     lit?VSTGUI::CColor{255,156,39,255}:
+                         VSTGUI::CColor{79,94,111,255});
+     c->drawRect({sx+4.,y+48.,sx+15.,y+56.},VSTGUI::kDrawFilled);
+     c->setFillColor(inactive?VSTGUI::CColor{49,54,61,255}:
+                     lit?VSTGUI::CColor{255,201,92,255}:
+                         VSTGUI::CColor{103,114,127,255});
      c->drawRect({sx+4.,y+48.,sx+15.,y+50.},VSTGUI::kDrawFilled);
      if(lit) {
-       c->setFillColor(VSTGUI::CColor{255,217,141,255});
-       c->drawRect({sx+6.,y+71.,sx+13.,y+73.},VSTGUI::kDrawFilled);
+       c->setFillColor(VSTGUI::CColor{255,226,151,255});
+       c->drawRect({sx+6.,y+68.,sx+13.,y+72.},VSTGUI::kDrawFilled);
      }
    }
    c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
