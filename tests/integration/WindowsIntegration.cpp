@@ -2000,6 +2000,7 @@ int main(int argc,char** argv){
  run("A22 bounded Song snapshot per host callback",testA22SongSnapshotBoundedByHostCallbacks);
  run("A23 valid host PPQ during missing tempo and locate",testA23AuthoritativePpqSurvivesMissingTempo);
  run("A24 component-first DZM3 origin permissions are one-shot",testA24ComponentFirstDzm3OriginConsumed);
+ run("A25 old unpaired Component then new DZM3 keeps provenance",testA25UnpairedComponentNewDzm3Origin);
  run("RM28 dropping valid partial PPQ is detected",[]{expectMutationKilled(qa::AuditMutation::ignoreValidPartialPpq,"host PPQ lost with invalid tempo",testA23AuthoritativePpqSurvivesMissingTempo);});
  run("RM29 stale component-first DZM3 permission detected",[]{expectMutationKilled(qa::AuditMutation::keepComponentFirstOriginArmed,"component-first DZM3 origin leak",testA24ComponentFirstDzm3OriginConsumed);});
  run("RM27 repeated per-Cycle Song snapshot detected",[]{expectMutationKilled(qa::AuditMutation::repeatSongSnapshots,"Song re-snapshot on every Cycle",testA22SongSnapshotBoundedByHostCallbacks);});

@@ -168,6 +168,10 @@ private:
  std::uint32_t editorWaveRevision_{0};
  std::array<std::uint64_t,kRows> originIdentity_{};
  std::array<bool,kRows> originIdentityValid_{};
+ // Last rejected per-row origin paths, held only on the controller thread.
+ // Detects a new Controller-first recall returning to a previously known
+ // project after an unrelated unpaired Component-only state.
+ std::array<std::string,kRows> invalidatedSampleOrigins_{};
  bool pathsRestoredBeforeComponent_{false};
  bool componentStatePendingController_{false};
  bool dirtyPending_{false};

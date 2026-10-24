@@ -499,6 +499,45 @@ void testA24ComponentFirstDzm3OriginConsumed(){
  }
 }
 
+
+void testA25UnpairedComponentNewDzm3Origin(){
+ FinalAuditFiles files;
+ const auto oldPcm=constantStereo(.125f,-.25f);
+ const auto newPcm=constantStereo(-.25f,.125f);
+ const auto oldPath=files.write("old.wav",oldPcm);
+ const auto newPath=files.write("new.wav",newPcm);
+ std::vector<std::uint8_t> newControllerState;
+ {
+   Fixture fresh;KitState empty;empty.visible=1;empty.grid.fill(0);
+   fresh.kit(empty);prepareAudio(*fresh.p);
+   check(fresh.c->loadWav(0,newPath)==Controller::LoadStatus::Accepted,
+         "A25 genuine DZM3 for new project");
+   newControllerState=finalAuditControllerBytes(*fresh.c);
+ }
+ Fixture f;KitState initial;initial.visible=1;initial.grid.fill(0);
+ f.kit(initial);prepareAudio(*f.p);
+ check(f.c->loadWav(0,oldPath)==Controller::LoadStatus::Accepted,
+       "A25 old project pathname fixture");
+ KitState newKit;newKit.grid.fill(0);newKit.visible=1;
+ newKit.names[0]="new.wav";newKit.wav[0]=newPcm;
+ const auto encoded=Fixture::encode(newKit);
+ check(f.recall(encoded)==kResultOk,
+       "A25 Component-first new project recall");
+ check(IntegrationAccess::paths(*f.c)[0].empty(),
+       "A25 wrong old project pathname survived new Component bytes");
+ check(finalAuditControllerRecall(*f.c,newControllerState)==kResultOk,
+       "A25 paired new-origin controller restore");
+ check(IntegrationAccess::paths(*f.c)[0]==newPath,
+       "A25 new project DZM3 pathname lost");
+ // The just-finished Component-first pair is consumed. An unrelated
+ // Component-only recall cannot use the same filename to borrow the path.
+ newKit.wav[0]=constantStereo(.375f,-.125f);
+ check(f.recall(Fixture::encode(newKit))==kResultOk,
+       "A25 later Component-only different PCM");
+ check(IntegrationAccess::paths(*f.c)[0].empty(),
+       "A25 restored DZM3 from new project retained for another Component");
+}
+
 void testReauditDeadlineMatrix(){
  using Clock=std::chrono::steady_clock;
  for(std::uint32_t rate:{44100u,48000u})for(std::uint32_t ratio:{4u,16u}){

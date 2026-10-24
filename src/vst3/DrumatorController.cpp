@@ -208,10 +208,22 @@ Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  // ONE forthcoming Component restore to retain DZM3 paths. Component-first
  // has ALREADY completed that pairing: newly populated paths must never
  // arm an unrelated future Component-only restore.
- const bool pairedComponentFirst=componentStatePendingController_;
+ // A prior unpaired Component-only recall may have invalidated an
+ // existing origin path. A subsequent DZM3 stream restoring that *known*
+ // old origin belongs to a NEW Controller-first project pair; otherwise
+ // the just-restored Component and DZM3 belong to the SAME current pair.
+ // Comparing saved path strings requires no filesystem access or allocation.
+ bool returningToKnownOrigin=false;
+ for(std::size_t row=0;row<kRows;++row)
+   if(!candidatePaths[row].empty()&&
+      candidatePaths[row]==invalidatedSampleOrigins_[row])
+     returningToKnownOrigin=true;
+ const bool pairedComponentFirst=componentStatePendingController_&&
+                                 !returningToKnownOrigin;
  pathsRestoredBeforeComponent_=!pairedComponentFirst;
  componentStatePendingController_=false;
  samplePaths_.swap(candidatePaths);
+ for(auto& stale:invalidatedSampleOrigins_)stale.clear();
  if(pairedComponentFirst) {
    // The component just provided each row's PCM identity. The paired DZM3
    // now provides its optional path; associate them so an unchanged
@@ -286,8 +298,13 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
       const bool sameName=!candidate.names[row].empty()&&
           path.compare(begin,std::string::npos,candidate.names[row])==0;
       if(!sameName||(!pathsRestoredBeforeComponent_&&
-                     (!originIdentityValid_[row]||originIdentity_[row]!=identity)))
+                     (!originIdentityValid_[row]||originIdentity_[row]!=identity))) {
+        // Keep the old pathname as an allocation-free, controller-owned
+        // witness for a subsequent explicit DZM3 restoring that origin.
+        // Never let it authorize an unrelated Component-only recall.
+        if(!path.empty())invalidatedSampleOrigins_[row].swap(path);
         path.clear();
+      }
       originIdentity_[row]=identity;
       originIdentityValid_[row]=!path.empty();
     }
