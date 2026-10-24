@@ -542,19 +542,37 @@ void testReauditDeadlineMatrix(){
  using Clock=std::chrono::steady_clock;
  for(std::uint32_t rate:{44100u,48000u})for(std::uint32_t ratio:{4u,16u}){
    Fixture f;KitState kit;kit.visible=16;kit.grid.fill(0);kit.pitch.fill(48);
-   const auto wav=reauditLongStereo(.125f,-.25f,rate*(ratio/4));
-   for(std::size_t row=0;row<kRows;++row){kit.names[row]="load"+std::to_string(row)+".wav";kit.wav[row]=wav;}
+   // Real 16-output, 16-distinct-asset scenario: the previous RE10
+   // configured 16 buses but rendered ONLY main bus with shared PCM.
+   for(std::size_t row=0;row<kRows;++row){
+     kit.names[row]="load"+std::to_string(row)+".wav";
+     kit.wav[row]=reauditLongStereo(
+        static_cast<float>(row+1)/128.f,
+        -static_cast<float>(row+1)/256.f,
+        rate*(ratio/4));
+     kit.output[row]=static_cast<std::uint8_t>(row);
+   }
    f.kit(kit);
    std::array<SpeakerArrangement,kRows> arrangements{};arrangements.fill(SpeakerArr::kStereo);
    check(f.p->setBusArrangements(nullptr,0,arrangements.data(),static_cast<int32>(kRows))==kResultOk,"RE10 output fixture");
    ProcessSetup setup{};setup.sampleRate=rate;setup.maxSamplesPerBlock=512;
    setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
    check(f.p->setupProcessing(setup)==kResultOk&&f.p->setActive(true)==kResultOk,"RE10 setup");
+   for(int32 bus=1;bus<static_cast<int32>(kRows);++bus)
+     check(f.p->activateBus(MediaTypes::kAudio,BusDirections::kOutput,bus,true)==kResultOk,
+           "RE10 activate actual stem bus");
    for(int32 frames:{64,128,256,512}){
      check(f.p->setProcessing(true)==kResultOk,"RE10 start");
-     std::array<float,512> left{},right{};float* channels[2]{left.data(),right.data()};
-     AudioBusBuffers output{};output.numChannels=2;output.channelBuffers32=channels;
-     ProcessData data{};data.symbolicSampleSize=kSample32;data.numSamples=frames;data.numOutputs=1;data.outputs=&output;
+     std::array<std::array<float,512>,kRows> stemL{},stemR{};
+     std::array<std::array<float*,2>,kRows> pointers{};
+     std::array<AudioBusBuffers,kRows> outputs{};
+     for(std::size_t bus=0;bus<kRows;++bus){
+       pointers[bus]={stemL[bus].data(),stemR[bus].data()};
+       outputs[bus].numChannels=2;
+       outputs[bus].channelBuffers32=pointers[bus].data();
+     }
+     ProcessData data{};data.symbolicSampleSize=kSample32;data.numSamples=frames;
+     data.numOutputs=static_cast<int32>(kRows);data.outputs=outputs.data();
      EventList notes(64);reaudit64Notes(notes,16);
      std::vector<double> times;times.reserve(32);unsigned badPcm=0,allocations=0;
      for(unsigned block=0;block<32;++block){
@@ -564,12 +582,20 @@ void testReauditDeadlineMatrix(){
        times.push_back(std::chrono::duration<double,std::milli>(end-begin).count());
        if(allocationCount!=allocationsBefore)++allocations;
        check(result==kResultOk&&IntegrationAccess::activeAudioVoices(*f.p)==64,"RE10 64 active voice precondition");
-       for(int32 sample=20;sample<frames;++sample)
-         if(std::abs(left[static_cast<std::size_t>(sample)]-8.f)>2e-4f||
-            std::abs(right[static_cast<std::size_t>(sample)]+16.f)>2e-4f)++badPcm;
+       // All sixteen genuinely active stereo buses must carry their own
+       // sample. 64 MIDI notes mean 4 overlapping voices per row.
+       for(std::size_t bus=0;bus<kRows;++bus)
+         for(int32 sample=20;sample<frames;++sample) {
+           const float expectedL=static_cast<float>(bus+1)/32.f;
+           const float expectedR=-static_cast<float>(bus+1)/64.f;
+           if(std::abs(stemL[bus][static_cast<std::size_t>(sample)]-expectedL)>2e-4f||
+              std::abs(stemR[bus][static_cast<std::size_t>(sample)]-expectedR)>2e-4f)
+             ++badPcm;
+         }
      }
      reauditTiming("RE10 rate="+std::to_string(rate)+" block="+std::to_string(frames)+
-                   " voices=64 ratio="+std::to_string(ratio),times,static_cast<double>(frames)/rate*1000.);
+                   " voices=64 active-stereo-buses=16 distinct-assets=16 ratio="+
+                   std::to_string(ratio),times,static_cast<double>(frames)/rate*1000.);
      check(badPcm==0&&allocations==0,"RE10 PCM or C++ allocation failure");
      check(f.p->setProcessing(false)==kResultOk,"RE10 stop");
    }
