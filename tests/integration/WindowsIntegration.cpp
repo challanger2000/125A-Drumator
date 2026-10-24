@@ -445,9 +445,9 @@ void activeEdits(Fixture& f){
  auto* v=IntegrationAccess::view(*f.c,0);
  // Actual Undo and clipboard plus an active drag in a real view.
  check(f.c->setStepVelocity(0,0,3,91)&&f.c->copyCurrentPattern(),"Z01 create Undo/clipboard");
- click(*v,1248,108+60); // expand velocity only for first instrument
+ click(*v,1248,UiCompactLayout::header+88); // expand velocity only for first instrument
  check(IntegrationAccess::velocityExpanded(*v,0),"Z01 Velocity row did not expand");
- click(*v,630,108+94+12); // inline velocity for first instrument
+ click(*v,630,UiCompactLayout::header+UiCompactLayout::baseRow+12); // inline velocity for first instrument
  check(std::get<0>(IntegrationAccess::viewSnapshot(*v)),"Z01 fixture did not start actual view drag");
  check(f.c->setStepVelocity(0,0,4,85),"Z01 active stroke change");
 }
