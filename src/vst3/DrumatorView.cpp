@@ -1087,8 +1087,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      c->drawString(status_.c_str(),{265,556,1020,585});
  }
  // Decorative corners only; no hit regions or interactive widgets are added.
- drawPanelScrew(c,screwBitmap_,10.,47.,-15.);
- drawPanelScrew(c,screwBitmap_,1270.,47.,25.);
+ drawPanelScrew(c,screwBitmap_,10.,10.,-15.);
+ drawPanelScrew(c,screwBitmap_,1270.,10.,25.);
  drawPanelScrew(c,screwBitmap_,10.,fullHeight-10.,40.);
  drawPanelScrew(c,screwBitmap_,1270.,fullHeight-10.,-30.);
  setDirty(false);
