@@ -221,6 +221,27 @@ void testRv01OutputlessPreviewRetirement(){
        f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
        "RV01 fresh preview failed after outputless interval");
 }
+void testA06CommittedImportSurvivesRepaintFailure(){
+ FinalAuditFiles files;
+ Fixture f;KitState initial;initial.visible=2;initial.grid.fill(0);
+ f.kit(initial);prepareAudio(*f.p);f.open();
+ const auto wav=constantStereo(.375f,-.125f);
+ const auto file=files.write("repaint-oom-source.wav",wav);
+ qa::auditMutation=qa::AuditMutation::loadRepaintOOM;
+ Controller::LoadStatus status=Controller::LoadStatus::ReadError;
+ bool escaped=false;
+ try{status=f.c->loadWav(0,file);}catch(...){escaped=true;}
+ qa::auditMutation=qa::AuditMutation::none;
+ check(!escaped&&status==Controller::LoadStatus::Accepted,
+       "A06 host accepted WAV but Controller reported failure after repaint OOM");
+ check(auditReturnedKit(*f.p).wav[0]==wav&&f.c->hasSample(0)&&
+       IntegrationAccess::paths(*f.c)[0]==file,
+       "A06 committed WAV/Controller path diverged on post-commit OOM");
+ AuditAudioBlock audio;
+ check(f.c->previewSample(0)&&f.p->process(audio.data)==kResultOk&&
+       audio.left[80]==.375f&&audio.right[80]==-.125f,
+       "A06 accepted WAV not playable after post-commit repaint failure");
+}
 void testA05DenseSongAutomationDoesNotReschedule(){
  auto initial=[]{
    KitState kit;kit.grid.fill(0);kit.visible=1;

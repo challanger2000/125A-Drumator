@@ -7,7 +7,7 @@ enum class AuditMutation { none, suppressZeroStop, staleDuration, skipPeerCommit
  basenameOnly, delayMidiOne, dropMidi, doubleMidi, zeroPrefix,
  skipImport, muteImportedProcessor, delayImportedProcessor,
  rejectPreviewStop, rejectPreviewStopOnce, patternQueryOOM, patternReplyOOM,
- oldFadeRenderer, oldKnobDrawCenters };
+ oldFadeRenderer, oldKnobDrawCenters, loadRepaintOOM };
 extern std::atomic<AuditMutation> auditMutation;
 extern std::atomic<unsigned> auditSongScheduleCalls;
 extern std::atomic<const void*> auditImportTarget;

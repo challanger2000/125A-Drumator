@@ -1173,23 +1173,23 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  }catch(const std::bad_alloc&) {return LoadStatus::ReadError;}
  if(name.empty()||name.size()>kMaxKitName||name.find('\0')!=std::string::npos)
     return LoadStatus::Rejected;
+ // A successful Processor commit must never later be reported as failure.
+ // Establish IMessage ownership before any potentially allocating SDK call.
  auto* msg=allocateMessage();
  if(!msg)return LoadStatus::NoProcessorConnection;
+ struct MessageOwner {
+   Steinberg::Vst::IMessage* message;
+   ~MessageOwner(){if(message)message->release();}
+ } owner{msg};
  msg->setMessageID("Drumator.LoadPcm16Wav");
  auto* attr=msg->getAttributes();
- if(!attr){msg->release();return LoadStatus::Rejected;}
- attr->setInt("Row",static_cast<Steinberg::int64>(row));
- if(attr->setBinary("SampleName",name.data(),
-                    static_cast<Steinberg::uint32>(name.size()))!=Steinberg::kResultOk) {
-    msg->release();return LoadStatus::Rejected;
- }
- if(attr->setBinary("WavBytes",data.data(),
-                    static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk) {
-     msg->release();return LoadStatus::Rejected;
- }
- const bool accepted=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();
- if(!accepted)return LoadStatus::Rejected;
+ if(!attr||attr->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk||
+    attr->setBinary("SampleName",name.data(),
+                    static_cast<Steinberg::uint32>(name.size()))!=Steinberg::kResultOk||
+    attr->setBinary("WavBytes",data.data(),
+                    static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk)
+   return LoadStatus::Rejected;
+ if(sendEditMessage(msg)!=Steinberg::kResultOk)return LoadStatus::Rejected;
  // Success means the processor accepted the immutable asset for the
  // next audio block; no claim is made that the buffer has already rendered.
  labels_[row].swap(name);
@@ -1199,7 +1199,9 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  originIdentityValid_[row]=true;
  pathsRestoredBeforeComponent_=false;
  componentStatePendingController_=false;
- notifyViews(false);
+ // The embedded WAV and UI metadata are committed. Host repaint/dirty
+ // notification failures must not turn that accepted import into ReadError.
+ try {notifyViews(false);}catch(...) { /* committed; next repaint refreshes */ }
  return LoadStatus::Accepted;
  }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
   catch(const std::exception&) {return LoadStatus::ReadError;}
