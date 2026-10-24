@@ -1460,11 +1460,13 @@ void testRv05GlobalKnobPaintCenters(){
  for(const double center:UiCompactLayout::globalKnobCenters){
    const auto left=static_cast<unsigned>(center-24.);
    const auto pixels=frGuiPixels(*view,left,61,left+48,63);
-   const auto backgroundColor=pixels[0];
+   // Identify the opaque rotary face rather than assuming the first pixel
+   // is a uniform background. The approved metallic bitmap has variable color.
+   constexpr std::uint32_t rotaryFace=(41u<<16)|(53u<<8)|67u;
    double sum=0.,count=0.;
    for(unsigned y=0;y<2;++y)
      for(unsigned x=0;x<48;++x){
-       if(pixels[y*48+x]==backgroundColor)continue;
+       if(pixels[y*48+x]!=rotaryFace)continue;
        sum+=static_cast<double>(left+x);
        count+=1.;
      }
