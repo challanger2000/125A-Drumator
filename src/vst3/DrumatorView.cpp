@@ -144,7 +144,11 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  fraction=std::clamp(fraction,0.,1.);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
  c->drawString(title,{cx-46.,cy-34.,cx+46.,cy-18.});
- if(auto* frames=dynamic_cast<VSTGUI::CMultiFrameBitmap*>(sprite)) {
+ // A bitmap object can exist even when its PNG resource was not loaded,
+ // notably in native offscreen QA outside the installed VST3 bundle.
+ // Treat that as unavailable and paint an actual usable fallback control.
+ if(auto* frames=dynamic_cast<VSTGUI::CMultiFrameBitmap*>(sprite);
+    frames&&frames->getWidth()==125.&&frames->getHeight()==12625.) {
    const auto frame=frames->normalizedValueToFrameIndex(static_cast<float>(fraction));
    // Render the 125px source frame into the 34px control without changing
    // the host's existing logical-coordinate zoom or mouse hit rectangles.
