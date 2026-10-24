@@ -646,18 +646,22 @@ void testGuiPhysicalStepsRaster(){
   }
   a->forget();return pixels;
  };
+ // Toggle-off->on always reactivates at the step default (100), not the
+ // original historical velocity. Assert an actual blank->on->blank lifecycle.
+ if(f.c->velocity(f.c->currentPattern(),0,0)!=0)
+    click(*v,631.,UiCompactLayout::header+88.);
+ check(f.c->velocity(f.c->currentPattern(),0,0)==0,"GUI blank baseline");
  const auto before=sample(*v);
- const auto original=f.c->velocity(f.c->currentPattern(),0,0);
  click(*v,631.,UiCompactLayout::header+88.);
- const auto changed=f.c->velocity(f.c->currentPattern(),0,0);
- check((original==0)!=(changed==0),"GUI physical-key step state did not toggle");
+ check(f.c->velocity(f.c->currentPattern(),0,0)==100,
+       "GUI newly activated step must have velocity 100");
  const auto after=sample(*v);
  std::size_t diff=0;
  for(std::size_t i=0;i<before.size();++i)if(before[i]!=after[i])++diff;
  check(diff>=65,"GUI physical keycap did not visually respond to toggle");
  click(*v,631.,UiCompactLayout::header+88.);
- check(f.c->velocity(f.c->currentPattern(),0,0)==original,"GUI step toggle not restored");
- check(sample(*v)==before,"GUI keycap raster not restored");
+ check(f.c->velocity(f.c->currentPattern(),0,0)==0,"GUI step did not clear");
+ check(sample(*v)==before,"GUI keycap raster did not restore blank appearance");
  evidence("GUI keycap active/inactive/revert native raster PASS");
 }
 void testVisualRender(){
