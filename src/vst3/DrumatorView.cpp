@@ -749,11 +749,21 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      for(std::size_t step=0;step<32;++step){
        const double sx=kGridX+step*kCellWidth;
        const auto vel=controller_.velocity(controller_.currentPattern(),row,step);
-       c->setFillColor(step>=steps?off:panel);
-       c->drawRect({sx+2,y+97,sx+17,y+120},VSTGUI::kDrawFilled);
-       if(vel>0) {
-         c->setFillColor(step>=steps?border:accent);
-         c->drawRect({sx+3,y+119.-21.*vel/127.,sx+16,y+119.},VSTGUI::kDrawFilled);
+       // Recessed velocity lane and luminous cyan bar; retain old input geometry.
+       const bool disabled=step>=steps;
+       c->setFillColor(VSTGUI::CColor{5,24,46,255});
+       c->drawRect({sx+2.,y+97.,sx+17.,y+120.},VSTGUI::kDrawFilled);
+       c->setFillColor(disabled?VSTGUI::CColor{29,45,61,255}:
+                                  VSTGUI::CColor{34,75,106,255});
+       c->drawRect({sx+3.,y+98.,sx+16.,y+119.},VSTGUI::kDrawFilled);
+       if(vel>0&&!disabled) {
+         const double top=y+119.-21.*static_cast<double>(vel)/127.;
+         c->setFillColor(VSTGUI::CColor{29,151,196,255});
+         c->drawRect({sx+3.,top,sx+16.,y+119.},VSTGUI::kDrawFilled);
+         c->setFillColor(VSTGUI::CColor{109,228,244,255});
+         c->drawRect({sx+5.,top,sx+8.,y+119.},VSTGUI::kDrawFilled);
+         c->setFillColor(VSTGUI::CColor{163,246,250,255});
+         c->drawRect({sx+3.,top,sx+16.,top+1.},VSTGUI::kDrawFilled);
        }
      }
    }
