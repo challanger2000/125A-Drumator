@@ -65,6 +65,7 @@ jobs:
           Copy-Item $found[0].FullName -Destination (Join-Path $binaryDirectory '125A Drumator.vst3')
           Copy-Item 'resource/Drumator.uidesc' -Destination (Join-Path $resourceDirectory 'Drumator.uidesc')
           Copy-Item 'resource/abstraktes_blaues_metall_mit_sanftem_glanz.png' -Destination (Join-Path $resourceDirectory 'abstraktes_blaues_metall_mit_sanftem_glanz.png')
+          Copy-Item 'resource/125A_Drumator_Knob.png' -Destination (Join-Path $resourceDirectory '125A_Drumator_Knob.png')
           $moduleInfo = Join-Path $resourceDirectory 'moduleinfo.json'
           & './build/bin/Release/moduleinfotool.exe' -create -version 0.1.0 -path $bundle -output $moduleInfo
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $moduleInfo)) {
@@ -101,6 +102,7 @@ jobs:
             '125A Drumator.vst3/Contents/x86_64-win/125A Drumator.vst3',
             '125A Drumator.vst3/Contents/Resources/Drumator.uidesc',
             '125A Drumator.vst3/Contents/Resources/abstraktes_blaues_metall_mit_sanftem_glanz.png',
+            '125A Drumator.vst3/Contents/Resources/125A_Drumator_Knob.png',
             '125A Drumator.vst3/Contents/Resources/moduleinfo.json'
           ) | Sort-Object
           $actual = @($bundleFiles | ForEach-Object {
