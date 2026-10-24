@@ -705,13 +705,28 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(border);
        c->drawString(index,{sx,y+10,sx+32,y+28},VSTGUI::kLeftText);
      }
-     c->setFillColor(inactive?off:velocity>=100?on:velocity>0?VSTGUI::CColor{148,119,88,255}:off);
-     c->drawRect({sx+2,y+45,sx+17,y+77},VSTGUI::kDrawFilled);
-     c->setFrameColor(step%4==0?letters:border);
-     c->drawRect({sx+1,y+44,sx+18,y+78},VSTGUI::kDrawStroked);
-     if(velocity>0) {
-       c->setFillColor(letters);
-       c->drawRect({sx+13,y+77.-static_cast<double>(velocity)*24./127.,sx+15,y+77.},VSTGUI::kDrawFilled);
+     // FL-style recessed step: dark body, orange-lit face for sounding steps.
+     // Geometry remains inside the existing step hit region (19 logical px).
+     const bool lit=velocity>0&&!inactive;
+     const VSTGUI::CRect outer{sx+1.,y+44.,sx+18.,y+78.};
+     const VSTGUI::CRect face{sx+3.,y+47.,sx+16.,y+75.};
+     c->setFillColor(VSTGUI::CColor{7,20,37,255});
+     c->drawRect(outer,VSTGUI::kDrawFilled);
+     c->setFrameColor(step%4==0?VSTGUI::CColor{87,126,161,255}:
+                                  VSTGUI::CColor{38,73,111,255});
+     c->drawRect(outer,VSTGUI::kDrawStroked);
+     c->setFillColor(inactive?VSTGUI::CColor{30,40,51,255}:
+                     lit?VSTGUI::CColor{227,113,29,255}:
+                         VSTGUI::CColor{43,51,65,255});
+     c->drawRect(face,VSTGUI::kDrawFilled);
+     // Thin highlight communicates a tactile button without changing hitboxes.
+     c->setFillColor(inactive?VSTGUI::CColor{52,59,69,255}:
+                     lit?VSTGUI::CColor{255,188,89,255}:
+                         VSTGUI::CColor{91,101,113,255});
+     c->drawRect({sx+4.,y+48.,sx+15.,y+50.},VSTGUI::kDrawFilled);
+     if(lit) {
+       c->setFillColor(VSTGUI::CColor{255,217,141,255});
+       c->drawRect({sx+6.,y+71.,sx+13.,y+73.},VSTGUI::kDrawFilled);
      }
    }
    c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
