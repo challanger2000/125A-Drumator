@@ -135,26 +135,29 @@ void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
 
 void drawPanelScrew(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* bitmap,double x,double y,double angle) {
  if(!bitmap||bitmap->getWidth()!=32.||bitmap->getHeight()!=32.)return;
- VSTGUI::CDrawContext::Transform rotation(*c,
-   VSTGUI::CGraphicsTransform().translate(-x,-y).rotate(angle).translate(x,y));
- c->fillRectWithBitmap(bitmap,{0.,0.,32.,32.},{x-8.,y-8.,x+8.,y+8.},1.f);
+ // Draw all 32 source pixels at 18px. fillRectWithBitmap crops/tiles here.
+ constexpr double factor=18./32.;
+ VSTGUI::CDrawContext::Transform transform(*c,
+   VSTGUI::CGraphicsTransform().scale(factor,factor)
+     .translate(-16.,-16.).rotate(angle).translate(x,y));
+ bitmap->draw(c,{0.,0.,32.,32.});
 }
 void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double cy,double fraction,
                 const char* title,const char* value,bool selected=false) {
  fraction=std::clamp(fraction,0.,1.);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
- c->drawString(title,{cx-46.,cy-34.,cx+46.,cy-18.});
+ c->drawString(title,{cx-46.,cy-37.,cx+46.,cy-24.});
  // A bitmap object can exist even when its PNG resource was not loaded,
  // notably in native offscreen QA outside the installed VST3 bundle.
  // Treat that as unavailable and paint an actual usable fallback control.
  if(auto* frames=dynamic_cast<VSTGUI::CMultiFrameBitmap*>(sprite);
     frames&&frames->getWidth()==125.&&frames->getHeight()==12625.) {
    const auto frame=frames->normalizedValueToFrameIndex(static_cast<float>(fraction));
-   // Render the 125px source frame into the 34px control without changing
-   // the host's existing logical-coordinate zoom or mouse hit rectangles.
-   const double scale=34./125.;
+   // Large 50px face; visual and clickable center match.
+   constexpr double radius=25.;
+   const double scale=2.*radius/125.;
    VSTGUI::CDrawContext::Transform transform(*c,
-     VSTGUI::CGraphicsTransform().scale(scale,scale).translate(cx-17.,cy-17.));
+     VSTGUI::CGraphicsTransform().scale(scale,scale).translate(cx-radius,cy-radius));
    frames->drawFrame(c,frame,{0.,0.});
    if(selected) {
      c->setFrameColor(accent);c->setLineWidth(1.);
@@ -163,15 +166,15 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  }else{
    // Visible fallback if a host did not load the sprite resource.
    c->setFillColor(panel);
-   c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawFilled);
+   c->drawEllipse({cx-25.,cy-25.,cx+25.,cy+25.},VSTGUI::kDrawFilled);
    c->setFrameColor(letters);
-   c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawStroked);
+   c->drawEllipse({cx-25.,cy-25.,cx+25.,cy+25.},VSTGUI::kDrawStroked);
    const auto angle=(-135.+270.*fraction)*3.14159265358979323846/180.;
    c->setFrameColor(on);c->setLineWidth(2.5);
-   c->drawLine({cx,cy},{cx+std::sin(angle)*13.,cy-std::cos(angle)*13.});
+   c->drawLine({cx,cy},{cx+std::sin(angle)*20.,cy-std::cos(angle)*20.});
  }
  c->setLineWidth(1.);c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
- c->drawString(value,{cx+21.,cy-11.,cx+72.,cy+14.},VSTGUI::kLeftText);
+ c->drawString(value,{cx+29.,cy-12.,cx+72.,cy+13.},VSTGUI::kLeftText);
 }
 } // anonymous namespace: shared rotary painter and palette
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
@@ -751,9 +754,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(step%4==0) {
        char index[8]{};
        std::snprintf(index,sizeof(index),"%u",static_cast<unsigned>(step+1));
-       // High-contrast group numbers above every fourth step (1,5,9...).
-       c->setFillColor(VSTGUI::CColor{7,31,58,255});
-       c->drawRect({sx+1.,y+10.,sx+34.,y+30.},VSTGUI::kDrawFilled);
+       // Bare group numbers on the blue row, no unwanted dark boxes.
        c->setFont(VSTGUI::kNormalFont,12);
        c->setFontColor(inactive?VSTGUI::CColor{146,165,180,255}:
                                 VSTGUI::CColor{226,242,253,255});
@@ -1081,10 +1082,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      c->drawString(status_.c_str(),{265,556,1020,585});
  }
  // Decorative corners only; no hit regions or interactive widgets are added.
- drawPanelScrew(c,screwBitmap_,12.,43.,-15.);
- drawPanelScrew(c,screwBitmap_,1268.,43.,25.);
- drawPanelScrew(c,screwBitmap_,12.,fullHeight-12.,40.);
- drawPanelScrew(c,screwBitmap_,1268.,fullHeight-12.,-30.);
+ drawPanelScrew(c,screwBitmap_,10.,47.,-15.);
+ drawPanelScrew(c,screwBitmap_,1270.,47.,25.);
+ drawPanelScrew(c,screwBitmap_,10.,fullHeight-10.,40.);
+ drawPanelScrew(c,screwBitmap_,1270.,fullHeight-10.,-30.);
  setDirty(false);
 }
 bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
@@ -1459,7 +1460,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  for(int i=4;i<=6;++i){
    const auto center=UiCompactLayout::globalKnobCenters[static_cast<std::size_t>(i-4)];
-   if(x>=center-18.&&x<center+18.&&y>=59&&y<94) {
+   if(x>=center-UiCompactLayout::knobRadius&&x<center+UiCompactLayout::knobRadius&&
+       y>=76.-UiCompactLayout::knobRadius&&y<76.+UiCompactLayout::knobRadius) {
       const int previous=i==4?static_cast<int>(controller_.swingPercent()):
                          i==5?static_cast<int>(controller_.humanizePercent()):
                               static_cast<int>(controller_.masterVolume());
@@ -1692,7 +1694,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    for(int i=0;i<4;++i){
      if(i==3&&controller_.rowRandomVelocity(row)==0)continue;
      const auto center=UiCompactLayout::rowKnobCenters[static_cast<std::size_t>(i)];
-     if(x>=center-18.&&x<center+18.&&y>=top+51&&y<top+85){
+     if(x>=center-UiCompactLayout::knobRadius&&x<center+UiCompactLayout::knobRadius&&
+        y>=top+68.-UiCompactLayout::knobRadius&&
+        y<top+68.+UiCompactLayout::knobRadius){
        const int previous=i==0?static_cast<int>(controller_.rowGain(row)):
           i==1?controller_.rowPan(row):
           i==2?controller_.rowPitch(row):

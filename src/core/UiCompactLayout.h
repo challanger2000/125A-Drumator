@@ -9,7 +9,7 @@ struct UiCompactLayout final {
  static constexpr double width=1280.,header=108.,baseRow=94.,velocityRow=30.,footer=54.;
  static constexpr std::size_t perPage=4;
  static constexpr double stepX=622.,stepWidth=19.;
- static constexpr double knobRadius=17.;
+ static constexpr double knobRadius=25.;
  struct Slot {double left,right;};
  static constexpr Slot barOne{280.,364.},barTwo{372.,456.},edit{208.,272.};
  static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},

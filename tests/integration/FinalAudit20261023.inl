@@ -1465,8 +1465,8 @@ void testRv05GlobalKnobPaintCenters(){
  check(bitmap[0]>0.5&&bitmap[1]==125.&&bitmap[2]==12625.,
        "RV05 JKnobMan image not loaded at expected 125x12625 size");
  for(const double center:UiCompactLayout::globalKnobCenters){
-   const auto left=static_cast<unsigned>(center-24.);
-   constexpr unsigned top=59,width=48,height=35;
+   const auto left=static_cast<unsigned>(center-32.);
+   constexpr unsigned top=48,width=64,height=57;
    const auto visible=frGuiPixels(*view,left,top,left+width,top+height);
    std::vector<std::uint32_t> hidden;
    drumator::qa::suppressRotaryFace.store(true,std::memory_order_relaxed);
