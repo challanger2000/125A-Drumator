@@ -89,6 +89,7 @@ void operator delete[](void* p,std::size_t) noexcept{std::free(p);}
 namespace drumator::qa {
 thread_local bool legacyTriggerOrdering=false;
 std::atomic<AuditMutation> auditMutation{AuditMutation::none};
+std::atomic<bool> suppressRotaryFace{false};
 std::atomic<unsigned> auditSongScheduleCalls{0};
 std::atomic<unsigned> auditSongPatternSnapshots{0};
 std::atomic<unsigned> auditViewRefreshFaultHits{0};

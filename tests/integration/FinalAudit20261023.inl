@@ -1454,43 +1454,40 @@ void testFr06ModalErrorPixels(){
 }
 // RV05 independent raster oracle: the actual circle must be centered on
 // the layout hit center. A return to old painted x=80/178/1178 fails.
+// RV05 native raster oracle: identify the actual knob face by subtracting
+// an otherwise identical render with only the face suppressed in QA sources.
+// No dependence on color thresholds or textured panel pixels. RM15 mutates
+// the three draw centers and must still be killed by this test.
 void testRv05GlobalKnobPaintCenters(){
  Fixture f;fa23Kit(f);f.open();
  auto* view=IntegrationAccess::view(*f.c,0);
+ const auto bitmap=IntegrationAccess::rotaryImageStatus(*view);
+ check(bitmap[0]>0.5&&bitmap[1]==125.&&bitmap[2]==12625.,
+       "RV05 JKnobMan image not loaded at expected 125x12625 size");
  for(const double center:UiCompactLayout::globalKnobCenters){
    const auto left=static_cast<unsigned>(center-24.);
-   // Offscreen QA is not guaranteed to have VST3 bundle resources loaded.
-   // Verify the actual painted position in both modes: bitmap and fallback.
-   // Preserve the historical-offset negative mutation (RM15).
-   const auto pixels=frGuiPixels(*view,left,74,left+48,78);
-   constexpr std::uint32_t fallbackFace=(41u<<16)|(53u<<8)|67u;
-   double darkSum=0.,darkCount=0.,fallbackSum=0.,fallbackCount=0.;
-   for(unsigned y=0;y<4;++y)
-     for(unsigned x=0;x<48;++x){
-       const auto rgb=pixels[y*48+x];
-       const auto red=(rgb>>16)&255u,green=(rgb>>8)&255u,blue=rgb&255u;
-       const auto xAbsolute=static_cast<double>(left+x);
-       if(red<=35u&&green<=40u&&blue<=48u){darkSum+=xAbsolute;++darkCount;}
-       if(rgb==fallbackFace){fallbackSum+=xAbsolute;++fallbackCount;}
-     }
-   const bool spriteVisible=darkCount>=8.;
-   const double count=spriteVisible?darkCount:fallbackCount;
-   const double sum=spriteVisible?darkSum:fallbackSum;
-   if(count<8.) {
-     // Diagnostics only: do not waive the assertion. Report real input
-     // pixels and actual resource load state from the native Windows test.
-     const auto image=IntegrationAccess::rotaryImageStatus(*view);
-     std::ostringstream details;
-     details<<"RV05 no painted rotary surface; imageLoaded="<<image[0]
-            <<" bitmapWidth="<<image[1]<<" bitmapHeight="<<image[2]
-            <<" controlCenter="<<center<<" pixels=";
-     for(unsigned x=4;x<44;x+=4){
-       details<<std::hex<<pixels[2u*48u+x]<<",";
-     }
-     throw std::runtime_error(details.str());
+   constexpr unsigned top=59,width=48,height=35;
+   const auto visible=frGuiPixels(*view,left,top,left+width,top+height);
+   std::vector<std::uint32_t> hidden;
+   drumator::qa::suppressRotaryFace.store(true,std::memory_order_relaxed);
+   try {hidden=frGuiPixels(*view,left,top,left+width,top+height);}
+   catch(...){
+     drumator::qa::suppressRotaryFace.store(false,std::memory_order_relaxed);
+     throw;
    }
-   check(std::abs(sum/count-center)<2.0,
-         "RV05 painted rotary center does not match input hit center");
+   drumator::qa::suppressRotaryFace.store(false,std::memory_order_relaxed);
+   check(visible.size()==hidden.size(),"RV05 unequal raster extents");
+   double sum=0.,count=0.;
+   for(unsigned y=0;y<height;++y)
+     for(unsigned x=0;x<width;++x){
+       const auto pixel=static_cast<std::size_t>(y)*width+x;
+       if(visible[pixel]==hidden[pixel])continue;
+       sum+=static_cast<double>(left+x);
+       count+=1.;
+     }
+   check(count>=150.,"RV05 bitmap face not visible in native pixel capture");
+   check(std::abs(sum/count-center)<0.85,
+         "RV05 rendered knob center differs from its input hit center");
  }
 }
 void testFr10GlobalKnobEdgeHit(){

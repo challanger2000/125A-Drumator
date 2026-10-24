@@ -92,6 +92,12 @@ function(reaudit_instrument name variable)
         }
         fade=std::clamp(fade,0.,1.);
       }")
+    // Suppress only the knob face in one QA-only raster pass. The title and
+    // value stay rendered, enabling a true background-independent difference.
+    qa_replace(_code " if(auto* frames=dynamic_cast<VSTGUI::CMultiFrameBitmap*>(sprite);"
+      " if(!drumator::qa::suppressRotaryFace.load(std::memory_order_relaxed)) {\n if(auto* frames=dynamic_cast<VSTGUI::CMultiFrameBitmap*>(sprite);")
+    qa_replace(_code " c->setLineWidth(1.);c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);"
+      " }\n c->setLineWidth(1.);c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);")
     # RV05: replay the three historical hard-coded draw centers.
     # Input hit detection retains its corrected shared layout coordinates.
     qa_replace(_code "drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[0],76"

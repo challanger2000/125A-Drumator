@@ -13,6 +13,8 @@ enum class AuditMutation { none, suppressZeroStop, staleDuration, skipPeerCommit
  keepCycleOnPartialDisable, ignorePartialTempo, repeatSongSnapshots,
  ignoreValidPartialPpq, keepComponentFirstOriginArmed };
 extern std::atomic<AuditMutation> auditMutation;
+// QA-only two-pass raster oracle: paint with and without actual knob faces.
+extern std::atomic<bool> suppressRotaryFace;
 extern std::atomic<unsigned> auditSongScheduleCalls;
 extern std::atomic<unsigned> auditSongPatternSnapshots;
 extern std::atomic<unsigned> auditViewRefreshFaultHits;
