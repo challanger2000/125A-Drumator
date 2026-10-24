@@ -914,14 +914,24 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
 
  if(sampleEditorOpen_) {
    // Modal overlay, fully inside the existing 1280-wide view at 100% zoom.
-   c->setFillColor(background);c->drawRect({230,100,1050,605},VSTGUI::kDrawFilled);
-   c->setFrameColor(accent);c->drawRect({230,100,1050,605},VSTGUI::kDrawStroked);
+   // Match the Drumator blue-metal shell; keep editor geometry and hit zones.
+   c->setFillColor(VSTGUI::CColor{8,28,51,255});
+   c->drawRect({230,100,1050,605},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{27,85,136,255});
+   c->drawRect({234,104,1046,151},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{93,166,211,255});
+   c->drawRect({234,104,1046,106},VSTGUI::kDrawFilled);
+   c->setFrameColor(VSTGUI::CColor{105,180,224,255});
+   c->drawRect({230,100,1050,605},VSTGUI::kDrawStroked);
    c->setFont(VSTGUI::kNormalFont,18);c->setFontColor(letters);
    c->drawString("SAMPLE EDITOR",{260,114,1000,148});
    // Wide, filled peak envelope: adjacent interpolated columns preserve
    // transients without inventing audio or filtering source PCM.
-   c->setFillColor(panel);c->drawRect(editorRect(UiWaveEditorLayout::waveform),VSTGUI::kDrawFilled);
-   c->setFrameColor(border);c->drawLine({284,268},{994,268});
+   c->setFillColor(VSTGUI::CColor{5,19,36,255});
+   c->drawRect(editorRect(UiWaveEditorLayout::waveform),VSTGUI::kDrawFilled);
+   c->setFrameColor(VSTGUI::CColor{47,109,154,255});
+   c->drawRect(editorRect(UiWaveEditorLayout::waveform),VSTGUI::kDrawStroked);
+   c->setFrameColor(VSTGUI::CColor{47,109,154,255});c->drawLine({284,268},{994,268});
    if(sampleEditorStereo_)c->drawLine({284,326},{994,326});
    const auto n=sampleEditorWave_.size();
    for(int pixel=0;pixel<710;++pixel){
