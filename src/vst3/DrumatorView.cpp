@@ -22,6 +22,7 @@
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cgraphicstransform.h"
 #include "vstgui/lib/cbitmap.h"
+#include "vstgui/lib/cmultiframebitmap.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cfont.h"
@@ -144,17 +145,17 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  fraction=std::clamp(fraction,0.,1.);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
  c->drawString(title,{cx-46.,cy-34.,cx+46.,cy-18.});
- if(sprite&&sprite->getWidth()==125.&&sprite->getHeight()==12625.) {
-   constexpr double frameSize=125.;
-   constexpr double frameCount=101.;
-   const auto frame=static_cast<int>(std::lround(fraction*(frameCount-1.)));
-   c->fillRectWithBitmap(sprite,
-     {0.,frame*frameSize,frameSize,(frame+1)*frameSize},
-     {cx-17.,cy-17.,cx+17.,cy+17.},1.f);
+ if(auto* frames=dynamic_cast<VSTGUI::CMultiFrameBitmap*>(sprite)) {
+   const auto frame=frames->normalizedValueToFrameIndex(static_cast<float>(fraction));
+   // Render the 125px source frame into the 34px control without changing
+   // the host's existing logical-coordinate zoom or mouse hit rectangles.
+   const double scale=34./125.;
+   VSTGUI::CDrawContext::Transform transform(*c,
+     VSTGUI::CGraphicsTransform().translate(cx-17.,cy-17.).scale(scale,scale));
+   frames->drawFrame(c,frame,{0.,0.});
    if(selected) {
-     c->setFrameColor(accent);
-     c->setLineWidth(1.);
-     c->drawEllipse({cx-18.,cy-18.,cx+18.,cy+18.},VSTGUI::kDrawStroked);
+     c->setFrameColor(accent);c->setLineWidth(1.);
+     c->drawEllipse({0.,0.,125.,125.},VSTGUI::kDrawStroked);
    }
  }else{
    // Visible fallback if a host did not load the sprite resource.
@@ -614,7 +615,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  // The view itself owns the drop-target interface, as in Phraseator.
  controller_.registerView(this);
  backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("abstraktes_blaues_metall_mit_sanftem_glanz.png"));
- knobBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Knob.png"));
+ knobBitmap_=new VSTGUI::CMultiFrameBitmap(VSTGUI::CResourceDescription("125A_Drumator_Knob.png"),{125.,125.},101);
  screwBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Screw.png"));
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
