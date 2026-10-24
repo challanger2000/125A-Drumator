@@ -102,13 +102,33 @@ void drawBrandLogo(VSTGUI::CDrawContext* c) {
 // contrast and selected/disabled states, with fixed hit regions.
 void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
                  const char* title,bool selected=false,bool enabled=true) {
- const VSTGUI::CColor face=enabled?(selected?accent:panel):background;
- ctx->setFillColor(face);
+ // Compact blue-metal button, matching the row wells and illuminated steps.
+ // The rectangle itself remains unchanged, so mouse hit testing is unaffected.
+ const VSTGUI::CColor deep{8,28,51,255};
+ const VSTGUI::CColor top= !enabled?VSTGUI::CColor{32,47,60,255}:
+   selected?VSTGUI::CColor{37,132,183,255}:VSTGUI::CColor{45,90,130,255};
+ const VSTGUI::CColor lower= !enabled?VSTGUI::CColor{27,39,49,255}:
+   selected?VSTGUI::CColor{19,87,144,255}:VSTGUI::CColor{21,54,88,255};
+ ctx->setFillColor(deep);
  ctx->drawRect(rect,VSTGUI::kDrawFilled);
- ctx->setFrameColor(selected?letters:border);
+ if(rect.getWidth()>4.&&rect.getHeight()>4.) {
+   const double mid=(rect.top+rect.bottom)*.5;
+   ctx->setFillColor(top);
+   ctx->drawRect({rect.left+2.,rect.top+2.,rect.right-2.,mid},VSTGUI::kDrawFilled);
+   ctx->setFillColor(lower);
+   ctx->drawRect({rect.left+2.,mid,rect.right-2.,rect.bottom-2.},VSTGUI::kDrawFilled);
+   ctx->setFillColor(selected?VSTGUI::CColor{111,213,242,255}:
+       VSTGUI::CColor{90,143,179,255});
+   ctx->drawRect({rect.left+2.,rect.top+2.,rect.right-2.,rect.top+3.},
+                 VSTGUI::kDrawFilled);
+ }
+ ctx->setFrameColor(!enabled?VSTGUI::CColor{52,69,83,255}:
+                     selected?VSTGUI::CColor{130,223,244,255}:
+                              VSTGUI::CColor{60,108,147,255});
  ctx->drawRect(rect,VSTGUI::kDrawStroked);
  ctx->setFont(VSTGUI::kNormalFont,12);
- ctx->setFontColor(!enabled?border:(selected?background:letters));
+ ctx->setFontColor(!enabled?VSTGUI::CColor{109,129,143,255}:
+                   selected?VSTGUI::CColor{248,252,255,255}:letters);
  ctx->drawString(title,rect);
 }
 
