@@ -30,6 +30,8 @@ function(reaudit_instrument name variable)
       "if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;\n if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::zeroPrefix||\n    (drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::muteImportedProcessor&&\n     drumator::qa::auditImportTarget.load()==this)) {\n   const auto auditMutationFrames=drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::zeroPrefix?\n       std::min(Steinberg::int32{32},data.numSamples):data.numSamples;\n   if(left)std::fill_n(left,auditMutationFrames,0.f);if(right)std::fill_n(right,auditMutationFrames,0.f);\n }\n if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::delayImportedProcessor&&\n    drumator::qa::auditImportTarget.load()==this&&drumator::qa::auditDelayCalls.fetch_add(1)<8u)\n   std::this_thread::sleep_for(std::chrono::milliseconds(10));")
     set(_code "#include <chrono>\n${_code}")
   elseif(name STREQUAL "DrumatorController")
+    qa_replace(_code "auto bounds=indexedLeft.range(wave->left.data(),wave->left.size(),"
+      "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::bypassWaveRangeIndex)++drumator::qa::auditWaveIndexedCalls;\n     auto bounds=drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::bypassWaveRangeIndex?waveformRange(wave->left.data(),wave->left.size(),binFirst,std::max(binFirst+std::size_t{1},binLast)):indexedLeft.range(wave->left.data(),wave->left.size(),")
     qa_replace(_code "if(editorWaveRow_==row&&"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::disableWaveCache&&editorWaveRow_==row&&")
     qa_replace(_code "if(!hit) {\n     const void* bytes=nullptr;"

@@ -91,6 +91,7 @@ std::atomic<AuditMutation> auditMutation{AuditMutation::none};
 std::atomic<unsigned> auditSongScheduleCalls{0};
 std::atomic<unsigned> auditViewRefreshFaultHits{0};
 std::atomic<unsigned> auditWaveDecodeMisses{0},auditWaveFullReplies{0};
+std::atomic<unsigned> auditWaveIndexedCalls{0};
 std::atomic<const void*> auditImportTarget{nullptr};
 std::atomic<unsigned> auditImportCalls{0},auditDelayCalls{0};
 void probe(Point p) noexcept {
@@ -1970,6 +1971,8 @@ int main(int argc,char** argv){
  run("A07 failed peer view refresh preserves accepted edit and dirty request",testA07NotificationFaultIsolation);
  run("A08 native WAV editor revision cache and invalidation",testA08WaveEditorRevisionCache);
  run("RM16 waveform cache disabled is detected",[]{expectMutationKilled(qa::AuditMutation::disableWaveCache,"full WAV on every viewport query",testA08WaveEditorRevisionCache);});
+ run("A09 native variable stereo waveform exact reference",testA09WaveformExtremaAgainstNativeReference);
+ run("RM17 direct-scan mutation is detected",[]{expectMutationKilled(qa::AuditMutation::bypassWaveRangeIndex,"linear scan instead of indexed bins",testA09WaveformExtremaAgainstNativeReference);});
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
  run("RV02 transient STOP rejection during native editor close",testRv02NativeEditorCloseTransientReject);
  run("RV02 rejected STOP leaves Apply uncommitted",testRv02ApplyRejectKeepsEdit);

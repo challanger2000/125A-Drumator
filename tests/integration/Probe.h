@@ -7,11 +7,12 @@ enum class AuditMutation { none, suppressZeroStop, staleDuration, skipPeerCommit
  basenameOnly, delayMidiOne, dropMidi, doubleMidi, zeroPrefix,
  skipImport, muteImportedProcessor, delayImportedProcessor,
  rejectPreviewStop, rejectPreviewStopOnce, patternQueryOOM, patternReplyOOM,
- oldFadeRenderer, oldKnobDrawCenters, loadRepaintOOM, refreshViewsOOM, disableWaveCache };
+ oldFadeRenderer, oldKnobDrawCenters, loadRepaintOOM, refreshViewsOOM, disableWaveCache, bypassWaveRangeIndex };
 extern std::atomic<AuditMutation> auditMutation;
 extern std::atomic<unsigned> auditSongScheduleCalls;
 extern std::atomic<unsigned> auditViewRefreshFaultHits;
 extern std::atomic<unsigned> auditWaveDecodeMisses,auditWaveFullReplies;
+extern std::atomic<unsigned> auditWaveIndexedCalls;
 extern std::atomic<const void*> auditImportTarget;
 extern std::atomic<unsigned> auditImportCalls,auditDelayCalls;
 enum Point { none, patternMidWrite, patternReadStarted, restoreSnapshot,

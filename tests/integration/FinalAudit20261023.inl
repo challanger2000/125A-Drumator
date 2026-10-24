@@ -221,6 +221,64 @@ void testRv01OutputlessPreviewRetirement(){
        f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
        "RV01 fresh preview failed after outputless interval");
 }
+void testA09WaveformExtremaAgainstNativeReference(){
+ constexpr std::size_t count=131089u;
+ auto wav=constantStereo(0.f,0.f);
+ wav.resize(44u+count*8u);
+ const auto put32=[&](std::size_t offset,std::uint32_t value){
+   for(unsigned j=0;j<4u;++j)
+     wav[offset+j]=static_cast<std::uint8_t>(value>>(j*8u));
+ };
+ put32(4u,static_cast<std::uint32_t>(wav.size()-8u));
+ put32(40u,static_cast<std::uint32_t>(count*8u));
+ std::vector<float> left(count),right(count);
+ for(std::size_t i=0;i<count;++i) {
+   left[i]=static_cast<float>(std::sin(static_cast<double>(i)*.01417)*.6);
+   right[i]=static_cast<float>(std::cos(static_cast<double>(i)*.01231)*.4);
+   if(i%256u==255u){left[i]=-.99f;right[i]=.95f;}
+   if(i%1024u==0u){left[i]=.87f;right[i]=-.92f;}
+   std::memcpy(wav.data()+44u+i*8u,&left[i],sizeof(float));
+   std::memcpy(wav.data()+48u+i*8u,&right[i],sizeof(float));
+ }
+ Fixture f;KitState state;state.grid.fill(0);state.visible=4;
+ state.names[0]="variable.wav";state.wav[0]=wav;
+ f.kit(state);prepareAudio(*f.p);
+ qa::auditWaveIndexedCalls=0;
+ // Open the real native WAV editor, then exercise the very same
+ // sampleEditorSnapshot path used by zoom, scroll and mouse drags.
+ auto& view=fa23Open(f);
+ check(IntegrationAccess::zoomSample(view,true)&&
+       IntegrationAccess::scrollSample(view,825.),
+       "A09 real View viewport controls failed");
+ std::array<WaveformRange,256> bins{},other{};
+ SampleEdit edit{};std::uint32_t frames=0,revision=0;bool stereo=false;
+ const std::array<std::pair<std::size_t,std::size_t>,8> windows{{
+     {0u,count},{1u,260u},{250u,260u},{255u,513u},
+     {256u,129999u},{17u,2000u},{65535u,65600u},{count-1u,count}}};
+ for(const auto bounds:windows) {
+   check(f.c->sampleEditorSnapshot(0,edit,frames,bins,
+           static_cast<std::uint32_t>(bounds.first),
+           static_cast<std::uint32_t>(bounds.second),
+           &revision,&other,&stereo)&&frames==count&&stereo,
+         "A09 authentic Controller->Processor stereo waveform query rejected");
+   for(std::size_t i=0;i<256u;++i) {
+     const auto start=bounds.first+((bounds.second-bounds.first)*i)/256u;
+     const auto rawEnd=bounds.first+((bounds.second-bounds.first)*(i+1u))/256u;
+     const auto end=std::max(start+1u,rawEnd);
+     const auto expectedLeft=waveformRange(left.data(),count,start,end);
+     const auto expectedRight=waveformRange(right.data(),count,start,end);
+     check(std::memcmp(&expectedLeft.minimum,&bins[i].minimum,sizeof(float))==0&&
+           std::memcmp(&expectedLeft.maximum,&bins[i].maximum,sizeof(float))==0&&
+           std::memcmp(&expectedRight.minimum,&other[i].minimum,sizeof(float))==0&&
+           std::memcmp(&expectedRight.maximum,&other[i].maximum,sizeof(float))==0,
+           "A09 displayed stereo bin does not match independent PCM oracle");
+   }
+ }
+ check(qa::auditWaveIndexedCalls.load()>=8u*256u,
+       "A09 real UI queries used old linear fallback instead of the index");
+ check(auditReturnedKit(*f.p).wav[0]==wav,
+       "A09 purely graphical operation changed embedded sample bytes");
+}
 void testA08WaveEditorRevisionCache(){
  FinalAuditFiles files;Fixture f;fa23Kit(f);
  qa::auditWaveDecodeMisses=0;qa::auditWaveFullReplies=0;
