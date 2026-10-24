@@ -1073,6 +1073,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        originStep<=static_cast<double>(std::numeric_limits<std::int64_t>::max()/2);
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
+     if(finish<=cursor)return; // retained for unique QA instrumentation anchor
      while(cursor<finish) {
        Steinberg::int32 segmentEnd=finish;
        double segmentPpq=initialPpq+static_cast<double>(cursor)*ppqPerFrame;
