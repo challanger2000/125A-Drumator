@@ -1021,7 +1021,10 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
            (suppliedContext->cycleStartMusic+cycleOvershoot))<=expectedTolerance;
    if(transportJump&&!confirmedCycleWrap)voices_.reset();
    if(!haveExpectedPpq_||transportJump) {
-      const double initialStep=std::floor(initialPpq*4.0+1e-8);
+      // Cycle origin is the musical loop start, not the host's post-seam overshoot.
+      const double originPpq=confirmedCycleWrap?
+          suppliedContext->cycleStartMusic:initialPpq;
+      const double initialStep=std::floor(originPpq*4.0+1e-8);
       phaseOriginStep_=std::isfinite(initialStep)&&
          initialStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
          initialStep<=static_cast<double>(std::numeric_limits<std::int64_t>::max()/2)
@@ -1039,9 +1042,56 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    std::array<std::uint8_t,kPatterns> lengths{};
    for(std::size_t i=0;i<kPatterns;++i)
      lengths[i]=audioPatternValid_[i]?audioPatternLengthCache_[i]:32;
+   // VST3 permits a fixed host block to straddle an active Cycle boundary.
+   // Subdivide the sequencer's timing only; existing sample voices keep ringing.
+   // Never infer a loop from an unflagged PPQ discontinuity.
+   const double ppqPerFrame=tempo/(60.0*rate);
+   const bool cycleFlags=suppliedContext&&
+       (suppliedContext->state&
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid))==
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid);
+   const double cycleStart=cycleFlags?suppliedContext->cycleStartMusic:0.0;
+   const double cycleEnd=cycleFlags?suppliedContext->cycleEndMusic:0.0;
+   const double cycleLength=cycleEnd-cycleStart;
+   const double firstWrapFrame=(cycleEnd-initialPpq)/ppqPerFrame;
+   const double cycleFrames=cycleLength/ppqPerFrame;
+   const double approximateWraps=std::isfinite(firstWrapFrame)&&
+       std::isfinite(cycleFrames)&&cycleFrames>0.0?
+       std::max(0.0,(static_cast<double>(data.numSamples)-firstWrapFrame)/cycleFrames)+1.0:0.0;
+   const double originStep=cycleFlags?std::floor(cycleStart*4.0+1e-8):0.0;
+   const bool splitCycle=cycleFlags&&std::isfinite(cycleStart)&&
+       std::isfinite(cycleEnd)&&cycleEnd>cycleStart&&
+       std::isfinite(ppqPerFrame)&&ppqPerFrame>0.0&&
+       initialPpq>=cycleStart-expectedTolerance&&
+       initialPpq<cycleEnd&&std::isfinite(firstWrapFrame)&&
+       std::isfinite(cycleFrames)&&cycleFrames>=1.0&&
+       approximateWraps<=StepScheduler::maxBoundariesPerBlock&&
+       std::isfinite(originStep)&&
+       originStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
+       originStep<=static_cast<double>(std::numeric_limits<std::int64_t>::max()/2);
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
-     if(finish<=cursor)return;
+     while(cursor<finish) {
+       Steinberg::int32 segmentEnd=finish;
+       double segmentPpq=initialPpq+static_cast<double>(cursor)*ppqPerFrame;
+       if(splitCycle) {
+         constexpr double epsilonSamples=1e-8;
+         const double first=std::ceil(firstWrapFrame-epsilonSamples);
+         if(static_cast<double>(cursor)>=first) {
+           const double elapsed=static_cast<double>(cursor)-firstWrapFrame;
+           const double loops=std::floor(std::max(0.0,elapsed)/cycleFrames+1e-12);
+           const double remainder=std::max(0.0,elapsed-loops*cycleFrames);
+           segmentPpq=cycleStart+remainder*ppqPerFrame;
+           phaseOriginStep_=static_cast<std::int64_t>(originStep);
+           const double next=std::ceil(firstWrapFrame+(loops+1.0)*cycleFrames-epsilonSamples);
+           if(std::isfinite(next)&&next<segmentEnd)
+             segmentEnd=std::max(cursor+1,static_cast<Steinberg::int32>(next));
+         }else if(first<segmentEnd) {
+           segmentEnd=std::max(cursor+1,static_cast<Steinberg::int32>(first));
+         }
+       }
      // Read exactly one generation; a concurrently replaced pattern is
      // deferred to a later block rather than rendered in a mixed state.
      std::array<std::uint8_t,kRows*kSteps> consistent{};
@@ -1055,7 +1105,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        consistent=audioPatternCache_[activePattern];
      }else if(!audioSongEnabled_) {
        // No previously validated generation exists; never render a partial edit.
-       cursor=finish;return;
+       cursor=segmentEnd;continue;
      }
      if(audioPatternValid_[activePattern])
        lengths[activePattern]=audioPatternLengthCache_[activePattern];
@@ -1073,8 +1123,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
           return p==program?values[r*kSteps+step]:0;
        }
      } read{consistent,static_cast<std::uint8_t>(activePattern),lengths[activePattern]};
-     const Clock clock{initialPpq+static_cast<double>(cursor)*tempo/(60.0*rate),
-                       tempo,rate,finish-cursor,true,swing,humanize,phaseOriginStep_};
+     const Clock clock{segmentPpq,tempo,rate,segmentEnd-cursor,
+                       true,swing,humanize,phaseOriginStep_};
      std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> songPrograms{};
      struct SongRead {
        const std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns>& values;
@@ -1114,7 +1164,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
            StepScheduler::run(songRead,clock,emitTrigger):
            StepScheduler::run(read,clock,emitTrigger);
      if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
-     cursor=finish;
+     cursor=segmentEnd;
+     }
    };
    // SongChain determines the audio independently of host-selected A-H.
    // Dense host automation still changes the selected parameter at its
