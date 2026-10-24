@@ -809,7 +809,9 @@ void testA21PartialTempoWithMissingPpq(){
          "A21 ProcessContext with partial current tempo");
    for(unsigned frame=0;frame<256;++frame){
      const unsigned at=block*256+frame;
-     const unsigned hits=1u+(at>=320u)+(at>=704u);
+     // 240 BPM has a 192-frame Cycle: after the first hit at 320,
+     // exact subsequent loop boundaries are frames 512 and 704.
+     const unsigned hits=1u+(at>=320u)+(at>=512u)+(at>=704u);
      const float left=static_cast<float>(hits)*.125f;
      check(reference.left[frame]==left&&reference.right[frame]==-2.f*left,
            "A21 full-host tempo oracle independently wrong");
@@ -818,7 +820,7 @@ void testA21PartialTempoWithMissingPpq(){
            "A21 ignored valid partial tempo or cut sample tails at host resync");
    }
  }
- check(IntegrationAccess::activeAudioVoices(*partial.p)==3,
+ check(IntegrationAccess::activeAudioVoices(*partial.p)==4,
        "A21 partial tempo resume lost voice at Cycle boundary");
 }
 
