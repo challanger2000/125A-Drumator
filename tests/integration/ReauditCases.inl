@@ -315,12 +315,25 @@ void testReauditPcmNegatives(){
    expectMutationKilled(mode,"independent complete PCM",testReauditPcmTimeline);
 }
 void testReauditDeadlineDiagnostic(){
+ // Positive control: the real paced import path must pass before any
+ // deliberately injected process() overrun can count as a killed mutation.
  testPacedSampleSwapContinuity();
- ReauditMutationScope scope(qa::AuditMutation::delayImportedProcessor);
- testPacedSampleSwapContinuity();
- check(qa::auditDelayCalls.load()>=8u&&qa::auditImportCalls.load()==12u,
-       "RE deadline injection did not reach actual imported processor");
- qa::workflowNotice("MUTATION PACING eight 10ms callback stalls: function still PASS by its diagnostic-only deadline contract; inspect its published miss counter");
+ bool caughtDeadlineFailure=false;
+ {
+   ReauditMutationScope scope(qa::AuditMutation::delayImportedProcessor);
+   try {testPacedSampleSwapContinuity();}
+   catch(const std::runtime_error& error){
+     // Require the exact new deadline gate, not an unrelated PCM/IO failure.
+     caughtDeadlineFailure=std::string(error.what()).find(
+         "PACING missed an audio deadline")!=std::string::npos;
+   }
+ }
+ check(caughtDeadlineFailure&&qa::auditDelayCalls.load()>=8u&&
+       qa::auditImportCalls.load()==12u,
+       "RM12 did not kill the 10ms PCM-correct but deadline-broken callback");
+ qa::workflowNotice(
+     "RM12 mutation KILLED: eight deliberately delayed 10ms callbacks "
+     "fail the new deadline gate; nonmutated paced audio PASS");
 }
 std::vector<std::uint8_t> reauditLongStereo(float left,float right,std::uint32_t rate,
                                           std::uint32_t frames=300000){
