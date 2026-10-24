@@ -72,6 +72,10 @@ void Controller::registerView(DrumatorView* view) {
 }
 void Controller::unregisterView(DrumatorView* view) {
  views_.erase(std::remove(views_.begin(),views_.end(),view),views_.end());
+ if(views_.empty()){
+   editorWaveCache_=DecodedWav{};
+   editorWaveRow_=kRows;
+ }
 }
 void Controller::notifyViews(bool relayout) {
  // After sendEditMessage() succeeded, the Processor has already committed
@@ -832,75 +836,92 @@ bool Controller::adjustSwing(int delta) {
 }
 
 bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
-                                     std::uint32_t& frames,
-                                     std::array<WaveformRange,256>& envelope,
-                                     std::uint32_t first,std::uint32_t last,
-                                     std::uint32_t* revision,
-                                     std::array<WaveformRange,256>* rightEnvelope,
-                                     bool* stereo) {
+                                      std::uint32_t& frames,
+                                      std::array<WaveformRange,256>& envelope,
+                                      std::uint32_t first,std::uint32_t last,
+                                      std::uint32_t* revision,
+                                      std::array<WaveformRange,256>* rightEnvelope,
+                                      bool* stereo) {
  if(row>=kRows)return false;
  Steinberg::Vst::IMessage* msg=nullptr;
  try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
  if(!msg)return false;
  struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
  try {
- msg->setMessageID("Drumator.SampleEditorQuery");
- auto* a=msg->getAttributes();
- if(!a||a->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk){
-   return false;
- }
- const auto result=sendMessage(msg);
- bool ok=false;
- if(result==Steinberg::kResultOk) {
-   const void* bytes=nullptr;Steinberg::uint32 length=0;
+   msg->setMessageID("Drumator.SampleEditorQuery");
+   auto* a=msg->getAttributes();
+   if(!a||a->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk)
+     return false;
+   // A metadata-only roundtrip detects another View's source replacement.
+   if(editorWaveRow_==row&&
+      a->setInt("KnownRevision",editorWaveRevision_)!=Steinberg::kResultOk)
+     return false;
+   if(sendMessage(msg)!=Steinberg::kResultOk)return false;
    Steinberg::int64 start=0,end=0,fadeIn=0,fadeOut=0,gainBits=0,version=-1;
-   if(a->getBinary("Wave",bytes,length)==Steinberg::kResultOk&&bytes&&
-      a->getInt("Start",start)==Steinberg::kResultOk&&
-      a->getInt("End",end)==Steinberg::kResultOk&&
-      a->getInt("FadeIn",fadeIn)==Steinberg::kResultOk&&
-      a->getInt("FadeOut",fadeOut)==Steinberg::kResultOk&&
-      a->getInt("GainBits",gainBits)==Steinberg::kResultOk&&
-      a->getInt("Revision",version)==Steinberg::kResultOk&&version>=0&&version<=UINT32_MAX) {
-     DecodedWav decoded;
-     if(WavPcm16Decoder::decode(static_cast<const std::uint8_t*>(bytes),length,decoded)==WavError::Ok&&
-        decoded.left.size()<=UINT32_MAX) {
-       SampleEdit candidate;
-       candidate.start=static_cast<std::uint32_t>(start);
-       candidate.end=static_cast<std::uint32_t>(end);
-       candidate.fadeIn=static_cast<std::uint32_t>(fadeIn);
-       candidate.fadeOut=static_cast<std::uint32_t>(fadeOut);
-       const auto bits=static_cast<std::uint32_t>(gainBits);
-       std::memcpy(&candidate.gain,&bits,sizeof(bits));
-       const auto count=static_cast<std::uint32_t>(decoded.left.size());
-       if(candidate.end==0)candidate=SampleEdit::reset(count);
-       if(candidate.valid(count)) {
-         if(last==0)last=count;
-         if(first>=last||last>count){return false;}
-         for(std::size_t i=0;i<envelope.size();++i) {
-           const auto binFirst=static_cast<std::size_t>(first)+
-                         (static_cast<std::size_t>(last-first)*i)/envelope.size();
-           const auto binLast=static_cast<std::size_t>(first)+
-                         (static_cast<std::size_t>(last-first)*(i+1))/envelope.size();
-           auto bounds=waveformRange(decoded.left.data(),decoded.left.size(),
-                      binFirst,std::max(binFirst+std::size_t{1},binLast));
-           if(decoded.channels==2) {
-             const auto other=waveformRange(decoded.right.data(),decoded.right.size(),
-                          binFirst,std::max(binFirst+std::size_t{1},binLast));
-             if(rightEnvelope)(*rightEnvelope)[i]=other;
-             else {bounds.minimum=std::min(bounds.minimum,other.minimum);
-                   bounds.maximum=std::max(bounds.maximum,other.maximum);}
-           }
-           envelope[i]=bounds;
-         }
-         edit=candidate;frames=count;
-         if(stereo)*stereo=decoded.channels==2;
-         if(revision)*revision=static_cast<std::uint32_t>(version);ok=true;
-       }
-     }
+   if(a->getInt("Start",start)!=Steinberg::kResultOk||
+      a->getInt("End",end)!=Steinberg::kResultOk||
+      a->getInt("FadeIn",fadeIn)!=Steinberg::kResultOk||
+      a->getInt("FadeOut",fadeOut)!=Steinberg::kResultOk||
+      a->getInt("GainBits",gainBits)!=Steinberg::kResultOk||
+      a->getInt("Revision",version)!=Steinberg::kResultOk||
+      version<0||version>UINT32_MAX||
+      start<0||end<0||fadeIn<0||fadeOut<0||
+      start>UINT32_MAX||end>UINT32_MAX||fadeIn>UINT32_MAX||
+      fadeOut>UINT32_MAX||gainBits<0||gainBits>UINT32_MAX)
+     return false;
+   const auto rev=static_cast<std::uint32_t>(version);
+   const bool hit=editorWaveRow_==row&&editorWaveRevision_==rev;
+   DecodedWav fresh;
+   const DecodedWav* wave=&editorWaveCache_;
+   if(!hit) {
+     const void* bytes=nullptr;Steinberg::uint32 length=0;
+     if(a->getBinary("Wave",bytes,length)!=Steinberg::kResultOk||
+        !bytes||WavPcm16Decoder::decode(static_cast<const std::uint8_t*>(bytes),
+                                        length,fresh)!=WavError::Ok||
+        fresh.left.size()>UINT32_MAX)
+       return false;
+     wave=&fresh;
    }
- }
- 
- return ok;
+   const auto count=static_cast<std::uint32_t>(wave->left.size());
+   if(count==0||(wave->channels!=1&&wave->channels!=2))return false;
+   SampleEdit next;
+   next.start=static_cast<std::uint32_t>(start);
+   next.end=static_cast<std::uint32_t>(end);
+   next.fadeIn=static_cast<std::uint32_t>(fadeIn);
+   next.fadeOut=static_cast<std::uint32_t>(fadeOut);
+   const auto bits=static_cast<std::uint32_t>(gainBits);
+   std::memcpy(&next.gain,&bits,sizeof(bits));
+   if(next.end==0)next=SampleEdit::reset(count);
+   if(!next.valid(count))return false;
+   if(last==0)last=count;
+   if(first>=last||last>count)return false;
+   // Identical extrema and bin arithmetic to the pre-cache renderer.
+   for(std::size_t i=0;i<envelope.size();++i) {
+     const auto binFirst=static_cast<std::size_t>(first)+
+                         (static_cast<std::size_t>(last-first)*i)/envelope.size();
+     const auto binLast=static_cast<std::size_t>(first)+
+                        (static_cast<std::size_t>(last-first)*(i+1))/envelope.size();
+     auto bounds=waveformRange(wave->left.data(),wave->left.size(),
+                        binFirst,std::max(binFirst+std::size_t{1},binLast));
+     if(wave->channels==2) {
+       const auto other=waveformRange(wave->right.data(),wave->right.size(),
+                          binFirst,std::max(binFirst+std::size_t{1},binLast));
+       if(rightEnvelope)(*rightEnvelope)[i]=other;
+       else {bounds.minimum=std::min(bounds.minimum,other.minimum);
+             bounds.maximum=std::max(bounds.maximum,other.maximum);}
+     }
+     envelope[i]=bounds;
+   }
+   if(!hit) {
+     editorWaveCache_=std::move(fresh);
+     editorWaveRow_=row;
+     editorWaveRevision_=rev;
+     wave=&editorWaveCache_;
+   }
+   edit=next;frames=count;
+   if(stereo)*stereo=wave->channels==2;
+   if(revision)*revision=rev;
+   return true;
  }catch(const std::bad_alloc&){return false;}
 }
 bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,

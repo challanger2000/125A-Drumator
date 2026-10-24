@@ -3,6 +3,8 @@
 function(reaudit_instrument name variable)
   set(_code "${${variable}}")
   if(name STREQUAL "DrumatorProcessor")
+    qa_replace(_code "try {return (sameWaveRevision||"
+      "if(!sameWaveRevision)++drumator::qa::auditWaveFullReplies;\n   try {return (sameWaveRevision||"
     qa_replace(_code "return attributes->setInt(\"Selected\","
       "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::patternReplyOOM)throw std::bad_alloc{};\n     return attributes->setInt(\"Selected\",")
     qa_replace(_code "if(std::strcmp(id,\"Drumator.EditorPreviewStop\")==0){"
@@ -28,6 +30,10 @@ function(reaudit_instrument name variable)
       "if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;\n if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::zeroPrefix||\n    (drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::muteImportedProcessor&&\n     drumator::qa::auditImportTarget.load()==this)) {\n   const auto auditMutationFrames=drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::zeroPrefix?\n       std::min(Steinberg::int32{32},data.numSamples):data.numSamples;\n   if(left)std::fill_n(left,auditMutationFrames,0.f);if(right)std::fill_n(right,auditMutationFrames,0.f);\n }\n if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::delayImportedProcessor&&\n    drumator::qa::auditImportTarget.load()==this&&drumator::qa::auditDelayCalls.fetch_add(1)<8u)\n   std::this_thread::sleep_for(std::chrono::milliseconds(10));")
     set(_code "#include <chrono>\n${_code}")
   elseif(name STREQUAL "DrumatorController")
+    qa_replace(_code "if(editorWaveRow_==row&&"
+      "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::disableWaveCache&&editorWaveRow_==row&&")
+    qa_replace(_code "if(!hit) {\n     const void* bytes=nullptr;"
+      "if(!hit) {\n     ++drumator::qa::auditWaveDecodeMisses;\n     const void* bytes=nullptr;"
     qa_replace(_code "view->refreshFromHost(relayout);"
       "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::refreshViewsOOM){++drumator::qa::auditViewRefreshFaultHits;throw std::bad_alloc{};}view->refreshFromHost(relayout);")
     qa_replace(_code "try {notifyViews(false);}catch(...) { /* committed; next repaint refreshes */ }"

@@ -151,7 +151,14 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    Steinberg::uint32 gainBits=0;
    static_assert(sizeof(gainBits)==sizeof(edit.gain));
    std::memcpy(&gainBits,&edit.gain,sizeof(gainBits));
-   try {return attrs->setBinary("Wave",wav.data(),static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk&&
+   // Legacy callers receive Wave unconditionally. A matching cached
+   // revision omits only the large binary, never the authoritative edit.
+   Steinberg::int64 known=-1;
+   const bool sameWaveRevision=
+       attrs->getInt("KnownRevision",known)==Steinberg::kResultOk&&
+       known>=0&&known==static_cast<Steinberg::int64>(revision);
+   try {return (sameWaveRevision||
+                 attrs->setBinary("Wave",wav.data(),static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk)&&
           attrs->setInt("Start",edit.start)==Steinberg::kResultOk&&
           attrs->setInt("End",edit.end)==Steinberg::kResultOk&&
           attrs->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&

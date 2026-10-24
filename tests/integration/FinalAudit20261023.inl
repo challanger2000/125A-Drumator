@@ -221,6 +221,63 @@ void testRv01OutputlessPreviewRetirement(){
        f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
        "RV01 fresh preview failed after outputless interval");
 }
+void testA08WaveEditorRevisionCache(){
+ FinalAuditFiles files;Fixture f;fa23Kit(f);
+ qa::auditWaveDecodeMisses=0;qa::auditWaveFullReplies=0;
+ auto& view=fa23Open(f); // Actual View OPEN invokes the public snapshot.
+ check(qa::auditWaveDecodeMisses==1&&qa::auditWaveFullReplies==1,
+       "A08 opening waveform did not exercise one real full WAV query");
+ for(int i=0;i<4;++i) {
+   check(IntegrationAccess::zoomSample(view,true),"A08 native View zoom rejected");
+   check(IntegrationAccess::scrollSample(view,870.),"A08 native View scroll rejected");
+ }
+ check(IntegrationAccess::zoomSample(view,false,true),"A08 waveform FIT failed");
+ check(qa::auditWaveDecodeMisses==1&&qa::auditWaveFullReplies==1,
+       "A08 unchanged View zoom/scroll redundantly decodes or transmits full WAV");
+ SampleEdit edit{};std::uint32_t frames=0,revision=0;
+ std::array<WaveformRange,256> envelope{},right{};
+ bool stereo=false;
+ check(f.c->sampleEditorSnapshot(0,edit,frames,envelope,0,0,&revision,&right,&stereo)&&
+       frames==1024&&stereo&&edit.gain==1.f,
+       "A08 metadata-only snapshot corrupted sample or channel count");
+ // Compare actual wave-envelope extrema against independently known
+ // constant PCM. These assertions fail if cached waveform is stale/silent.
+ for(std::size_t i=0;i<256;++i)
+   check(envelope[i].minimum==.25f&&envelope[i].maximum==.25f&&
+         right[i].minimum==-.5f&&right[i].maximum==-.5f,
+         "A08 cached waveform PCM does not match original stereo source");
+ check(f.c->commitSampleEdit(0,{0,1024,8,12,.75f},revision),
+       "A08 edit commit refused");
+ check(f.c->sampleEditorSnapshot(0,edit,frames,envelope,0,0,&revision,&right,&stereo)&&
+       edit.gain==.75f&&edit.fadeIn==8&&edit.fadeOut==12&&
+       qa::auditWaveDecodeMisses==2&&qa::auditWaveFullReplies==2,
+       "A08 edited-source revision failed to invalidate cached decode");
+ const auto other=constantStereo(-.125f,.375f);
+ check(f.c->loadWav(0,files.write("cache-replacement.wav",other))==Controller::LoadStatus::Accepted,
+       "A08 replacement WAV rejected");
+ check(f.c->sampleEditorSnapshot(0,edit,frames,envelope,0,0,&revision,&right,&stereo)&&
+       edit.gain==1.f&&envelope[0].minimum==-.125f&&right[0].maximum==.375f&&
+       qa::auditWaveDecodeMisses==3&&qa::auditWaveFullReplies==3,
+       "A08 peer WAV replacement incorrectly reused old PCM");
+ // Component-only recall of a THIRD sample must never resurrect the
+ // previous cached decode, even when the display name is identical.
+ KitState recalled;recalled.grid.fill(0);recalled.visible=4;
+ recalled.names[0]="cache-replacement.wav";
+ recalled.wav[0]=constantStereo(.0625f,-.1875f);
+ const auto bytes=Fixture::encode(recalled);
+ check(f.p->setState(&qa::ByteStream(bytes.data(),bytes.size()))==Steinberg::kResultOk,
+       "A08 processor project recall rejected");
+ check(f.c->sampleEditorSnapshot(0,edit,frames,envelope,0,0,&revision,&right,&stereo)&&
+       envelope[0].maximum==.0625f&&right[0].minimum==-.1875f&&
+       qa::auditWaveDecodeMisses==4&&qa::auditWaveFullReplies==4,
+       "A08 recall failed to invalidate decoded sample cache");
+ check(f.c->clearSample(0)&&
+       !f.c->sampleEditorSnapshot(0,edit,frames,envelope),
+       "A08 clear did not invalidate editor source");
+ f.closeLast();
+ check(IntegrationAccess::waveCacheEmpty(*f.c),
+       "A08 last View close retained decoded WAV in Controller");
+}
 void testA07NotificationFaultIsolation(){
  FinalAuditFiles files;
  Fixture f;KitState initial;initial.visible=2;initial.grid.fill(0);

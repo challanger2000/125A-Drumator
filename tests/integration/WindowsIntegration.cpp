@@ -90,6 +90,7 @@ thread_local bool legacyTriggerOrdering=false;
 std::atomic<AuditMutation> auditMutation{AuditMutation::none};
 std::atomic<unsigned> auditSongScheduleCalls{0};
 std::atomic<unsigned> auditViewRefreshFaultHits{0};
+std::atomic<unsigned> auditWaveDecodeMisses{0},auditWaveFullReplies{0};
 std::atomic<const void*> auditImportTarget{nullptr};
 std::atomic<unsigned> auditImportCalls{0},auditDelayCalls{0};
 void probe(Point p) noexcept {
@@ -158,6 +159,10 @@ struct IntegrationAccess {
  static std::size_t songSlot(DrumatorView& v){return v.songSlot_;}
  static const auto& paths(Controller& c){return c.samplePaths_;}
  static bool pendingDirty(const Controller& c){return c.dirtyPending_;}
+ static bool zoomSample(DrumatorView& v,bool in,bool full=false){return v.zoomSampleEditor(in,full);}
+ static bool scrollSample(DrumatorView& v,double x){return v.scrollEditorWave(x);}
+ static bool waveCacheEmpty(const Controller& c){return c.editorWaveRow_==kRows;}
+ static std::size_t cachedWaveRow(const Controller& c){return c.editorWaveRow_;}
 };
 }
 namespace {
@@ -1963,6 +1968,8 @@ int main(int argc,char** argv){
  run("A05 dense Song automation one schedule",testA05DenseSongAutomationDoesNotReschedule);
  run("A06 committed WAV remains accepted after repaint OOM",testA06CommittedImportSurvivesRepaintFailure);
  run("A07 failed peer view refresh preserves accepted edit and dirty request",testA07NotificationFaultIsolation);
+ run("A08 native WAV editor revision cache and invalidation",testA08WaveEditorRevisionCache);
+ run("RM16 waveform cache disabled is detected",[]{expectMutationKilled(qa::AuditMutation::disableWaveCache,"full WAV on every viewport query",testA08WaveEditorRevisionCache);});
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
  run("RV02 transient STOP rejection during native editor close",testRv02NativeEditorCloseTransientReject);
  run("RV02 rejected STOP leaves Apply uncommitted",testRv02ApplyRejectKeepsEdit);

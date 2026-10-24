@@ -3,6 +3,7 @@
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "core/SequencerCore.h"
 #include "core/SampleEdit.h"
+#include "core/WavPcm16Decoder.h"
 #include "core/PatternOperations.h"
 #include "core/PatternUndo.h"
 #include "core/KitEditGeneration.h"
@@ -157,6 +158,12 @@ private:
  std::array<std::string,kRows> customNames_{};
  // Filesystem navigation is session-only. Embedded WAV data remains self-contained.
  std::array<std::string,kRows> samplePaths_{};
+ // UI thread only. A single row cache bounds decoded-PCM residency even
+ // when several View windows/16 sample rows exist. Processor revision is
+ // always checked before reusing it after edit, import or project recall.
+ DecodedWav editorWaveCache_{};
+ std::size_t editorWaveRow_{kRows};
+ std::uint32_t editorWaveRevision_{0};
  std::array<std::uint64_t,kRows> originIdentity_{};
  std::array<bool,kRows> originIdentityValid_{};
  bool pathsRestoredBeforeComponent_{false};
