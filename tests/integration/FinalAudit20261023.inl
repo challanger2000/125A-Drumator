@@ -824,6 +824,43 @@ void testA21PartialTempoWithMissingPpq(){
        "A21 partial tempo resume lost voice at Cycle boundary");
 }
 
+
+void testA22SongSnapshotBoundedByHostCallbacks(){
+ constexpr auto flags=ProcessContext::kPlaying|
+   ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid|
+   ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+ kit.grid[0]=127;
+ kit.names[0]="song-snapshot-loop.wav";
+ kit.wav[0]=a14LongConstant(.125f,-.25f);
+ kit.songEnabled=1;
+ check(kit.chain.setCount(1)&&kit.chain.configure(0,0,16),
+       "A22 actual Song configuration");
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock audio;audio.clock.state=flags;
+ audio.clock.tempo=120.;
+ audio.clock.projectTimeMusic=4.;
+ audio.clock.cycleStartMusic=4.;
+ audio.clock.cycleEndMusic=4.+64./24000.;
+ qa::auditSongPatternSnapshots.store(0);
+ for(unsigned block=0;block<2;++block){
+   // Each 256-frame host callback contains FOUR complete musical loops.
+   // Song was historically re-read 4x8 times per callback.
+   check(f.p->process(audio.data)==kResultOk,
+         "A22 real multi-Cycle Song processor callback");
+   for(unsigned i=0;i<256;++i){
+     const float voices=static_cast<float>(block*4+i/64+1);
+     check(audio.left[i]==voices*.125f&&
+           audio.right[i]==-voices*.25f,
+           "A22 Song snapshot optimization missed a kick, changed PCM or cut voices");
+   }
+   check(qa::auditSongPatternSnapshots.load()==8u*(block+1),
+         "A22 realtime Song re-snapshotted eight patterns more than once per callback");
+ }
+ check(IntegrationAccess::activeAudioVoices(*f.p)==8u,
+       "A22 Song playback failed to preserve eight genuine overlapped voices");
+}
+
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

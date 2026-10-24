@@ -23,6 +23,10 @@ function(reaudit_instrument name variable)
       "inferred.tempo=(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::ignorePartialTempo?false:partialTempoValid)?suppliedContext->tempo:lastClockTempo_;")
     qa_replace(_code "if(haveCycleBounds_) {\n     const double cycleLength"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::suppressCycleClockCache&&haveCycleBounds_) {\n     const double cycleLength")
+    qa_replace(_code "if(patterns_.coherentPattern(program,coherent,coherentSongLength)){"
+      "++drumator::qa::auditSongPatternSnapshots;\n       if(patterns_.coherentPattern(program,coherent,coherentSongLength)){")
+    qa_replace(_code "while(cursor<finish) {"
+      "while(cursor<finish) {\n       if(audioSongEnabled_&&drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::repeatSongSnapshots)\n         for(std::size_t p=0;p<kPatterns;++p){\n           std::array<std::uint8_t,kRows*kSteps> tmp{};std::uint8_t length=32;\n           ++drumator::qa::auditSongPatternSnapshots;\n           (void)patterns_.coherentPattern(p,tmp,length);\n         }")
     qa_replace(_code "if(finish<=cursor)return;"
       "if(finish<=cursor)return;\n      ++drumator::qa::auditSongScheduleCalls;")
     # Exercise the actual generated QA Processor with the repaired Cycle

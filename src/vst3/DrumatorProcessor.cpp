@@ -1139,6 +1139,26 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    velocityCycleStart=cycleStart;
    velocityCycleEnd=cycleEnd;
    velocityCycleValid=splitCycle;
+   // One coherent SONG snapshot per audio callback, not once per host
+   // pattern event or every Cycle sub-segment. This bounds realtime work
+   // and prevents different musical positions of the same host buffer
+   // from observing different partially published pattern generations.
+   std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> songPrograms{};
+   if(audioSongEnabled_) {
+     for(std::size_t program=0;program<kPatterns;++program){
+       std::array<std::uint8_t,kRows*kSteps> coherent{};
+       std::uint8_t coherentSongLength=32;
+       if(patterns_.coherentPattern(program,coherent,coherentSongLength)){
+         audioPatternCache_[program]=coherent;
+         audioPatternLengthCache_[program]=coherentSongLength;
+         audioPatternValid_[program]=true;
+       }
+       if(audioPatternValid_[program]) {
+         songPrograms[program]=audioPatternCache_[program];
+         lengths[program]=audioPatternLengthCache_[program];
+       }
+     }
+   }
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
      if(finish<=cursor)return; // retained for unique QA instrumentation anchor
@@ -1165,7 +1185,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      // deferred to a later block rather than rendered in a mixed state.
      std::array<std::uint8_t,kRows*kSteps> consistent{};
      std::uint8_t coherentLength=32;
-     if(patterns_.coherentPattern(activePattern,consistent,coherentLength)) {
+     if(!audioSongEnabled_&&
+        patterns_.coherentPattern(activePattern,consistent,coherentLength)) {
        audioPatternCache_[activePattern]=consistent;
        audioPatternLengthCache_[activePattern]=coherentLength;
        audioPatternValid_[activePattern]=true;
@@ -1194,7 +1215,6 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      } read{consistent,static_cast<std::uint8_t>(activePattern),lengths[activePattern]};
      const Clock clock{segmentPpq,tempo,rate,segmentEnd-cursor,
                        true,swing,humanize,phaseOriginStep_};
-     std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> songPrograms{};
      struct SongRead {
        const std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns>& values;
        const SongChain& chain;
@@ -1210,21 +1230,6 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
             values[program][row*kSteps+step]:0;
        }
      } songRead{songPrograms,audioSongChain_,lengths};
-     if(audioSongEnabled_) {
-       for(std::size_t program=0;program<kPatterns;++program){
-         std::array<std::uint8_t,kRows*kSteps> coherent{};
-         std::uint8_t coherentSongLength=32;
-         if(patterns_.coherentPattern(program,coherent,coherentSongLength)){
-           audioPatternCache_[program]=coherent;
-           audioPatternLengthCache_[program]=coherentSongLength;
-           audioPatternValid_[program]=true;
-         }
-         if(audioPatternValid_[program]) {
-           songPrograms[program]=audioPatternCache_[program];
-           lengths[program]=audioPatternLengthCache_[program];
-         }
-       }
-     }
      auto emitTrigger=[&](Trigger hit){
        hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
        triggers_.appendStep(hit);

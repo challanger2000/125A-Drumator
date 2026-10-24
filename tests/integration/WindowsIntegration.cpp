@@ -89,6 +89,7 @@ namespace drumator::qa {
 thread_local bool legacyTriggerOrdering=false;
 std::atomic<AuditMutation> auditMutation{AuditMutation::none};
 std::atomic<unsigned> auditSongScheduleCalls{0};
+std::atomic<unsigned> auditSongPatternSnapshots{0};
 std::atomic<unsigned> auditViewRefreshFaultHits{0};
 std::atomic<unsigned> auditWaveDecodeMisses{0},auditWaveFullReplies{0};
 std::atomic<unsigned> auditWaveIndexedCalls{0};
@@ -1984,6 +1985,8 @@ int main(int argc,char** argv){
  run("A19 changing tempo within active Cycle PCM",testA19TempoChangeWithinHostCycle);
  run("A20 partial clock explicitly disables Cycle",testA20PartialClockExplicitCycleDisable);
  run("A21 valid tempo with temporarily absent PPQ",testA21PartialTempoWithMissingPpq);
+ run("A22 bounded Song snapshot per host callback",testA22SongSnapshotBoundedByHostCallbacks);
+ run("RM27 repeated per-Cycle Song snapshot detected",[]{expectMutationKilled(qa::AuditMutation::repeatSongSnapshots,"Song re-snapshot on every Cycle",testA22SongSnapshotBoundedByHostCallbacks);});
  run("RM25 stale Cycle after explicit partial disable killed",[]{expectMutationKilled(qa::AuditMutation::keepCycleOnPartialDisable,"partial ProcessContext Cycle-off ignored",testA20PartialClockExplicitCycleDisable);});
  run("RM26 valid partial tempo ignored killed",[]{expectMutationKilled(qa::AuditMutation::ignorePartialTempo,"partially valid host BPM ignored",testA21PartialTempoWithMissingPpq);});
  run("RM23 variable block no Cycle split is detected",[]{expectMutationKilled(qa::AuditMutation::skipCycleSplit,"variable callback Cycle split",testA18CycleBlockPartitionAcrossSampleRates);});
