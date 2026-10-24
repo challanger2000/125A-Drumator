@@ -1476,7 +1476,19 @@ void testRv05GlobalKnobPaintCenters(){
    const bool spriteVisible=darkCount>=8.;
    const double count=spriteVisible?darkCount:fallbackCount;
    const double sum=spriteVisible?darkSum:fallbackSum;
-   check(count>=8.,"RV05 no painted rotary surface found in offscreen capture");
+   if(count<8.) {
+     // Diagnostics only: do not waive the assertion. Report real input
+     // pixels and actual resource load state from the native Windows test.
+     const auto image=IntegrationAccess::rotaryImageStatus(*view);
+     std::ostringstream details;
+     details<<"RV05 no painted rotary surface; imageLoaded="<<image[0]
+            <<" bitmapWidth="<<image[1]<<" bitmapHeight="<<image[2]
+            <<" controlCenter="<<center<<" pixels=";
+     for(unsigned x=4;x<44;x+=4){
+       details<<std::hex<<pixels[2u*48u+x]<<",";
+     }
+     throw std::runtime_error(details.str());
+   }
    check(std::abs(sum/count-center)<2.0,
          "RV05 painted rotary center does not match input hit center");
  }
