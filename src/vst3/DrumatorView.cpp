@@ -155,15 +155,18 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  if(auto* frames=dynamic_cast<VSTGUI::CMultiFrameBitmap*>(sprite);
     frames&&frames->getWidth()==125.&&frames->getHeight()==12625.) {
    const auto frame=frames->normalizedValueToFrameIndex(static_cast<float>(fraction));
-   // Large 50px face; visual and clickable center match.
-   constexpr double radius=25.;
-   const double scale=2.*radius/125.;
+   // JKnobMan source is 125px wide but only the inner 81px is opaque.
+   // A 75px full frame displays a real 48.6px diameter knob, matching
+   // the 50px clickable hit zone without covering adjacent labels.
+   constexpr double frameRadius=37.5;
+   const double scale=2.*frameRadius/125.;
    VSTGUI::CDrawContext::Transform transform(*c,
-     VSTGUI::CGraphicsTransform().scale(scale,scale).translate(cx-radius,cy-radius));
+     VSTGUI::CGraphicsTransform().scale(scale,scale)
+       .translate(cx-frameRadius,cy-frameRadius));
    frames->drawFrame(c,frame,{0.,0.});
    if(selected) {
      c->setFrameColor(accent);c->setLineWidth(1.);
-     c->drawEllipse({0.,0.,125.,125.},VSTGUI::kDrawStroked);
+     c->drawEllipse({22.,22.,103.,103.},VSTGUI::kDrawStroked);
    }
  }else{
    // Visible fallback if a host did not load the sprite resource.
