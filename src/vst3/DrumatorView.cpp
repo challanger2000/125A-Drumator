@@ -137,6 +137,14 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
    c->setFillColor(selected?VSTGUI::CColor{13,41,62,255}:
                              VSTGUI::CColor{136,167,187,255});
    c->drawRect({face.left+1.,face.top,face.right-1.,face.top+1.},VSTGUI::kDrawFilled);
+   // Machined left chamfer and black shadowed right sidewall.
+   c->setFillColor(selected?VSTGUI::CColor{46,104,141,255}:
+                             VSTGUI::CColor{103,139,163,255});
+   c->drawRect({face.left+1.,face.top+2.,face.left+2.,face.bottom-2.},
+               VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{7,21,34,255});
+   c->drawRect({face.right-2.,face.top+3.,face.right,face.bottom-1.},
+               VSTGUI::kDrawFilled);
    c->setFillColor(selected?VSTGUI::CColor{73,152,195,255}:
                              VSTGUI::CColor{13,27,39,255});
    c->drawRect({face.left+1.,face.bottom-2.,face.right-1.,face.bottom},VSTGUI::kDrawFilled);
@@ -150,6 +158,48 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
  c->setFontColor(!enabled?VSTGUI::CColor{113,131,147,255}:
                  selected?VSTGUI::CColor{245,252,255,255}:letters);
  c->drawString(title,{r.left,r.top+(selected?1.:0.),r.right,r.bottom+(selected?1.:0.)});
+}
+
+
+void drawHardwareStep(VSTGUI::CDrawContext* c,double sx,double y,
+                      bool lit,bool disabled,bool downbeat) {
+ // True recessed socket and shallow travel inside the unchanged 19px pitch.
+ const VSTGUI::CRect socket{sx+1.,y+69.,sx+18.,y+103.};
+ c->setFillColor(VSTGUI::CColor{2,9,17,255});
+ c->drawRect(socket,VSTGUI::kDrawFilled);
+ c->setFrameColor(downbeat?VSTGUI::CColor{68,102,123,255}:
+                             VSTGUI::CColor{31,58,77,255});
+ c->drawRect(socket,VSTGUI::kDrawStroked);
+ c->setFillColor(VSTGUI::CColor{1,11,20,255});
+ c->drawRect({sx+3.,y+73.,sx+17.,y+102.},VSTGUI::kDrawFilled);
+ const double t=y+(lit?72.:71.),b=y+(lit?98.:97.);
+ c->setFillColor(disabled?VSTGUI::CColor{32,40,49,255}:
+                lit?VSTGUI::CColor{173,70,22,255}:
+                    VSTGUI::CColor{49,68,83,255});
+ c->drawRect({sx+3.,t,sx+16.,b},VSTGUI::kDrawFilled);
+ c->setFillColor(disabled?VSTGUI::CColor{46,54,64,255}:
+                lit?VSTGUI::CColor{241,126,35,255}:
+                    VSTGUI::CColor{73,95,112,255});
+ c->drawRect({sx+4.,t+2.,sx+14.,b-2.},VSTGUI::kDrawFilled);
+ c->setFillColor(disabled?VSTGUI::CColor{66,74,82,255}:
+                lit?VSTGUI::CColor{255,185,85,255}:
+                    VSTGUI::CColor{123,146,162,255});
+ c->drawRect({sx+4.,t+1.,sx+15.,t+3.},VSTGUI::kDrawFilled);
+ // Black sidewall makes the key read as a physical raised cap.
+ c->setFillColor(disabled?VSTGUI::CColor{21,28,35,255}:
+                lit?VSTGUI::CColor{107,44,16,255}:
+                    VSTGUI::CColor{24,43,54,255});
+ c->drawRect({sx+14.,t+4.,sx+16.,b},VSTGUI::kDrawFilled);
+ c->setFillColor(disabled?VSTGUI::CColor{15,25,32,255}:
+                lit?VSTGUI::CColor{121,47,15,255}:
+                    VSTGUI::CColor{13,28,38,255});
+ c->drawRect({sx+4.,b-2.,sx+14.,b},VSTGUI::kDrawFilled);
+ if(lit){
+  c->setFillColor(VSTGUI::CColor{255,219,147,255});
+  c->drawRect({sx+7.,y+93.,sx+12.,y+97.},VSTGUI::kDrawFilled);
+  c->setFillColor(VSTGUI::CColor{255,248,222,255});
+  c->drawRect({sx+8.,y+94.,sx+11.,y+96.},VSTGUI::kDrawFilled);
+ }
 }
 
 void drawPanelScrew(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* bitmap,double x,double y,double angle) {
@@ -837,31 +887,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                                 VSTGUI::CColor{226,242,253,255});
        c->drawString(index,{sx+3.,y+36.,sx+32.,y+57.},VSTGUI::kLeftText);
      }
-     // FL-style tactile step: dark recessed body, orange layered face and gloss.
-     // Keep all geometry inside the unchanged 19-pixel step hit region.
-     const bool lit=velocity>0&&!inactive;
-     const VSTGUI::CRect outer{sx+1.,y+69.,sx+18.,y+103.};
-     c->setFillColor(VSTGUI::CColor{5,17,33,255});
-     c->drawRect(outer,VSTGUI::kDrawFilled);
-     c->setFrameColor(step%4==0?VSTGUI::CColor{91,139,183,255}:
-                                  VSTGUI::CColor{38,77,117,255});
-     c->drawRect(outer,VSTGUI::kDrawStroked);
-     c->setFillColor(inactive?VSTGUI::CColor{30,40,51,255}:
-                     lit?VSTGUI::CColor{234,93,12,255}:
-                         VSTGUI::CColor{41,53,69,255});
-     c->drawRect({sx+3.,y+72.,sx+16.,y+100.},VSTGUI::kDrawFilled);
-     c->setFillColor(inactive?VSTGUI::CColor{53,61,72,255}:
-                     lit?VSTGUI::CColor{255,156,39,255}:
-                         VSTGUI::CColor{79,94,111,255});
-     c->drawRect({sx+4.,y+73.,sx+15.,y+81.},VSTGUI::kDrawFilled);
-     c->setFillColor(inactive?VSTGUI::CColor{49,54,61,255}:
-                     lit?VSTGUI::CColor{255,201,92,255}:
-                         VSTGUI::CColor{103,114,127,255});
-     c->drawRect({sx+4.,y+73.,sx+15.,y+75.},VSTGUI::kDrawFilled);
-     if(lit) {
-       c->setFillColor(VSTGUI::CColor{255,226,151,255});
-       c->drawRect({sx+6.,y+88.,sx+13.,y+97.},VSTGUI::kDrawFilled);
-     }
+     // Only actual step velocity lights the amber LED aperture.
+     drawHardwareStep(c,sx,y,velocity>0&&!inactive,inactive,step%4==0);
    }
    c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
    c->drawString("VEL",{1233,y+44,1259,y+62});

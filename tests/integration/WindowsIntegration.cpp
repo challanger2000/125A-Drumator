@@ -626,6 +626,40 @@ void captureVstgui(DrumatorView& v,const std::string& title,double scale){
  evidence("Native VSTGUI render "+title+" "+std::to_string(width)+"x"+
           std::to_string(height)+" pixel checksum "+std::to_string(checksum));
 }
+void testGuiPhysicalStepsRaster(){
+ Fixture f;f.kit(namedKit('X',4));f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ auto sample=[](DrumatorView& view){
+  auto rect=view.getViewSize();
+  auto bmp=VSTGUI::renderBitmapOffscreen(
+   VSTGUI::CPoint(rect.getWidth(),rect.getHeight()),1.,
+   [&](VSTGUI::CDrawContext& dc){view.draw(&dc);});
+  check(bmp!=nullptr,"GUI physical-key bitmap missing");
+  auto* a=VSTGUI::CBitmapPixelAccess::create(bmp.get(),false);
+  check(a!=nullptr,"GUI physical-key pixel access missing");
+  std::array<std::uint32_t,17*34> pixels{};
+  std::size_t k=0;
+  for(int yy=177;yy<211;++yy)for(int xx=623;xx<640;++xx){
+   check(a->setPosition(xx,yy),"GUI key raster out of view");
+   VSTGUI::CColor c{};a->getColor(c);
+   pixels[k++]=(std::uint32_t(c.red)<<16)|(std::uint32_t(c.green)<<8)|c.blue;
+  }
+  a->forget();return pixels;
+ };
+ const auto before=sample(*v);
+ const auto original=f.c->velocity(f.c->currentPattern(),0,0);
+ click(*v,631.,UiCompactLayout::header+88.);
+ const auto changed=f.c->velocity(f.c->currentPattern(),0,0);
+ check((original==0)!=(changed==0),"GUI physical-key step state did not toggle");
+ const auto after=sample(*v);
+ std::size_t diff=0;
+ for(std::size_t i=0;i<before.size();++i)if(before[i]!=after[i])++diff;
+ check(diff>=65,"GUI physical keycap did not visually respond to toggle");
+ click(*v,631.,UiCompactLayout::header+88.);
+ check(f.c->velocity(f.c->currentPattern(),0,0)==original,"GUI step toggle not restored");
+ check(sample(*v)==before,"GUI keycap raster not restored");
+ evidence("GUI keycap active/inactive/revert native raster PASS");
+}
 void testVisualRender(){
  for(const auto zoom: {1.0,1.2,1.3,1.5}){
    Fixture f;auto kit=namedKit('X',4);
@@ -1949,6 +1983,7 @@ int main(int argc,char** argv){
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
+  run("GUI physical step state/raster toggle",testGuiPhysicalStepsRaster);
  run("UX direct pattern length",testPatternLengthControls);
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
  run("P19 1T/2T copy-paste-duplicate duration",testPatternDurationClipboard);
