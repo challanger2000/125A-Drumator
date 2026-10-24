@@ -835,7 +835,7 @@ void testVelocityLaneExistingStepsOnly(){
        f.c->velocity(0,0,2)==90,
        "UX velocity drag Undo did not restore exact original steps");
  // Standard Step buttons remain the explicit way to add notes.
- click(*v,col(1),top+61.);
+ click(*v,col(1),top+88.);
  check(f.c->velocity(0,0,1)>0,
        "UX standard Step click no longer enables a blank note");
  evidence("UX velocity lane edits occupied notes only; drag/Undo and explicit Step creation PASS");
@@ -896,7 +896,7 @@ void testRandomVelocityOneShot(){
  check(f.c->togglePatternLength(0),"Button test return to one bar");
  auto* view=IntegrationAccess::view(*f.c,0);
  const auto before=f.c->velocity(0,0,0);
- click(*view,496.,UiCompactLayout::header+68.);
+ click(*view,496.,UiCompactLayout::header+89.);
  check(f.c->velocity(0,0,0)!=before,"Button click did not randomize velocity");
  check(f.c->velocity(0,0,1)==0&&f.c->velocity(0,0,20)==64,"Button changed empty/inactive step");
  check(f.c->undoCurrentPattern()&&f.c->velocity(0,0,0)==before,"Button Undo failed");
@@ -1413,30 +1413,30 @@ void testPagedSongEditor(){
 void testSongCompactViewport(){
  Fixture f;f.kit(namedKit('X',4));f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
- check(v->getViewSize().getHeight()==538.,"UX expected four-row default editor");
+ check(v->getViewSize().getHeight()==682.,"UX expected four spacious rows");
  click(*v,1026.,65.); // Song edit (compact)
  check(v->getViewSize().getHeight()==370.,"UX Song editor failed to become compact");
  captureVstgui(*v,"ux-song-compact-370",1.0);
  click(*v,1026.,65.); // return to Step grid
- check(v->getViewSize().getHeight()==538.,"UX Step editor height not restored");
+ check(v->getViewSize().getHeight()==682.,"UX Step editor height not restored");
  // Reject the enlargement after Song edit. Users must still be able to
  // reach every instrument, not skip rows in a truncated viewport.
  click(*v,1026.,65.);
  check(v->getViewSize().getHeight()==370.,"UX Song second open");
  f.frames[0].accept=false;
- click(*v,1026.,65.); // host refuses resize back to 538
- check(v->getViewSize().getHeight()==370.&&v->visibleRowsForHit()==2,
-       "UX refused host resize did not degrade to two reachable rows");
- const auto bottom=UiCompactLayout::header+2*UiCompactLayout::baseRow;
- click(*v,1190.,bottom+17.); // next page: rows 3 and 4
- check(IntegrationAccess::firstRow(*v)==2&&v->visibleRowsForHit()==2,
+ click(*v,1026.,65.); // host refuses resize back to 682
+ check(v->getViewSize().getHeight()==370.&&v->visibleRowsForHit()==1,
+       "UX refused host resize did not degrade to one reachable row");
+ const auto bottom=UiCompactLayout::header+UiCompactLayout::baseRow;
+ click(*v,1190.,bottom+17.); // next page: row 2 within refused 370px client
+ check(IntegrationAccess::firstRow(*v)==1&&v->visibleRowsForHit()==1,
        "UX compact fallback skipped rows when paging");
  click(*v,45.,UiCompactLayout::header+17.);
- check(IntegrationAccess::selectedRow(*v)==2,"UX compact fallback row 3 not selectable");
+ check(IntegrationAccess::selectedRow(*v)==1,"UX compact fallback row 2 not selectable");
  f.frames[0].accept=true;
  click(*v,1090.,bottom+17.); // back to rows 1..4, now resize accepted
  check(IntegrationAccess::firstRow(*v)==0&&
-       v->getViewSize().getHeight()==538.&&v->visibleRowsForHit()==4,
+       v->getViewSize().getHeight()==682.&&v->visibleRowsForHit()==4,
        "UX compact fallback cannot recover after host accepts again");
  evidence("UX 370px Song viewport, return to Steps and refused-resize row navigation PASS");
 }

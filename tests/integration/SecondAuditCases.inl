@@ -53,12 +53,15 @@ void testSecondAuditViewInvalidation() {
  const auto resizeCalls=f.frames[0].calls+f.frames[1].calls;
  bothInvalidated("ADD FIRST ROW",[&]{return f.c->addRow();});
  bothInvalidated("ADD SECOND ROW",[&]{return f.c->addRow();});
- check(f.c->visibleRows()==3&&other->visibleRowsForHit()==2&&
+ check(f.c->visibleRows()==3&&other->visibleRowsForHit()==1&&
        f.frames[0].calls+f.frames[1].calls==resizeCalls,
        "SA01 peer editor clipped added rows or issued an extra host resize");
- click(*other,1180.,108.+2.*94.+15.);
- check(IntegrationAccess::firstRow(*other)==2&&other->visibleRowsForHit()==1,
+ click(*other,1180.,UiCompactLayout::header+UiCompactLayout::baseRow+15.);
+ check(IntegrationAccess::firstRow(*other)==1&&other->visibleRowsForHit()==2,
        "SA01 newly added row inaccessible in peer compact page");
+  click(*other,45.,UiCompactLayout::header+UiCompactLayout::baseRow+17.);
+  check(IntegrationAccess::selectedRow(*other)==2,
+        "SA01 newly added third row not selectable after viewport navigation");
  bothInvalidated("HIDE LAST ROW",[&]{return f.c->hideLastEmptyRow();});
  check(f.c->visibleRows()==2&&IntegrationAccess::firstRow(*other)<2,
        "SA01 peer page invalid after row removal");

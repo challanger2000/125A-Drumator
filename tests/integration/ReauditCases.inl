@@ -165,7 +165,8 @@ void testReauditDurationFallback(){
 void testReauditPeerFill(){
  Fixture f;KitState kit;kit.grid.fill(0);kit.grid[0]=60;f.kit(kit);
  f.open();f.open();auto* first=IntegrationAccess::view(*f.c,0);auto* peer=IntegrationAccess::view(*f.c,1);
- click(*first,1248.,168.);click(*first,630.,214.);
+ click(*first,1248.,UiCompactLayout::header+88.);
+ click(*first,630.,UiCompactLayout::header+UiCompactLayout::baseRow+12.);
  check(std::get<0>(IntegrationAccess::viewSnapshot(*first)),"RE04 first gesture absent");
  // Native View FILL menu on row two, ALL item; a bulk Controller operation.
  const auto rowY=IntegrationAccess::rowTop(*peer,1);
