@@ -48,6 +48,7 @@ public:
 private:
  Controller& controller_;
  VSTGUI::CBitmap* backgroundBitmap_{nullptr};
+ VSTGUI::CBitmap* knobBitmap_{nullptr};
  VSTGUI::CTextEdit* nameEdit_{nullptr};
  std::size_t editingNameRow_{kRows};
  std::uint64_t nameEditGeneration_{0};
