@@ -250,7 +250,8 @@ if(DRUMATOR_BUILD_VST3)
   smtg_target_add_plugin_resources(Drumator
       RESOURCES resource/Drumator.uidesc
                 resource/abstraktes_blaues_metall_mit_sanftem_glanz.png
-                resource/125A_Drumator_Knob.png)
+                resource/125A_Drumator_Knob.png
+                resource/125A_Drumator_Screw.png)
   # Steinberg official Win32 bundle resource setup, even though CI assembles
   # the final bundle manually to avoid administrator symlink privileges.
   # The official helper macro is evaluated in this parent project scope.
