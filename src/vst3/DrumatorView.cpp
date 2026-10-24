@@ -22,7 +22,6 @@
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cgraphicstransform.h"
 #include "vstgui/lib/cbitmap.h"
-#include "vstgui/lib/cmultiframebitmap.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cfont.h"
