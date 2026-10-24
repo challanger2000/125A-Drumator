@@ -722,8 +722,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(step%4==0) {
        char index[8]{};
        std::snprintf(index,sizeof(index),"%u",static_cast<unsigned>(step+1));
-       c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(border);
-       c->drawString(index,{sx,y+10,sx+32,y+28},VSTGUI::kLeftText);
+       // High-contrast group numbers above every fourth step (1,5,9...).
+       c->setFillColor(VSTGUI::CColor{7,31,58,255});
+       c->drawRect({sx+1.,y+10.,sx+34.,y+30.},VSTGUI::kDrawFilled);
+       c->setFont(VSTGUI::kNormalFont,12);
+       c->setFontColor(inactive?VSTGUI::CColor{146,165,180,255}:
+                                VSTGUI::CColor{226,242,253,255});
+       c->drawString(index,{sx+3.,y+10.,sx+32.,y+30.},VSTGUI::kLeftText);
      }
      // FL-style tactile step: dark recessed body, orange layered face and gloss.
      // Keep all geometry inside the unchanged 19-pixel step hit region.
