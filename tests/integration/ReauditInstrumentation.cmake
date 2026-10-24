@@ -17,6 +17,10 @@ function(reaudit_instrument name variable)
       "const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);\n drumator::qa::probe(drumator::qa::auditAfterAuditionStartTaken);")
     # A17 negative mutation: the historical linear clock fallback without
     # the host-verified Cycle bounds must fail exact native PCM comparison.
+    qa_replace(_code "if(explicitStop||(suppliedContext&&"
+      "if(explicitStop||((drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::keepCycleOnPartialDisable)&&suppliedContext&&")
+    qa_replace(_code "inferred.tempo=partialTempoValid?suppliedContext->tempo:lastClockTempo_;"
+      "inferred.tempo=(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::ignorePartialTempo?false:partialTempoValid)?suppliedContext->tempo:lastClockTempo_;")
     qa_replace(_code "if(haveCycleBounds_) {\n     const double cycleLength"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::suppressCycleClockCache&&haveCycleBounds_) {\n     const double cycleLength")
     qa_replace(_code "if(finish<=cursor)return;"

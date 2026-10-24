@@ -904,7 +904,12 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  };
  // The host alone establishes or clears Cycle metadata. A missing
  // ProcessContext is not proof that a previously valid Cycle has ended.
- if(explicitStop)haveCycleBounds_=false;
+ // Even when PPQ/tempo are omitted, the presence of ProcessContext
+ // explicitly reports whether Cycle is active. Do not synthesize a new
+ // loop after the host has switched Cycle off.
+ if(explicitStop||(suppliedContext&&
+    (suppliedContext->state&Steinberg::Vst::ProcessContext::kCycleActive)==0))
+   haveCycleBounds_=false;
  else if(hasClock(suppliedContext)) {
    haveCycleBounds_=
      (suppliedContext->state&
@@ -931,7 +936,13 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                   Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
                   Steinberg::Vst::ProcessContext::kTempoValid;
    inferred.projectTimeMusic=expectedNextPpq_;
-   inferred.tempo=lastClockTempo_;
+   // A host can provide the *current* tempo while PPQ is unavailable.
+   // The position at this callback's start was advanced with the previous
+   // block's tempo; all samples in this callback use the new valid tempo.
+   const bool partialTempoValid=suppliedContext&&
+     (suppliedContext->state&Steinberg::Vst::ProcessContext::kTempoValid)!=0&&
+     std::isfinite(suppliedContext->tempo)&&suppliedContext->tempo>0.0;
+   inferred.tempo=partialTempoValid?suppliedContext->tempo:lastClockTempo_;
    // Extrapolate modulo the most recent valid host Cycle, never against
    // guessed or stale settings from a new transport run.
    if(haveCycleBounds_) {

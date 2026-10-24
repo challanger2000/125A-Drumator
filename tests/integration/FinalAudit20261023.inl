@@ -740,6 +740,88 @@ void testA19TempoChangeWithinHostCycle(){
  }
 }
 
+
+void testA20PartialClockExplicitCycleDisable(){
+ constexpr auto playing=ProcessContext::kPlaying|
+     ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);
+ kit.names[0]="cycle-disabled.wav";kit.wav[0]=a14LongConstant(.125f,-.25f);
+ kit.grid[0]=127;
+ f.kit(kit);prepareAudio(*f.p);AuditAudioBlock audio;
+ audio.clock.tempo=120.;audio.clock.projectTimeMusic=4.;
+ audio.clock.cycleStartMusic=4.;audio.clock.cycleEndMusic=4.+64./24000.;
+ audio.clock.state=playing|ProcessContext::kCycleActive|
+                           ProcessContext::kCycleValid;
+ audio.data.numSamples=64;
+ check(f.p->process(audio.data)==kResultOk&&
+       IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "A20 initial valid host Cycle voice");
+ audio.data.numSamples=256;
+ // Host explicitly disables Cycle but temporarily omits musical PPQ.
+ // No inferred Cycle must restart the grid at every 64 samples.
+ audio.clock.state=ProcessContext::kPlaying;
+ check(f.p->process(audio.data)==kResultOk,
+       "A20 partial clock after Cycle disable");
+ for(unsigned i=0;i<256;++i)
+   check(audio.left[i]==.125f&&audio.right[i]==-.25f,
+         "A20 partial ProcessContext kept generating disabled Cycle hits");
+ check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "A20 Cycle-disabled voice count");
+ audio.clock.state=playing;
+ audio.clock.projectTimeMusic=4.+320./24000.;
+ check(f.p->process(audio.data)==kResultOk,
+       "A20 fully valid host clock after Cycle disabled");
+ for(unsigned i=0;i<256;++i)
+   check(audio.left[i]==.125f&&audio.right[i]==-.25f,
+         "A20 resumed valid noncycle clock lost tail or invented a hit");
+}
+void testA21PartialTempoWithMissingPpq(){
+ constexpr auto clockBits=ProcessContext::kPlaying|
+     ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ constexpr auto cycleBits=ProcessContext::kCycleActive|
+     ProcessContext::kCycleValid;
+ Fixture full,partial;KitState kit;kit.grid.fill(0);kit.visible=1;
+ kit.names[0]="partial-tempo.wav";kit.wav[0]=a14LongConstant(.125f,-.25f);
+ kit.grid[0]=127;
+ full.kit(kit);partial.kit(kit);
+ prepareAudio(*full.p);prepareAudio(*partial.p);
+ AuditAudioBlock reference,underTest;
+ for(auto* block:{&reference,&underTest}){
+   block->clock.state=clockBits|cycleBits;
+   block->clock.tempo=120.;
+   block->clock.cycleStartMusic=4.;
+   block->clock.cycleEndMusic=4.+384./24000.;
+ }
+ // A: 120 BPM, 256 frames; B: 240 BPM, 256 frames, with only tempo
+ // valid in partial context (but no project PPQ); C: 240 BPM, full
+ // host clock resumes at Cycle start. Expected hits 0, 320, 704.
+ for(unsigned block=0;block<3;++block){
+   const double ppq=block==0?4.:block==1?4.+256./24000.:4.;
+   reference.clock.projectTimeMusic=ppq;
+   reference.clock.tempo=block==0?120.:240.;
+   underTest.clock.projectTimeMusic=ppq;
+   underTest.clock.tempo=reference.clock.tempo;
+   underTest.clock.state=block==1?
+     ProcessContext::kPlaying|ProcessContext::kTempoValid|cycleBits:
+     clockBits|cycleBits;
+   check(full.p->process(reference.data)==kResultOk&&
+         partial.p->process(underTest.data)==kResultOk,
+         "A21 ProcessContext with partial current tempo");
+   for(unsigned frame=0;frame<256;++frame){
+     const unsigned at=block*256+frame;
+     const unsigned hits=1u+(at>=320u)+(at>=704u);
+     const float left=static_cast<float>(hits)*.125f;
+     check(reference.left[frame]==left&&reference.right[frame]==-2.f*left,
+           "A21 full-host tempo oracle independently wrong");
+     check(underTest.left[frame]==reference.left[frame]&&
+           underTest.right[frame]==reference.right[frame],
+           "A21 ignored valid partial tempo or cut sample tails at host resync");
+   }
+ }
+ check(IntegrationAccess::activeAudioVoices(*partial.p)==3,
+       "A21 partial tempo resume lost voice at Cycle boundary");
+}
+
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

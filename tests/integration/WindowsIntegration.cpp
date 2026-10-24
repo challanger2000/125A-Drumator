@@ -1982,6 +1982,10 @@ int main(int argc,char** argv){
  run("A17 optional Cycle context gap full stereo PCM",testA17MissingCycleClockKeepsExactPcm);
  run("A18 variable sample rate and host frames Cycle PCM",testA18CycleBlockPartitionAcrossSampleRates);
  run("A19 changing tempo within active Cycle PCM",testA19TempoChangeWithinHostCycle);
+ run("A20 partial clock explicitly disables Cycle",testA20PartialClockExplicitCycleDisable);
+ run("A21 valid tempo with temporarily absent PPQ",testA21PartialTempoWithMissingPpq);
+ run("RM25 stale Cycle after explicit partial disable killed",[]{expectMutationKilled(qa::AuditMutation::keepCycleOnPartialDisable,"partial ProcessContext Cycle-off ignored",testA20PartialClockExplicitCycleDisable);});
+ run("RM26 valid partial tempo ignored killed",[]{expectMutationKilled(qa::AuditMutation::ignorePartialTempo,"partially valid host BPM ignored",testA21PartialTempoWithMissingPpq);});
  run("RM23 variable block no Cycle split is detected",[]{expectMutationKilled(qa::AuditMutation::skipCycleSplit,"variable callback Cycle split",testA18CycleBlockPartitionAcrossSampleRates);});
  run("RM24 stale Cycle tempo mutation is detected",[]{expectMutationKilled(qa::AuditMutation::freezeCycleTempo,"wrong tempo at Cycle seam",testA19TempoChangeWithinHostCycle);});
  run("RM22 missing Cycle clock cache is killed",[]{expectMutationKilled(qa::AuditMutation::suppressCycleClockCache,"missing Cycle clock caused skipped sample triggers",testA17MissingCycleClockKeepsExactPcm);});
