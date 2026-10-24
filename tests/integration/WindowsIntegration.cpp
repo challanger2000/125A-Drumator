@@ -1979,6 +1979,8 @@ int main(int argc,char** argv){
  run("A14 pattern and Song at intra-block Cycle seam",testA14PatternAndSongAcrossCycleSeam);
  run("A15 Cycle random velocity block-invariance",testA15CycleRandomVelocityReproducible);
  run("A16 multiple Cycles in one host callback",testA16MultiCyclePerCallback);
+ run("A17 optional Cycle context gap full stereo PCM",testA17MissingCycleClockKeepsExactPcm);
+ run("RM22 missing Cycle clock cache is killed",[]{expectMutationKilled(qa::AuditMutation::suppressCycleClockCache,"missing Cycle clock caused skipped sample triggers",testA17MissingCycleClockKeepsExactPcm);});
  run("RM19 old unsplit Cycle scheduler is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleSplit,"unsplit host Cycle lost Step",testA13PureSequencerCyclePcm);});
  run("RM20 old linear Velocity PPQ is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleVelocityMap,"randomized loop velocity changed with block partition",testA15CycleRandomVelocityReproducible);});
  run("RM21 old single-wrap voice reset is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleModulo,"multiple Cycle wraps retire valid tails",testA16MultiCyclePerCallback);});

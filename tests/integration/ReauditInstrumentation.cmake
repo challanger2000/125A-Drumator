@@ -15,6 +15,10 @@ function(reaudit_instrument name variable)
       "auditionStart_.store(true,std::memory_order_release);\n   drumator::qa::probe(drumator::qa::auditAfterAuditionAssetPublished);")
     qa_replace(_code "const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);"
       "const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);\n drumator::qa::probe(drumator::qa::auditAfterAuditionStartTaken);")
+    # A17 negative mutation: the historical linear clock fallback without
+    # the host-verified Cycle bounds must fail exact native PCM comparison.
+    qa_replace(_code "if(haveCycleBounds_) {\n     const double cycleLength"
+      "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::suppressCycleClockCache&&haveCycleBounds_) {\n     const double cycleLength")
     qa_replace(_code "if(finish<=cursor)return;"
       "if(finish<=cursor)return;\n      ++drumator::qa::auditSongScheduleCalls;")
     # Exercise the actual generated QA Processor with the repaired Cycle

@@ -90,6 +90,7 @@ Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 s
 }
 Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
+             haveCycleBounds_=false;
              previewPending_.store(0,std::memory_order_release);
              auditionStart_.store(false,std::memory_order_release);
              auditionStop_.store(true,std::memory_order_release);
@@ -104,6 +105,7 @@ Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
  // Steinberg's AudioEffect default returns kNotImplemented. A real host
  // may invoke this independently of setActive; honor the lifecycle.
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
+             haveCycleBounds_=false;
              previewPending_.store(0,std::memory_order_release);
              auditionStart_.store(false,std::memory_order_release);
              auditionStop_.store(true,std::memory_order_release);
@@ -648,6 +650,7 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  haveExpectedPpq_=false;
  expectedNextPpq_=0.0;
  lastClockTempo_=0.0;
+ haveCycleBounds_=false;
  phaseOriginStep_=0;
  // A rate change invalidates any prior per-voice interpolation kernel.
  // Preserve retired asset ownership; mute existing rows until reloaded.
@@ -785,6 +788,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    voices_.reset();
    wasPlaying_=false;
    haveExpectedPpq_=false;
+   haveCycleBounds_=false;
    previewPending_.store(0,std::memory_order_release);
  }
  // Hosts may flush discrete automation without providing any audio buffers.
@@ -797,6 +801,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      voices_.reset();
      wasPlaying_=false;
      haveExpectedPpq_=false;
+     haveCycleBounds_=false;
      // An audition requested while there is no audio sink must not fire
      // unexpectedly when the host restores its outputs.
      previewPending_.store(0,std::memory_order_release);
@@ -897,6 +902,26 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      std::isfinite(c->projectTimeMusic)&&
      std::isfinite(c->tempo)&&c->tempo>0.0;
  };
+ // The host alone establishes or clears Cycle metadata. A missing
+ // ProcessContext is not proof that a previously valid Cycle has ended.
+ if(explicitStop)haveCycleBounds_=false;
+ else if(hasClock(suppliedContext)) {
+   haveCycleBounds_=
+     (suppliedContext->state&
+       (Steinberg::Vst::ProcessContext::kCycleActive|
+        Steinberg::Vst::ProcessContext::kCycleValid))==
+       (Steinberg::Vst::ProcessContext::kCycleActive|
+        Steinberg::Vst::ProcessContext::kCycleValid)&&
+     std::isfinite(suppliedContext->cycleStartMusic)&&
+     std::isfinite(suppliedContext->cycleEndMusic)&&
+     suppliedContext->cycleEndMusic>suppliedContext->cycleStartMusic&&
+     suppliedContext->projectTimeMusic>=suppliedContext->cycleStartMusic&&
+     suppliedContext->projectTimeMusic<suppliedContext->cycleEndMusic;
+   if(haveCycleBounds_) {
+     lastCycleStartMusic_=suppliedContext->cycleStartMusic;
+     lastCycleEndMusic_=suppliedContext->cycleEndMusic;
+   }
+ }
  Steinberg::Vst::ProcessContext inferred{};
  const auto* context=suppliedContext;
  if(!explicitStop&&!hasClock(suppliedContext)&&wasPlaying_&&
@@ -907,6 +932,22 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                   Steinberg::Vst::ProcessContext::kTempoValid;
    inferred.projectTimeMusic=expectedNextPpq_;
    inferred.tempo=lastClockTempo_;
+   // Extrapolate modulo the most recent valid host Cycle, never against
+   // guessed or stale settings from a new transport run.
+   if(haveCycleBounds_) {
+     const double cycleLength=lastCycleEndMusic_-lastCycleStartMusic_;
+     if(inferred.projectTimeMusic>=lastCycleEndMusic_) {
+       inferred.projectTimeMusic=lastCycleStartMusic_+
+         std::fmod(inferred.projectTimeMusic-lastCycleEndMusic_,cycleLength);
+     }
+     if(inferred.projectTimeMusic>=lastCycleStartMusic_&&
+        inferred.projectTimeMusic<lastCycleEndMusic_) {
+       inferred.state|=Steinberg::Vst::ProcessContext::kCycleActive|
+                       Steinberg::Vst::ProcessContext::kCycleValid;
+       inferred.cycleStartMusic=lastCycleStartMusic_;
+       inferred.cycleEndMusic=lastCycleEndMusic_;
+     }
+   }
    context=&inferred;
  }
  const bool playing=explicitStop?false:context?
@@ -915,6 +956,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  const bool validHostClock=playing&&hasClock(context);
  if(wasPlaying_&&!playing)voices_.reset(); // only explicit host STOP
  if(!playing||!validHostClock)haveExpectedPpq_=false;
+ if(!playing)haveCycleBounds_=false;
  wasPlaying_=playing;
  // The first full block after a kit commit starts with no old-kit voices.
  const auto revision=kitRevision_.load(std::memory_order_acquire);
@@ -997,16 +1039,16 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    // start when the last processed block crossed the cycle end. Its reported
    // PPQ then includes exactly that overshoot. Recognize this modular clock
    // relationship, but reject unrelated locates and bogus cycle metadata.
-   const double cycleOvershoot=suppliedContext&&
-       std::isfinite(suppliedContext->cycleEndMusic)?
-       expectedNextPpq_-suppliedContext->cycleEndMusic:0.0;
-   const double priorCycleLength=suppliedContext?
-       suppliedContext->cycleEndMusic-suppliedContext->cycleStartMusic:0.0;
+   const double cycleOvershoot=context&&
+       std::isfinite(context->cycleEndMusic)?
+       expectedNextPpq_-context->cycleEndMusic:0.0;
+   const double priorCycleLength=context?
+       context->cycleEndMusic-context->cycleStartMusic:0.0;
    const double wrappedOvershoot=std::isfinite(priorCycleLength)&&
        priorCycleLength>0.0&&std::isfinite(cycleOvershoot)?
        std::fmod(std::max(0.0,cycleOvershoot),priorCycleLength):0.0;
-   const double actualCycleOffset=suppliedContext?
-       initialPpq-suppliedContext->cycleStartMusic:0.0;
+   const double actualCycleOffset=context?
+       initialPpq-context->cycleStartMusic:0.0;
    const double cycleOffsetError=std::abs(actualCycleOffset-wrappedOvershoot);
    const double cyclePhaseError=std::isfinite(priorCycleLength)&&priorCycleLength>0.0?
        std::min(cycleOffsetError,std::abs(cycleOffsetError-priorCycleLength)):
@@ -1014,28 +1056,28 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    const double maximumPriorBlockPpq=lastClockTempo_>0.0?
        static_cast<double>(processSetup.maxSamplesPerBlock)*lastClockTempo_/
        (60.0*rateForClock):0.0;
-   const bool confirmedCycleWrap=transportJump&&suppliedContext&&
-       (suppliedContext->state&
+   const bool confirmedCycleWrap=transportJump&&context&&
+       (context->state&
            (Steinberg::Vst::ProcessContext::kCycleActive|
             Steinberg::Vst::ProcessContext::kCycleValid))==
            (Steinberg::Vst::ProcessContext::kCycleActive|
             Steinberg::Vst::ProcessContext::kCycleValid)&&
-       std::isfinite(suppliedContext->cycleStartMusic)&&
-       std::isfinite(suppliedContext->cycleEndMusic)&&
-       suppliedContext->cycleEndMusic>suppliedContext->cycleStartMusic&&
+       std::isfinite(context->cycleStartMusic)&&
+       std::isfinite(context->cycleEndMusic)&&
+       context->cycleEndMusic>context->cycleStartMusic&&
        std::isfinite(maximumPriorBlockPpq)&&maximumPriorBlockPpq>0.0&&
        std::isfinite(cycleOvershoot)&&
        cycleOvershoot>=-expectedTolerance&&
        cycleOvershoot<=maximumPriorBlockPpq+expectedTolerance&&
-       initialPpq>=suppliedContext->cycleStartMusic-expectedTolerance&&
-       initialPpq<suppliedContext->cycleEndMusic+expectedTolerance&&
+       initialPpq>=context->cycleStartMusic-expectedTolerance&&
+       initialPpq<context->cycleEndMusic+expectedTolerance&&
        expectedNextPpq_>initialPpq&&
        cyclePhaseError<=expectedTolerance;
    if(transportJump&&!confirmedCycleWrap)voices_.reset();
    if(!haveExpectedPpq_||transportJump) {
       // Cycle origin is the musical loop start, not the host's post-seam overshoot.
       const double originPpq=confirmedCycleWrap?
-          suppliedContext->cycleStartMusic:initialPpq;
+          context->cycleStartMusic:initialPpq;
       const double initialStep=std::floor(originPpq*4.0+1e-8);
       phaseOriginStep_=std::isfinite(initialStep)&&
          initialStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
@@ -1058,14 +1100,14 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    // Subdivide the sequencer's timing only; existing sample voices keep ringing.
    // Never infer a loop from an unflagged PPQ discontinuity.
    const double ppqPerFrame=tempo/(60.0*rate);
-   const bool cycleFlags=suppliedContext&&
-       (suppliedContext->state&
+   const bool cycleFlags=context&&
+       (context->state&
            (Steinberg::Vst::ProcessContext::kCycleActive|
             Steinberg::Vst::ProcessContext::kCycleValid))==
            (Steinberg::Vst::ProcessContext::kCycleActive|
             Steinberg::Vst::ProcessContext::kCycleValid);
-   const double cycleStart=cycleFlags?suppliedContext->cycleStartMusic:0.0;
-   const double cycleEnd=cycleFlags?suppliedContext->cycleEndMusic:0.0;
+   const double cycleStart=cycleFlags?context->cycleStartMusic:0.0;
+   const double cycleEnd=cycleFlags?context->cycleEndMusic:0.0;
    const double cycleLength=cycleEnd-cycleStart;
    const double firstWrapFrame=(cycleEnd-initialPpq)/ppqPerFrame;
    const double cycleFrames=cycleLength/ppqPerFrame;

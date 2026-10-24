@@ -562,6 +562,86 @@ void testA16MultiCyclePerCallback(){
  }
 }
 
+
+void testA17MissingCycleClockKeepsExactPcm(){
+ constexpr auto playing=ProcessContext::kPlaying|
+     ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ constexpr auto cycle=ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ for(unsigned gapMode=0;gapMode<2;++gapMode){
+   // Mode 0: no ProcessContext at all, mode 1: valid transport/Cycle
+   // flags but absent optional musical position and tempo bits.
+   Fixture continuous,interrupted;
+   KitState kit;kit.grid.fill(0);kit.visible=1;
+   kit.names[0]="clock-cycle.wav";
+   kit.wav[0]=a14LongConstant(.125f,-.25f);
+   kit.grid[0]=127;
+   continuous.kit(kit);interrupted.kit(kit);
+   prepareAudio(*continuous.p);prepareAudio(*interrupted.p);
+   AuditAudioBlock clean,gap;
+   for(auto* block:{&clean,&gap}){
+     block->clock.tempo=120.;
+     block->clock.cycleStartMusic=4.;
+     block->clock.cycleEndMusic=4.+64./24000.;
+     block->clock.state=playing|cycle;
+   }
+   for(unsigned block=0;block<4;++block){
+     // Every 256-frame block covers exactly four 64-frame cycles.
+     clean.clock.projectTimeMusic=4.;
+     gap.clock.projectTimeMusic=4.;
+     gap.clock.state=playing|cycle;
+     gap.data.processContext=&gap.clock;
+     if(block==1||block==2){
+       if(gapMode==0)gap.data.processContext=nullptr;
+       else gap.clock.state=ProcessContext::kPlaying|cycle;
+     }
+     check(continuous.p->process(clean.data)==kResultOk&&
+           interrupted.p->process(gap.data)==kResultOk,
+           "A17 live host clock gap interrupted Processor");
+     for(unsigned i=0;i<256;++i){
+       const float expectedL=static_cast<float>(4*block+i/64+1)*.125f;
+       const float expectedR=-2.f*expectedL;
+       check(clean.left[i]==expectedL&&clean.right[i]==expectedR,
+             "A17 full-clock reference was silently broken");
+       check(gap.left[i]==clean.left[i]&&gap.right[i]==clean.right[i],
+             "A17 optional ProcessContext omission cut/doubled/shifted a Cycle step or tail");
+     }
+   }
+   check(IntegrationAccess::activeAudioVoices(*interrupted.p)==16,
+         "A17 pending sample tails absent after optional Cycle clock gaps");
+   gap.data.processContext=&gap.clock;
+   gap.clock.state=0; // Explicit STOP wins even after missing clock.
+   check(interrupted.p->process(gap.data)==kResultOk,
+         "A17 explicit STOP rejected");
+   for(unsigned i=0;i<256;++i)
+     check(gap.left[i]==0.f&&gap.right[i]==0.f,
+           "A17 explicit STOP failed after inferred cycle");
+   check(IntegrationAccess::activeAudioVoices(*interrupted.p)==0,
+         "A17 explicit STOP retained inferred Cycle voices");
+   gap.data.processContext=nullptr;
+   check(interrupted.p->process(gap.data)==kResultOk,
+         "A17 no-clock after STOP rejected");
+   for(unsigned i=0;i<256;++i)
+     check(gap.left[i]==0.f&&gap.right[i]==0.f,
+           "A17 stale Cycle carried across STOP");
+ }
+ // Absent genuine Cycle metadata, missing time must NOT fabricate a loop.
+ {
+   Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+   kit.names[0]="no-cycle.wav";kit.wav[0]=a14LongConstant(.125f,-.25f);
+   kit.grid[0]=127;f.kit(kit);prepareAudio(*f.p);
+   AuditAudioBlock audio;audio.clock.tempo=120.;
+   audio.clock.state=playing;audio.clock.projectTimeMusic=4.;
+   check(f.p->process(audio.data)==kResultOk,"A17 no-Cycle initial block");
+   audio.data.processContext=nullptr;
+   check(f.p->process(audio.data)==kResultOk,"A17 no-Cycle gap");
+   for(unsigned i=0;i<256;++i)
+     check(audio.left[i]==.125f&&audio.right[i]==-.25f,
+           "A17 missing clock invented a Cycle where none was declared");
+   check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+         "A17 no-Cycle negative registered synthetic steps");
+ }
+}
+
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

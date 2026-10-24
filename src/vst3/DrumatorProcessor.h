@@ -129,6 +129,11 @@ private:
  double expectedNextPpq_{0.0};
  bool haveExpectedPpq_{false};
  double lastClockTempo_{0.0}; // audio-owner fallback for optional context
+ // Last genuinely supplied host Cycle bounds, audio-thread-owned only.
+ // Used solely when optional transport-clock data disappear transiently.
+ double lastCycleStartMusic_{0.0};
+ double lastCycleEndMusic_{0.0};
+ bool haveCycleBounds_{false};
  AtomicPatternSelection selected_{};
  std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
  std::atomic<std::uint32_t> muteMask_{0};
