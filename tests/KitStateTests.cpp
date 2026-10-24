@@ -51,11 +51,15 @@ int main() {
     original.displayNames[3]="Closed Hat";
     original.displayNames[6]="Buehne";
     original.wav[0]=wav16();
+    original.sampleEdits[0]={0,1,0,0,.5f};
     original.names[2]="HiHat_Closed.wav";
     original.wav[2]=wav16();
     std::vector<std::uint8_t> encoded;
     check(KitCodec::encode(original,encoded),"Unable to encode kit");
     check(KitCodec::u32(encoded.data())==kKitMagic,"DMR4 format ID");
+     // DM16 sample edits must be serialized losslessly; old DM15 projects
+     // will default to unedited samples after migration.
+     check(encoded.size()>=kRows*kSampleEditBytes+4,"DM16 edit tail missing");
     KitState copy{};
     check(KitCodec::decode(encoded.data(),encoded.size(),copy),"Unable to decode");
     check(copy.muted==0x8001&&copy.solo==0x0006&&copy.swing==35&&copy.humanize==70,
@@ -84,6 +88,8 @@ int main() {
           !validRowLabel(std::string("Bad\nLine")),
           "DM14 label validation");
     check(copy.wav==original.wav,"Source WAV bytes not identical");
+    check(copy.sampleEdits[0].start==0&&copy.sampleEdits[0].end==1&&
+          copy.sampleEdits[0].gain==.5f,"DM16 sample edit roundtrip lost");
     std::vector<std::uint8_t> again;
     check(KitCodec::encode(copy,again)&&encoded==again,
           "Roundtrip must produce deterministic DMR4");
@@ -104,8 +110,24 @@ int main() {
           "out-of-range DM11 bus accepted despite valid checksum");
     check(copy.output==preservedRouting.output&&copy.grid==preservedRouting.grid,
           "rejected bus changed previously loaded kit");
+    // First strip the DM16 WAV-edit extension to recreate an actual DM15.
+    auto old15=encoded;
+    old15.erase(old15.end()-static_cast<std::ptrdiff_t>(4+kRows*kSampleEditBytes),old15.end()-4);
+    for(int i=0;i<4;++i)
+      old15[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV15>>(8*i));
+    const auto old15Size=static_cast<std::uint32_t>(old15.size()-8);
+    for(int i=0;i<4;++i)
+      old15[4+static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(old15Size>>(8*i));
+    const auto old15Hash=KitCodec::hash(old15.data()+8,old15.size()-12);
+    for(int i=0;i<4;++i)
+      old15[old15.size()-4+static_cast<std::size_t>(i)]=
+          static_cast<std::uint8_t>(old15Hash>>(8*i));
+    KitState migrated15;
+    check(KitCodec::decode(old15.data(),old15.size(),migrated15)&&
+          migrated15.sampleEdits[0].end==0,
+          "DM15 WAV-edit default migration failed");
     // Strip the DM15 eight-byte length extension to recreate DM14.
-    auto old14=encoded;
+    auto old14=old15;
     old14.erase(old14.end()-static_cast<std::ptrdiff_t>(4+kPatterns),old14.end()-4);
     for(int i=0;i<4;++i)
       old14[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV14>>(8*i));
@@ -141,7 +163,7 @@ int main() {
     // Corrupt display-label length with a corrected checksum, rejecting
     // the state without mutating its previous successful contents.
     auto badDisplay=encoded;
-    const auto labelsBegin=badDisplay.size()-4-kPatterns-labelsSize;
+    const auto labelsBegin=badDisplay.size()-4-kRows*kSampleEditBytes-kPatterns-labelsSize;
     badDisplay[labelsBegin]=static_cast<std::uint8_t>(kMaxRowLabel+1);
     const auto badDisplayHash=KitCodec::hash(badDisplay.data()+8,badDisplay.size()-12);
     for(int i=0;i<4;++i)badDisplay[badDisplay.size()-4+static_cast<std::size_t>(i)]=
@@ -300,6 +322,9 @@ int main() {
     original.names[0]="../bad.wav";
     check(!KitCodec::encode(original,again),"Path traversal name accepted");
     original.names[0]="Kick_01.wav";
+    // The raw-invalid-WAV fixture must not also retain a DM16 edit:
+    // edited samples are intentionally decoded during encode validation.
+    original.sampleEdits[0]=SampleEdit{};
     original.wav[0][0]='X'; // invalid WAV, checksum would be recomputed
     check(KitCodec::encode(original,again),"Raw invalid fixture creation");
     check(!KitCodec::decode(again.data(),again.size(),copy),

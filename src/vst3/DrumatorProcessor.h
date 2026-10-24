@@ -95,16 +95,30 @@ private:
  // Version and selected program share one atomic CAS arbitration word.
  std::uint32_t lastAudioKitRevision_{0}; // audio-thread only
  KitState kit_{};
+ // Control-thread-only per-row source/edit generation (never serialized).
+ std::array<std::uint32_t,kRows> editorRevisions_{};
  SongMailbox songMailbox_{};
  SongChain audioSongChain_{};
  bool audioSongEnabled_{false};
  AtomicPatternBank patterns_;
  // Last coherent patterns, read/written only in the audio callback.
  std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> audioPatternCache_{};
+ std::array<std::uint8_t,kPatterns> audioPatternLengthCache_{};
  std::array<bool,kPatterns> audioPatternValid_{};
  SampleVoiceEngine voices_;
 
  SampleExchange exchange_{};
+ SampleExchange auditionExchange_{};
+ SampleVoiceEngine auditionVoices_{};
+ std::atomic<bool> auditionStart_{false},auditionStop_{false};
+ std::atomic<std::uint64_t> auditionStopGeneration_{0};
+ // Latest Preview/STOP command is published as one atomic transaction.
+ std::atomic<std::uint64_t> auditionCommand_{0};
+ // Even = completed sample/START transaction; odd = publishing sample.
+ // Audio checks the sequence before and after adoption to protect identity.
+ std::atomic<std::uint64_t> auditionPublishSequence_{0};
+ std::uint64_t lastAudioAuditionCommand_{0};
+ std::vector<float> auditionLeft_{},auditionRight_{};
  TriggerBatch triggers_{};
  PatternEventTimeline patternTimeline_{};
  // One-shot previews from GUI; one pending request per row, not persisted.
@@ -114,6 +128,12 @@ private:
  std::int64_t phaseOriginStep_{0};
  double expectedNextPpq_{0.0};
  bool haveExpectedPpq_{false};
+ double lastClockTempo_{0.0}; // audio-owner fallback for optional context
+ // Last genuinely supplied host Cycle bounds, audio-thread-owned only.
+ // Used solely when optional transport-clock data disappear transiently.
+ double lastCycleStartMusic_{0.0};
+ double lastCycleEndMusic_{0.0};
+ bool haveCycleBounds_{false};
  AtomicPatternSelection selected_{};
  std::atomic<std::uint8_t> visibleRows_{kDefaultVisibleRows};
  std::atomic<std::uint32_t> muteMask_{0};

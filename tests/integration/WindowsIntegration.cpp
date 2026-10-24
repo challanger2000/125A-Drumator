@@ -34,6 +34,8 @@
 #include "vstgui/lib/coffscreencontext.h"
 #include "vstgui/lib/idatapackage.h"
 #include <filesystem>
+#include <algorithm>
+#include <chrono>
 #include <array>
 #include <limits>
 #include <atomic>
@@ -85,6 +87,14 @@ void operator delete(void* p,std::size_t) noexcept{std::free(p);}
 void operator delete[](void* p,std::size_t) noexcept{std::free(p);}
 namespace drumator::qa {
 thread_local bool legacyTriggerOrdering=false;
+std::atomic<AuditMutation> auditMutation{AuditMutation::none};
+std::atomic<unsigned> auditSongScheduleCalls{0};
+std::atomic<unsigned> auditSongPatternSnapshots{0};
+std::atomic<unsigned> auditViewRefreshFaultHits{0};
+std::atomic<unsigned> auditWaveDecodeMisses{0},auditWaveFullReplies{0};
+std::atomic<unsigned> auditWaveIndexedCalls{0};
+std::atomic<const void*> auditImportTarget{nullptr};
+std::atomic<unsigned> auditImportCalls{0},auditDelayCalls{0};
 void probe(Point p) noexcept {
  if(stopPoint.load(std::memory_order_acquire)!=p)return;
  SetEvent(entered);
@@ -97,6 +107,10 @@ namespace drumator {
 // Added as a friend in generated TEST headers only. Observes real state,
 // including Undo/clipboard/paths, rather than mirroring the commit algorithm.
 struct IntegrationAccess {
+ static bool sampleEditorOpen(const DrumatorView& view){return view.sampleEditorOpen_;}
+ static SampleEdit sampleEditorDraft(const DrumatorView& view){return view.sampleEditorEdit_;}
+ static void setSampleEditorDraft(DrumatorView& view,const SampleEdit& edit){view.sampleEditorEdit_=edit;}
+ static void setStatusText(DrumatorView& view,const std::string& status){view.status_=status;}
  static void seedTransportClock(Processor& p) {
    p.haveExpectedPpq_=true;
    p.expectedNextPpq_=19.5;
@@ -104,6 +118,9 @@ struct IntegrationAccess {
  }
  static bool clockReset(const Processor& p) {
    return !p.haveExpectedPpq_&&p.expectedNextPpq_==0.0&&p.phaseOriginStep_==0;
+ }
+ static std::uint32_t activeAudioVoices(const Processor& p) {
+   return p.voices_.active();
  }
  static auto snapshot(Controller& c) {
    std::array<PatternSteps,kPatterns> undo{};
@@ -120,7 +137,8 @@ struct IntegrationAccess {
      c.muted_,c.solo_,c.gain_,c.pan_,c.pitch_,c.choke_,c.output_,c.visibleRows_,
      c.swingPercent_,c.humanizePercent_,c.masterVolume_,c.randomVelocity_,c.songEnabled_,
      c.clipboard_,c.clipboardLength_,c.clipboardValid_,c.strokeBefore_,c.strokePattern_,c.strokeGeneration_,
-     c.editGeneration(),available,undo,undoLengths,chain,c.songChain_.count(),c.velocityVariation_,c.preferredZoom_,c.getParamNormalized(kPatternParam)};
+     c.editGeneration(),available,undo,undoLengths,chain,c.songChain_.count(),c.velocityVariation_,c.preferredZoom_,c.getParamNormalized(kPatternParam),
+     c.originIdentity_,c.originIdentityValid_,c.pathsRestoredBeforeComponent_,c.strokeOwner_};
  }
  static auto viewSnapshot(DrumatorView& v) {
    VSTGUI::IPlatformTextEdit* platform=nullptr;
@@ -142,6 +160,11 @@ struct IntegrationAccess {
  static std::size_t songPage(DrumatorView& v){return v.songPage_;}
  static std::size_t songSlot(DrumatorView& v){return v.songSlot_;}
  static const auto& paths(Controller& c){return c.samplePaths_;}
+ static bool pendingDirty(const Controller& c){return c.dirtyPending_;}
+ static bool zoomSample(DrumatorView& v,bool in,bool full=false){return v.zoomSampleEditor(in,full);}
+ static bool scrollSample(DrumatorView& v,double x){return v.scrollEditorWave(x);}
+ static bool waveCacheEmpty(const Controller& c){return c.editorWaveRow_==kRows;}
+ static std::size_t cachedWaveRow(const Controller& c){return c.editorWaveRow_;}
 };
 }
 namespace {
@@ -268,6 +291,80 @@ std::vector<std::uint8_t> constantStereo(float l,float r){
  std::memcpy(b.data()+36,"data",4);put(40,1024*8,4);
  for(std::size_t n=0;n<1024;++n){std::memcpy(b.data()+44+n*8,&l,4);std::memcpy(b.data()+48+n*8,&r,4);}
  return b;
+}
+void testWavEditorPreviewAndRecall(){
+ Fixture f;
+ KitState initial;initial.visible=2;initial.grid.fill(0);
+ initial.names[0]="sample.wav";initial.wav[0]=constantStereo(.5f,-.25f);
+ f.kit(initial);prepareAudio(*f.p);
+ std::array<float,256> left{},right{};float* channels[]{left.data(),right.data()};
+ AudioBusBuffers out{};out.numChannels=2;out.channelBuffers32=channels;
+ ProcessData block{};block.numSamples=256;block.numOutputs=1;block.outputs=&out;
+ block.symbolicSampleSize=kSample32;
+ auto getKit=[&]{
+   ResizableMemoryIBStream stream;KitState kit;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+                          static_cast<std::size_t>(stream.getCursor()),kit),
+         "WE01 processor save/decode failed");
+   return kit;
+ };
+ SampleEdit candidate{64,512,0,0,.5f};
+ SampleEdit observed{};std::uint32_t frames=0;
+ std::array<WaveformRange,256> peaks{};
+ check(f.c->sampleEditorSnapshot(0,observed,frames,peaks)&&frames==1024&&
+       observed.start==0&&observed.end==1024,"WE01 embedded editor snapshot");
+ check(f.c->previewSampleEdit(0,candidate),"WE01 provisional preview rejected");
+ check(f.p->process(block)==kResultOk,"WE01 stopped-transport preview render");
+ check(std::abs(left[100]-.25f)<.005f&&
+       std::abs(right[100]+.125f)<.005f,
+       "WE01 provisional START/GAIN not audible");
+ check(getKit().sampleEdits[0].end==0,"WE01 preview dirtied project");
+ f.c->stopSampleEditPreview();
+ check(f.p->process(block)==kResultOk,"WE01 preview stop render");
+ check(std::abs(left[100])<1e-6f&&std::abs(right[100])<1e-6f,
+       "WE01 cancel left provisional audio playing");
+ check(getKit().sampleEdits[0].end==0,"WE01 cancel changed saved edit");
+ check(f.c->commitSampleEdit(0,candidate),"WE01 commit rejected");
+ const auto committed=getKit();
+ check(committed.sampleEdits[0].start==64&&committed.sampleEdits[0].end==512&&
+       committed.sampleEdits[0].gain==.5f,"WE01 edit missing from kit state");
+ const auto encoded=Fixture::encode(committed);
+ drumator::qa::ByteStream input(const_cast<std::uint8_t*>(encoded.data()),encoded.size());
+ check(f.p->setState(&input)==kResultOk&&f.recall(encoded)==kResultOk,
+       "WE01 processor/controller recall rejected");
+ check(f.c->sampleEditorSnapshot(0,observed,frames,peaks)&&
+       observed.start==64&&observed.end==512&&observed.gain==.5f,
+       "WE01 recalled editor state differs");
+ // Repeat native editor attach/detach while snapshots and previews are active.
+ for(unsigned cycle=0;cycle<3;++cycle){
+   f.open();
+   check(f.c->sampleEditorSnapshot(0,observed,frames,peaks),
+         "WE02 editor re-open lost WAV snapshot");
+   check(f.c->previewSampleEdit(0,candidate),"WE02 repeated preview rejected");
+   check(f.p->process(block)==kResultOk,"WE02 repeated preview render");
+   f.closeLast();
+   f.c->stopSampleEditPreview();
+   check(f.p->process(block)==kResultOk,"WE02 stopped preview after detach");
+   check(std::abs(left[100])<1e-6f,"WE02 orphaned preview after editor close");
+ }
+ // Valid host transport clock must not suppress a provisional audition.
+ ProcessContext clock{};clock.tempo=120.;clock.projectTimeMusic=0.;
+ clock.state=ProcessContext::kPlaying|ProcessContext::kTempoValid|
+             ProcessContext::kProjectTimeMusicValid;
+ block.processContext=&clock;
+ check(f.c->previewSampleEdit(0,candidate),"WE03 transport preview rejected");
+ check(f.p->process(block)==kResultOk,"WE03 transport preview render");
+ check(std::abs(left[100]-.25f)<.005f&&
+       std::abs(right[100]+.125f)<.005f,
+       "WE03 running transport provisional output wrong");
+ check(getKit().sampleEdits[0].start==64,"WE03 preview changed saved kit");
+ f.c->stopSampleEditPreview();clock.projectTimeMusic+=256./48000.;
+ check(f.p->process(block)==kResultOk,"WE03 transport preview stop");
+ check(std::abs(left[100])<1e-6f,"WE03 stopped preview still audible");
+ block.processContext=nullptr;
+ f.p->setProcessing(false);f.p->setActive(false);
+ evidence("WE01-03 provisional audition stopped/running transport, 3 view cycles and DM16 recall PASS");
 }
 void testArbitration(bool zero,bool busy,const std::vector<unsigned>& points){
  Fixture f;auto old=namedKit('X');old.selected=2;f.kit(old);prepareAudio(*f.p);
@@ -444,16 +541,17 @@ void testZoom(){
    drumator::qa::ByteStream in(v2.data(),v2.size());
    check(f.c->setState(&in)==kResultOk&&v->zoomMatches(entry.first),"Z02 DZM2 intermediate zoom recall");
    ResizableMemoryIBStream written;
-   check(f.c->getState(&written)==kResultOk&&written.getCursor()==5,
-         "Z02 DZM2 state length");
+   check(f.c->getState(&written)==kResultOk&&written.getCursor()==5+2*kRows,
+         "Z02 DZM3 state length with empty sample paths");
    const auto* b=static_cast<const std::uint8_t*>(written.getData());
-   check(b[0]=='D'&&b[1]=='Z'&&b[2]=='M'&&b[3]=='2'&&b[4]==entry.second,
-         "Z02 intermediate zoom not persisted");
+   check(b[0]=='D'&&b[1]=='Z'&&b[2]=='M'&&b[3]=='3'&&b[4]==entry.second,
+         "Z02 intermediate zoom not persisted in DZM3");
  }
  check(zoom(*f.c,true)==kResultOk,"Z02 saved preference set");
  ResizableMemoryIBStream saved;
- check(f.c->getState(&saved)==kResultOk&&saved.getCursor()==5&&
-   static_cast<const std::uint8_t*>(saved.getData())[4]==1,"Z02 saved zoom bytes disagree");
+ check(f.c->getState(&saved)==kResultOk&&saved.getCursor()==5+2*kRows&&
+   static_cast<const std::uint8_t*>(saved.getData())[4]==3,
+   "Z02 saved DZM3 zoom bytes disagree");
  f.closeLast();
  auto& reopened=f.open();check(std::abs(reopened.getZoomFactor()-1.5)<.001,"Z02 reopen lost preference");
  // Both views need a change: policy must reject before any native host request.
@@ -892,6 +990,25 @@ void testVelocityInactiveBarProtection(){
        "V16 2T undo did not recover hidden velocities");
  evidence("V16 active 1T VELO VARIIEREN/100 preserves second bar; 2T and Undo PASS");
 }
+void testNewStepDefault100(){
+ Fixture f;
+ auto kit=namedKit('X',4);
+ kit.grid.fill(0);
+ f.kit(kit);f.open();
+ check(f.c->velocity(0,0,2)==0,"default step fixture not empty");
+ check(f.c->toggleStep(0,0,2),"new step toggle rejected");
+ check(f.c->velocity(0,0,2)==100,"new step did not receive Velocity 100");
+ check(f.c->toggleStep(0,0,2)&&f.c->velocity(0,0,2)==0,
+       "second step click must disable note");
+ check(f.c->setStepVelocity(0,0,2,37),"setup explicit Velocity 37 failed");
+ check(f.c->toggleStep(0,0,2)&&f.c->velocity(0,0,2)==0,
+       "click on existing non-default Velocity must disable note");
+ check(f.c->toggleStep(0,0,2)&&f.c->velocity(0,0,2)==100,
+       "recreated step must use default Velocity 100");
+ check(f.c->velocity(0,1,2)==0&&f.c->velocity(1,0,2)==0,
+       "toggle changed another row or pattern");
+ evidence("SOR01 real Controller toggles 0 -> 100 -> 0; previous non-default 37 -> 0 -> 100 PASS");
+}
 void testVelocityResetPattern(){
  Fixture f;
  auto kit=namedKit('X',4);
@@ -972,6 +1089,11 @@ void testPatternDurationClipboard(){
  // Check other direction: 2T copied over an existing 1T pattern.
  KitState reverse=kit;reverse.patternLengths[0]=32;reverse.patternLengths[1]=16;
  f.kit(reverse);
+ // Selecting A explicitly is required: the preceding host-selected C can
+ // legitimately survive Component recall (RE07). The clipboard source
+ // must not depend on the host's prior active pattern.
+ check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk&&
+       f.c->currentPattern()==0,"P19 explicitly select source A after kit recall");
  check(f.c->copyCurrentPattern()&&
        f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&
        f.c->pasteCurrentPattern(),"P19 2T->1T paste");
@@ -988,6 +1110,8 @@ void testPatternDurationClipboard(){
  matching.grid[kRows*kSteps]=matching.grid[0];
  matching.grid[kRows*kSteps+20]=matching.grid[20];
  f.kit(matching);
+ check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk&&
+       f.c->currentPattern()==0,"P19 explicitly select matching source A");
  check(f.c->copyCurrentPattern()&&
        f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&
        f.c->pasteCurrentPattern(),"P19 length-only paste rejected");
@@ -1091,7 +1215,7 @@ void testPatternLengthControls(){
  f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
  check(f.c->patternLength(0)==32,"UX pattern length initial state");
- click(*v,481.,20.);
+ click(*v,322.,20.);
  check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
  const double blockedX=UiCompactLayout::stepX+20.*UiCompactLayout::stepWidth+8.;
  const auto oldHidden=f.c->velocity(0,0,20);
@@ -1100,9 +1224,9 @@ void testPatternLengthControls(){
  click(*v,1248.,UiCompactLayout::header+60.);
  click(*v,blockedX,UiCompactLayout::header+UiCompactLayout::baseRow+12.);
  check(f.c->velocity(0,0,20)==oldHidden,"UX edited inactive velocity in 1T");
- click(*v,481.,20.);
+ click(*v,322.,20.);
  check(f.c->patternLength(0)==16,"UX selected length not idempotent");
- click(*v,557.,20.);
+ click(*v,414.,20.);
  check(f.c->patternLength(0)==32,"UX visible 2 TAKTE control failed");
  click(*v,820.,65.);
  click(*v,820.,98.);
@@ -1348,7 +1472,7 @@ void testControllerMetadataCommit(){
        f.c->label(1)==path.filename().string(),
        "N11 loaded sample filename/path/processor state diverged");
  check(f.c->clearSample(1)&&IntegrationAccess::paths(*f.c)[1].empty()&&
-       f.c->label(1)=="LEER - WAV LADEN"&&
+       f.c->label(1)=="EMPTY - LOAD WAV"&&
        savedKit().names[1].empty()&&savedKit().wav[1].empty(),
        "N11 clear sample did not atomically reset metadata");
  std::error_code ec;std::filesystem::remove(path,ec);
@@ -1413,6 +1537,40 @@ void testRealSampleFolderStepping(){
        IntegrationAccess::paths(*f.c)[0]==aPath&&
        snapshot().wav[0]==wavA,
        "N12 next did not wrap after invalid final file");
+ // SOR02: restore both VST3 state streams and retain the original folder.
+ ResizableMemoryIBStream componentState;
+ ResizableMemoryIBStream controllerState;
+ check(f.p->getState(&componentState)==kResultOk&&
+       f.c->getState(&controllerState)==kResultOk,
+       "SOR02 could not capture host project state");
+ componentState.seek(0,IBStream::kIBSeekSet,nullptr);
+ controllerState.seek(0,IBStream::kIBSeekSet,nullptr);
+ check(f.c->setComponentState(&componentState)==kResultOk&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 matching kit recall discarded valid browsing origin");
+ check(f.c->setState(&controllerState)==kResultOk&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 controller state did not restore browsing origin");
+ check(f.c->stepSample(0,+1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==cPath,
+       "SOR02 next sample failed after two-stream project recall");
+ check(f.c->stepSample(0,-1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 previous sample failed after project recall");
+ // Opposite legal host order: Controller state precedes component state.
+ componentState.seek(0,IBStream::kIBSeekSet,nullptr);
+ controllerState.seek(0,IBStream::kIBSeekSet,nullptr);
+ check(f.c->setState(&controllerState)==kResultOk&&
+       f.c->setComponentState(&componentState)==kResultOk&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 opposite restore ordering lost matching origin");
+ check(f.c->stepSample(0,+1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==cPath,
+       "SOR02 next failed when component state restored second");
+ check(f.c->stepSample(0,-1)==Controller::LoadStatus::Accepted&&
+       IntegrationAccess::paths(*f.c)[0]==aPath,
+       "SOR02 return to original sample failed");
+
  const auto previous=snapshot();
  check(f.c->stepSample(0,0)==Controller::LoadStatus::Rejected&&
        f.c->stepSample(1,+1)==Controller::LoadStatus::NotFound&&
@@ -1481,21 +1639,286 @@ void testNativeName(){
 }
 #include "FunctionalAuditCases.inl"
 #include "SecondAuditCases.inl"
+void testTransportSequenceTorture(){
+ Fixture f;KitState kit;kit.visible=1;kit.grid.fill(0);
+ kit.names[0]="transport.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock block;
+ constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|
+                        ProcessContext::kProjectTimeMusicValid;
+ EventList notes;Event hit{};hit.type=Event::kNoteOnEvent;
+ hit.noteOn.pitch=36;hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+ check(notes.addEvent(hit)==kResultOk,"TORTURE MIDI trigger fixture");
+ unsigned stale=0,wrongSilence=0,missingHits=0;
+ for(unsigned cycle=0;cycle<96;++cycle){
+   // Empty pattern: every sound MUST originate from this explicit MIDI hit.
+   // This detects a missed hit separately from a stale voice or double hit.
+   block.data.numSamples=256;
+   block.clock.state=playing;
+   block.clock.projectTimeMusic=(cycle%2?4.:8.);
+   block.data.inputEvents=&notes;
+   check(f.p->process(block.data)==kResultOk,"TORTURE MIDI trigger block");
+   // Verify sample-exact onset and prefix, not only an interior sample.
+   // A delayed MIDI event or missing initial PCM must fail mutation QA.
+   for(std::size_t sample=0;sample<128;++sample)
+     if(std::abs(block.left[sample]-.25f)>1e-6f||
+        std::abs(block.right[sample]+.5f)>1e-6f)++missingHits;
+   block.data.inputEvents=nullptr;
+   block.data.numSamples=(cycle%3==0?0:256);
+   block.clock.state=0;
+   check(f.p->process(block.data)==kResultOk,"TORTURE stopped callback");
+   if(IntegrationAccess::activeAudioVoices(*f.p)!=0)++stale;
+   block.data.numSamples=256;block.clock.state=playing;
+   block.clock.projectTimeMusic=(cycle%4==0?4.:8.);
+   check(f.p->process(block.data)==kResultOk,"TORTURE restart block");
+   if(block.left[80]!=0.f||block.right[80]!=0.f)++wrongSilence;
+   // Moving the host clock while playing must never resurrect old voices.
+   block.clock.projectTimeMusic=(cycle%2?8.:4.);
+   check(f.p->process(block.data)==kResultOk,"TORTURE locate/loop block");
+   if(block.left[80]!=0.f||block.right[80]!=0.f)++wrongSilence;
+ }
+ qa::workflowNotice("TORTURE 96 MIDI/stop/restart/loop sequences: stale="+
+   std::to_string(stale)+" missing-or-doubled-hits="+std::to_string(missingHits)+
+   " unexpected-PCM="+std::to_string(wrongSilence));
+ f.p->setProcessing(false);f.p->setActive(false);
+ check(stale==0&&missingHits==0&&wrongSilence==0,
+       "TORTURE missed/doubled trigger, stale voice or unexpected output");
+}
+void testPacedSampleSwapContinuity(){
+ using Clock=std::chrono::steady_clock;
+ Fixture active,baseline;
+ KitState kit;kit.grid.fill(0);kit.visible=2;
+ kit.names[1]="reference.wav";kit.wav[1]=constantStereo(.25f,-.5f);
+ active.kit(kit);baseline.kit(kit);
+ prepareAudio(*active.p);prepareAudio(*baseline.p);
+ const auto folder=std::filesystem::current_path()/"125A-paced-import-QA";
+ std::filesystem::create_directories(folder);
+ const auto fileA=folder/"swapA.wav",fileB=folder/"swapB.wav";
+ for(const auto& [path,left,right]:std::array<std::tuple<std::filesystem::path,float,float>,2>{
+       std::tuple{fileA,.125f,-.25f},std::tuple{fileB,-.375f,.125f}}){
+   const auto wav=constantStereo(left,right);
+   std::ofstream output(path,std::ios::binary|std::ios::trunc);
+   output.write(reinterpret_cast<const char*>(wav.data()),
+                static_cast<std::streamsize>(wav.size()));
+   check(output.good(),"PACING fixture write");
+ }
+ std::atomic<unsigned> blocks{0},badPcm{0},errors{0},misses{0};
+ std::atomic<double> maximumMs{0.};
+ // Audio actor owns writes; read only after join. Fixed memory, no
+ // allocations in the callback or measured pacing loop.
+ std::array<double,500> callbackMs{};
+ std::jthread actor([&](std::stop_token stop){
+   AuditAudioBlock tested,reference;
+   EventList events;Event note{};note.type=Event::kNoteOnEvent;
+   note.noteOn.pitch=37;note.noteOn.velocity=1.f;note.noteOn.noteId=-1;
+   if(events.addEvent(note)!=kResultOk){++errors;return;}
+   tested.data.inputEvents=&events;reference.data.inputEvents=&events;
+   auto target=Clock::now();
+   for(unsigned n=0;n<500&&!stop.stop_requested();++n){
+     const auto begin=Clock::now();
+     const auto ok=active.p->process(tested.data);
+     const auto end=Clock::now();
+     const double ms=std::chrono::duration<double,std::milli>(end-begin).count();
+     callbackMs[n]=ms;
+     if(ms>256./48000.*1000.)++misses;
+     auto peak=maximumMs.load();
+     while(ms>peak&&!maximumMs.compare_exchange_weak(peak,ms)){}
+     if(ok!=kResultOk||baseline.p->process(reference.data)!=kResultOk)++errors;
+     for(std::size_t i=0;i<256;++i)
+       if(tested.left[i]!=reference.left[i]||tested.right[i]!=reference.right[i])
+         ++badPcm;
+     ++blocks;
+     target+=std::chrono::duration_cast<Clock::duration>(
+                  std::chrono::duration<double>(256./48000.));
+     std::this_thread::sleep_until(target);
+   }
+ });
+ while(blocks.load()<4&&errors.load()==0)std::this_thread::yield();
+ for(unsigned i=0;i<12;++i){
+   const auto path=(i&1)?fileA:fileB;
+   if(active.c->loadWav(0,pathToUtf8(path))!=Controller::LoadStatus::Accepted)
+     ++errors;
+ }
+ actor.join();
+ // Assert that accepted controller imports actually reach the processor kit.
+ // Unchanged-row PCM alone cannot distinguish an ignored import from success.
+ ResizableMemoryIBStream importedState;
+ KitState importedKit;
+ check(active.p->getState(&importedState)==kResultOk&&
+       KitCodec::decode(static_cast<const std::uint8_t*>(importedState.getData()),
+                        static_cast<std::size_t>(importedState.getCursor()),importedKit),
+       "PACING imported kit state decode");
+ check(importedKit.wav[0]==constantStereo(.125f,-.25f),
+       "PACING accepted sample import did not update processor asset");
+ // Compute quantiles off the actor thread. An otherwise green PCM
+ // comparison must never hide measured audio callback overruns.
+ auto sortedCallbackMs=callbackMs;
+ std::sort(sortedCallbackMs.begin(),sortedCallbackMs.end());
+ const double p95=sortedCallbackMs[474],p99=sortedCallbackMs[494];
+ qa::workflowNotice("PACING 48k/256 blocks="+std::to_string(blocks.load())+
+   " unchanged-row PCM mismatches="+std::to_string(badPcm.load())+
+   " deadline-misses="+std::to_string(misses.load())+
+   " p95-ms="+std::to_string(p95)+" p99-ms="+std::to_string(p99)+
+   " max-callback-ms="+std::to_string(maximumMs.load())+
+   "; paced shared Windows runner, NOT Studio One/ASIO certification");
+ std::error_code ec;std::filesystem::remove_all(folder,ec);
+ active.p->setProcessing(false);active.p->setActive(false);
+ baseline.p->setProcessing(false);baseline.p->setActive(false);
+ check(blocks.load()==500&&badPcm.load()==0&&errors.load()==0,
+       "PACING actual-controller sample swaps disrupted unchanged audio");
+ check(misses.load()==0,
+       "PACING missed an audio deadline despite a previously green PCM result");
+}
+void testComponentOnlySameBasenameRejectsStaleOrigin(){
+ Fixture f;
+ KitState initial;initial.grid.fill(0);initial.visible=1;
+ f.kit(initial);prepareAudio(*f.p);
+ const auto directory=std::filesystem::current_path()/"125A-v1a04-source";
+ std::filesystem::create_directories(directory);
+ const auto source=directory/"kick.wav";
+ {
+   const auto bytes=constantStereo(.25f,-.5f);
+   std::ofstream out(source,std::ios::binary);
+   out.write(reinterpret_cast<const char*>(bytes.data()),
+             static_cast<std::streamsize>(bytes.size()));
+   check(out.good(),"V1A04 write source WAV");
+ }
+ check(f.c->loadWav(0,pathToUtf8(source))==Controller::LoadStatus::Accepted,
+       "V1A04 load source via real controller");
+ check(!IntegrationAccess::paths(*f.c)[0].empty(),
+       "V1A04 expected original navigation path");
+ KitState other;other.grid.fill(0);other.visible=1;
+ other.names[0]="kick.wav";other.wav[0]=constantStereo(-.125f,.375f);
+ const auto state=Fixture::encode(other);
+ check(f.recall(state)==kResultOk,"V1A04 component-only different kit recall");
+ check(IntegrationAccess::paths(*f.c)[0].empty(),
+       "V1A04 component-only recall retained stale same-basename origin");
+ std::error_code ec;std::filesystem::remove_all(directory,ec);
+}
+void testPeerVelocityCancelPreservesCommittedStep(){
+ Fixture f;KitState kit;kit.grid.fill(0);kit.grid[0]=60;f.kit(kit);
+ f.open();f.open();
+ auto* first=IntegrationAccess::view(*f.c,0);
+ auto* peer=IntegrationAccess::view(*f.c,1);
+ click(*first,1248.,168.);
+ click(*first,630.,214.);
+ check(std::get<0>(IntegrationAccess::viewSnapshot(*first)),
+       "V1A03 first view gesture absent");
+ click(*peer,630.,108.+94.+60.);
+ check(f.c->velocity(0,1,0)==100,
+       "V1A03 peer step was not committed");
+ // The peer edit commits the first gesture, so its last velocity
+ // must survive a subsequently delivered stale Cancel unchanged.
+ const auto committedOwnVelocity=f.c->velocity(0,0,0);
+ first->onMouseCancel();
+ check(f.c->velocity(0,1,0)==100,
+       "V1A03 late Cancel erased second view step");
+ check(f.c->velocity(0,0,0)==committedOwnVelocity,
+       "V1A03 stale Cancel changed previously committed velocity");
+}
+void testZeroFrameStopRetiresVoice(){
+ Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+ kit.names[0]="zero-stop.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock audio;
+ constexpr auto playing=ProcessContext::kPlaying|ProcessContext::kTempoValid|
+                        ProcessContext::kProjectTimeMusicValid;
+ audio.clock.state=playing;audio.clock.projectTimeMusic=4.;
+ EventList notes;Event hit{};hit.type=Event::kNoteOnEvent;hit.noteOn.pitch=36;
+ hit.noteOn.velocity=1.f;hit.noteOn.noteId=-1;
+ check(notes.addEvent(hit)==kResultOk,"SOR03Z trigger fixture");
+ audio.data.inputEvents=&notes;
+ check(f.p->process(audio.data)==kResultOk&&IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "SOR03Z initial voice missing");
+ audio.data.inputEvents=nullptr;audio.data.numSamples=0;
+ audio.clock.state=0;audio.clock.projectTimeMusic=4.+256./24000.;
+ check(f.p->process(audio.data)==kResultOk&&IntegrationAccess::activeAudioVoices(*f.p)==0,
+       "SOR03Z zero-frame stopped callback failed to retire voice");
+ audio.data.numSamples=256;audio.clock.state=playing;
+ check(f.p->process(audio.data)==kResultOk&&audio.left[80]==0.f&&audio.right[80]==0.f,
+       "SOR03Z continuous PPQ restart resumed old voice");
+ f.p->setProcessing(false);f.p->setActive(false);
+}
+void testTransportJumpRetiresOldVoices(){
+ Fixture f;
+ KitState kit;kit.visible=1;kit.grid.fill(0);kit.grid[0]=100;
+ kit.names[0]="restart.wav";kit.wav[0]=constantStereo(.25f,.25f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock block;
+ block.clock.state=ProcessContext::kPlaying|
+       ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ block.clock.projectTimeMusic=4.0;
+ check(f.p->process(block.data)==kResultOk,"SOR03 first transport block");
+ check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "SOR03 first voice absent");
+ // Simulate a host which delivers no stopped transport process callback.
+ // It locates to bar three, preserving playing=true on both observed blocks.
+ block.clock.projectTimeMusic=8.0;
+ check(f.p->process(block.data)==kResultOk,"SOR03 host jump process");
+ check(IntegrationAccess::activeAudioVoices(*f.p)==1,
+       "SOR03 stale previous-run voice survived host locate");
+ // Render the full callback, not only a voice counter. A loop discontinuity
+ // must produce a valid finite new hit; stale voices must not double the PCM.
+ check(std::isfinite(block.left[80])&&std::isfinite(block.right[80])&&
+       std::abs(block.left[80])<=.25f&&std::abs(block.right[80])<=.25f,
+       "SOR03 loop jump produced doubled or nonfinite sample audio");
+ f.p->setProcessing(false);f.p->setActive(false);
+ evidence("SOR03 native processor timeline jump retires old voice without stopped callback PASS");
+}
+#include "ReauditCases.inl"
+#include "FinalAudit20261023.inl"
 }
 int main(int argc,char** argv){
- if(argc!=2)return 2;
+ std::cout<<std::unitbuf;
+ if(argc!=2&&argc!=3)return 2;
+ SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
  CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
  moduleHandle=GetModuleHandleW(nullptr);VSTGUI::init(static_cast<HINSTANCE>(moduleHandle));
  auto* platform=VSTGUI::getPlatformFactory().asWin32Factory();
  if(!platform)return 3;platform->setResourceBasePath(VSTGUI::UTF8String(argv[1]));
  entered=CreateEventW(nullptr,TRUE,FALSE,nullptr);resume=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+ if(argc==3){
+   const bool warm=std::strcmp(argv[2],"--reaudit-song-warm")==0;
+   if(!warm&&std::strcmp(argv[2],"--reaudit-song-cold")!=0)return 2;
+   int childResult=0;
+   try{testReauditSongCold(warm);}catch(const std::exception& ex){std::cerr<<ex.what()<<'\n';childResult=3;}
+   CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return childResult;
+ }
+
  int failures=0;
+ std::string auditDiagnostics;drumator::qa::collectedNotices=&auditDiagnostics;
  std::string qaCaseSummary="Executed native integration cases:\n";
  auto run=[&](const std::string& name,const auto& test){
    try{test();const auto line=name+" PASS";evidence(line);qaCaseSummary+=line+'\n';}
    catch(const std::exception& ex){allocationFail=-1;releaseProbe();++failures;
      const auto line=name+" FAIL: "+ex.what();evidence(line);qaCaseSummary+=line+'\n';}
  };
+ run("RE01 original deterministic VFA02",testReauditPatternLength);
+ run("RE02 original fresh DZM3 matrix",testFinalAuditDzm3);
+ run("RE03 paired duration fallback in Pattern and Song",testReauditDurationFallback);
+ run("RE04 peer FILL survives late Cancel",testReauditPeerFill);
+ run("RE05 component-first recall does not arm next kit",testReauditOriginOrder);
+ run("RE06 reentrant setDirty captures consistent streams",testReauditDirtySave);
+ run("RE07 host pattern feedback before component recall",testReauditHostMirror);
+ run("RE08 independent complete PCM timeline",testReauditPcmTimeline);
+ run("RE09 64 voices live swap locate Stop",testReauditLoadedSwap);
+ run("RE10 actual Processor deadline matrix",testReauditDeadlineMatrix);
+ run("A26 combined 16 active buses, 64 voices, 12 imports, Cycle Stop and PCM",testA26CombinedLiveMultibusCycleImport);
+ run("RE11 cold Song overlap cannot divide by zero",[&]{testReauditSongColdChild(argv[1]);});
+ run("RM01 zero Stop repair mutation",[]{expectMutationKilled(qa::AuditMutation::suppressZeroStop,"zero Stop",testZeroFrameStopRetiresVoice);});
+ run("RM02 paired duration repair mutation",[]{expectMutationKilled(qa::AuditMutation::staleDuration,"paired duration",testReauditPatternLength);});
+ run("RM03 peer owner repair mutation",[]{expectMutationKilled(qa::AuditMutation::skipPeerCommit,"peer commit",testPeerVelocityCancelPreservesCommittedStep);});
+ run("RM04 asset identity repair mutation",[]{expectMutationKilled(qa::AuditMutation::basenameOnly,"asset identity",testComponentOnlySameBasenameRejectsStaleOrigin);});
+ run("RM05 TORTURE missing MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::dropMidi,"TORTURE missing MIDI",testTransportSequenceTorture);});
+ run("RM06 TORTURE duplicate MIDI mutation",[]{expectMutationKilled(qa::AuditMutation::doubleMidi,"TORTURE doubled MIDI",testTransportSequenceTorture);});
+ run("RM07 TORTURE one-sample delay mutation",[]{expectMutationKilled(qa::AuditMutation::delayMidiOne,"TORTURE one-sample delay",testTransportSequenceTorture);});
+ run("RM08 TORTURE missing prefix mutation",[]{expectMutationKilled(qa::AuditMutation::zeroPrefix,"TORTURE zero first32",testTransportSequenceTorture);});
+ run("RM09 PACING accepted import no-op mutation",[]{expectMutationKilled(qa::AuditMutation::skipImport,"PACING import no-op",testPacedSampleSwapContinuity);});
+ run("RM10 PACING active dropout mutation",[]{expectMutationKilled(qa::AuditMutation::muteImportedProcessor,"PACING active-only dropout",testPacedSampleSwapContinuity);});
+ run("RM11 independent PCM detects offset and gaps",testReauditPcmNegatives);
+ run("RM12 PACING deadline diagnostic injection",testReauditDeadlineDiagnostic);
+ run("RM13 loaded swap detects ignored replacement",[]{expectMutationKilled(qa::AuditMutation::skipImport,"64 voice audible replacement",testReauditLoadedSwap);});
+ run("WE01 actual WAV preview and project recall",testWavEditorPreviewAndRecall);
  run("T03 controlled actual bank",testPatternOverlap);
  run("T04 controlled real restore gate",testKitGate);
  for(bool zero:{true,false})for(bool busy:{false,true})for(const auto& points:std::vector<std::vector<unsigned>>{{5},{2},{5,2}}){
@@ -1513,8 +1936,15 @@ int main(int argc,char** argv){
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
  run("P19 1T/2T copy-paste-duplicate duration",testPatternDurationClipboard);
  run("T28 rate-switch transport clock reset",testRateChangeTransportReset);
+ run("SOR03 host timeline jump voice cleanup",testTransportJumpRetiresOldVoices);
+ run("SOR03Z zero-frame stop retires old voices",testZeroFrameStopRetiresVoice);
+ run("V1A03 peer edit survives velocity cancel",testPeerVelocityCancelPreservesCommittedStep);
+ run("V1A04 component-only same-name origin safety",testComponentOnlySameBasenameRejectsStaleOrigin);
+ run("PACING long running sample swap audio continuity",testPacedSampleSwapContinuity);
+ run("TORTURE 96 transport stop and locate sequences",testTransportSequenceTorture);
  run("RANDOM one-shot existing notes",testRandomVelocityOneShot);
-  run("VELO 100 reset existing notes",testVelocityResetPattern);
+  run("SOR01 new Step Velocity 100",testNewStepDefault100);
+ run("VELO 100 reset existing notes",testVelocityResetPattern);
  run("V16 1T hidden velocity preservation",testVelocityInactiveBarProtection);
  run("V17 1T row FILL/CLEAR hidden-step protection",testFillActivePatternLength);
  run("UX Velocity empty-step editing",testVelocityLaneExistingStepsOnly);
@@ -1535,8 +1965,81 @@ int main(int argc,char** argv){
  run("FA06 minimum-height host refusal menus",testAuditMinimumHeightMenus);
  run("SA01 two-view native invalidation after row and global edits",testSecondAuditViewInvalidation);
  run("SA02 actual sequencer/MIDI choke partition",testSecondAuditTriggerPartition);
+ run("FA23-01 edited Clear remains saveable",testFa23ClearEditedState);
+ run("FA23-02 preview restarts without layering",testFa23PreviewRetrigger);
+ run("FA23-03 preview publication boundary",testFa23PreviewPublication);
+ run("FA23-04 WAV modal blocks drop",testFa23ModalDrop);
+ run("FA23-05 stale draft cannot edit new sample",testFa23StaleEditor);
+ run("FA23-06 multiple restore provenance cycles",testFa23OriginCycles);
+ run("FA23-07 Undo duration during live gesture",testFa23UndoDuringStroke);
+ run("FA23-08 interpolation respects trim bounds",testFa23TrimInterpolation);
+ run("FA23-09 audition deactivation",testFa23AuditionDeactivate);
+ run("FA23-10 waveform query OOM",testFa23QueryOOM);
+ run("FR01 stop ordering after consumed start",testFr01StopAfterStartConsumed);
+ run("RV01 stop then new preview ordering",testRv01RestartAfterStopDuringAudioStart);
+ run("RV01 asset+command publication ordering",testRv01AssetCommandPublication);
+ run("RV01 preview retirement across outputless callback",testRv01OutputlessPreviewRetirement);
+ run("A04 preview lifecycle across 48k / 44.1k / 48k",testA04PreviewRateLifecycle);
+ run("A05 dense Song automation one schedule",testA05DenseSongAutomationDoesNotReschedule);
+ run("A06 committed WAV remains accepted after repaint OOM",testA06CommittedImportSurvivesRepaintFailure);
+ run("A07 failed peer view refresh preserves accepted edit and dirty request",testA07NotificationFaultIsolation);
+ run("A08 native WAV editor revision cache and invalidation",testA08WaveEditorRevisionCache);
+ run("RM16 waveform cache disabled is detected",[]{expectMutationKilled(qa::AuditMutation::disableWaveCache,"full WAV on every viewport query",testA08WaveEditorRevisionCache);});
+ run("A09 native variable stereo waveform exact reference",testA09WaveformExtremaAgainstNativeReference);
+ run("A10 context gap audio and step continuity",testA10MissingContextAudioContinuity);
+ run("A11 verified Cycle tail vs Locate",testA11CycleWrapPreservesSampleTails);
+ run("A12 nonaligned Cycle wrap and negative controls",testA12CycleWrapMidBlockAndNegativeControls);
+ run("A13 internal Step at mid-block Cycle",testA13PureSequencerCyclePcm);
+ run("A14 pattern and Song at intra-block Cycle seam",testA14PatternAndSongAcrossCycleSeam);
+ run("A15 Cycle random velocity block-invariance",testA15CycleRandomVelocityReproducible);
+ run("A16 multiple Cycles in one host callback",testA16MultiCyclePerCallback);
+ run("A17 optional Cycle context gap full stereo PCM",testA17MissingCycleClockKeepsExactPcm);
+ run("A18 variable sample rate and host frames Cycle PCM",testA18CycleBlockPartitionAcrossSampleRates);
+ run("A19 changing tempo within active Cycle PCM",testA19TempoChangeWithinHostCycle);
+ run("A20 partial clock explicitly disables Cycle",testA20PartialClockExplicitCycleDisable);
+ run("A21 valid tempo with temporarily absent PPQ",testA21PartialTempoWithMissingPpq);
+ run("A22 bounded Song snapshot per host callback",testA22SongSnapshotBoundedByHostCallbacks);
+ run("A23 valid host PPQ during missing tempo and locate",testA23AuthoritativePpqSurvivesMissingTempo);
+ run("A24 component-first DZM3 origin permissions are one-shot",testA24ComponentFirstDzm3OriginConsumed);
+ run("A25 old unpaired Component then new DZM3 keeps provenance",testA25UnpairedComponentNewDzm3Origin);
+ run("RM28 dropping valid partial PPQ is detected",[]{expectMutationKilled(qa::AuditMutation::ignoreValidPartialPpq,"host PPQ lost with invalid tempo",testA23AuthoritativePpqSurvivesMissingTempo);});
+ run("RM29 stale component-first DZM3 permission detected",[]{expectMutationKilled(qa::AuditMutation::keepComponentFirstOriginArmed,"component-first DZM3 origin leak",testA24ComponentFirstDzm3OriginConsumed);});
+ run("RM27 repeated per-Cycle Song snapshot detected",[]{expectMutationKilled(qa::AuditMutation::repeatSongSnapshots,"Song re-snapshot on every Cycle",testA22SongSnapshotBoundedByHostCallbacks);});
+ run("RM25 stale Cycle after explicit partial disable killed",[]{expectMutationKilled(qa::AuditMutation::keepCycleOnPartialDisable,"partial ProcessContext Cycle-off ignored",testA20PartialClockExplicitCycleDisable);});
+ run("RM26 valid partial tempo ignored killed",[]{expectMutationKilled(qa::AuditMutation::ignorePartialTempo,"partially valid host BPM ignored",testA21PartialTempoWithMissingPpq);});
+ run("RM23 variable block no Cycle split is detected",[]{expectMutationKilled(qa::AuditMutation::skipCycleSplit,"variable callback Cycle split",testA18CycleBlockPartitionAcrossSampleRates);});
+ run("RM24 stale Cycle tempo mutation is detected",[]{expectMutationKilled(qa::AuditMutation::freezeCycleTempo,"wrong tempo at Cycle seam",testA19TempoChangeWithinHostCycle);});
+ run("RM22 missing Cycle clock cache is killed",[]{expectMutationKilled(qa::AuditMutation::suppressCycleClockCache,"missing Cycle clock caused skipped sample triggers",testA17MissingCycleClockKeepsExactPcm);});
+ run("RM19 old unsplit Cycle scheduler is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleSplit,"unsplit host Cycle lost Step",testA13PureSequencerCyclePcm);});
+ run("RM20 old linear Velocity PPQ is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleVelocityMap,"randomized loop velocity changed with block partition",testA15CycleRandomVelocityReproducible);});
+ run("RM21 old single-wrap voice reset is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleModulo,"multiple Cycle wraps retire valid tails",testA16MultiCyclePerCallback);});
+ run("RM18 missing-context old-cutoff regression is killed",[]{expectMutationKilled(qa::AuditMutation::suppressMissingContextCarry,"missing clock truncates hits",testA10MissingContextAudioContinuity);});
+ run("RM17 direct-scan mutation is detected",[]{expectMutationKilled(qa::AuditMutation::bypassWaveRangeIndex,"linear scan instead of indexed bins",testA09WaveformExtremaAgainstNativeReference);});
+ run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
+ run("RV02 transient STOP rejection during native editor close",testRv02NativeEditorCloseTransientReject);
+ run("RV02 rejected STOP leaves Apply uncommitted",testRv02ApplyRejectKeepsEdit);
+ run("A03 permanent STOP refusal and recovery",testA03PersistentStopRejectionRecovery);
+ run("R05 sample menu allocation failures",testR05SampleMenuAllocationFailures);
+ run("FR02 controller query/edit OOM boundaries",testFr02ControllerMessageOOM);
+ run("RV03 full and legacy recall query allocation failures",testRv03RecallQueryOOM);
+ run("FR03 legacy sample-present synchronization",testFr03LegacyRecallSamplePresence);
+ run("FR08 controller path length consistency",testFr08PathSerializationBoundary);
+ run("FR04 waveform border real mouse input",testFr04RealWaveformEdgeMouse);
+ run("FR05 one-frame Fade Out native pixel contract",testFr05ShortFadePixelsMatchAudioContract);
+ run("FR06 modal error message native pixels",testFr06ModalErrorPixels);
+ run("FR10 global knob right-edge mouse input",testFr10GlobalKnobEdgeHit);
+ run("RV05 all global knob rendered centers",testRv05GlobalKnobPaintCenters);
+ run("RM14 historical Fade renderer regression killed",[]{
+   expectMutationKilled(qa::AuditMutation::oldFadeRenderer,"RV04 historical Fade/Gain formula",
+                        testFr05ShortFadePixelsMatchAudioContract);
+ });
+ run("RM15 historical knob draw offsets killed",[]{
+   expectMutationKilled(qa::AuditMutation::oldKnobDrawCenters,"RV05 original 80/178/1178 draw centers",
+                        testRv05GlobalKnobPaintCenters);
+ });
  evidence("Integration total failures: "+std::to_string(failures)+"; Studio One NOT RUN");
  qaCaseSummary+="Total failures: "+std::to_string(failures)+"; Studio One NOT RUN";
- drumator::qa::workflowNotice(qaCaseSummary);
+ drumator::qa::collectedNotices=nullptr;
+ drumator::qa::workflowNotice(qaCaseSummary+"\nDetailed audit diagnostics:\n"+auditDiagnostics);
  CloseHandle(entered);CloseHandle(resume);VSTGUI::exit();CoUninitialize();return failures?1:0;
 }

@@ -163,6 +163,26 @@ int main(){
   e=get(b,Clock{7.75,120,48000,12000,true});
   check(e.size()==2&&e[0].step==31&&e[1].step==0&&
         e[1].sampleOffset==6000,"32-step wrap");
+  // SOR03: stopping and restarting at the unchanged musical position must
+  // schedule the same events again; stopped blocks must emit no sequencer notes.
+  for(const double rate:{44100.,48000.}) {
+    PatternBank restarted;
+    check(restarted.set(0,0,0,100)&&restarted.set(0,1,1,72),
+          "SOR03 pattern setup");
+    const Clock first{4.0,120.,rate,256,true,0.,0.,16};
+    const auto before=get(restarted,first);
+    check(before.size()==1&&before[0].sampleOffset==0&&
+          before[0].step==0,"SOR03 first start onset missing");
+    for(const int stoppedFrames:{0,128,256,512}) {
+      auto paused=first;paused.playing=false;paused.frames=stoppedFrames;
+      check(get(restarted,paused).empty(),"SOR03 emitted during stop");
+      const auto after=get(restarted,first);
+      check(after.size()==before.size()&&
+            after[0].sampleOffset==before[0].sampleOffset&&
+            after[0].velocity==before[0].velocity,
+            "SOR03 unchanged-PPQ restart onset mismatch");
+    }
+  }
   // Starting playback at DAW bar 2 (PPQ 4) must begin at step 1,
   // not at the previous absolute 16th index 17.
   e=get(b,Clock{4,120,48000,12001,true,0,0,16});

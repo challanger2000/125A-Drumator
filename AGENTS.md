@@ -1,3 +1,5 @@
+**Entwicklungskandidat (24.10.2026):** Letzter vollständig Windows-geprüfter Stand vor dieser Reparaturrunde: `7d0054289bc2630250afeeb75c1a57f0b86d465f` ([Actions #40040298588](https://github.com/challanger2000/125A-Drumator/actions/runs/40040298588), 23/23 CTests, 47/47 Steinberg Validator). Neuere Änderungen gelten erst mit Windows-QA für ihren exakten Commit als geprüft. **KEIN V1-FINAL:** Studio-One-/ASIO-Aussetzerfreiheit und 125A Plugin Tester sind noch nicht abgenommen. Die alten Auditangaben vom 22.10. sind historisch. `kPluginVersion=0.1.0` kennzeichnet den Entwicklungsstand, keine V1-Freigabe.
+
 # 125A Drumator — development instructions
 
 ## Zweiter unabhängiger Abschlussaudit — 22.10.2026 (maßgeblich)

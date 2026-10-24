@@ -2,6 +2,9 @@
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "vstgui/plugin-bindings/vst3editor.h"
 #include "core/SequencerCore.h"
+#include "core/SampleEdit.h"
+#include "core/WavPcm16Decoder.h"
+#include "core/WaveformExtremaIndex.h"
 #include "core/PatternOperations.h"
 #include "core/PatternUndo.h"
 #include "core/KitEditGeneration.h"
@@ -21,6 +24,7 @@ public:
  static Steinberg::FUnknown* createInstance(void*) {
    return static_cast<Steinberg::Vst::IEditController*>(new Controller());
  }
+ ~Controller() override;
  Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream*) SMTG_OVERRIDE;
@@ -34,8 +38,20 @@ public:
                   const VSTGUI::UIAttributes&,const VSTGUI::IUIDescription*,
                   VSTGUI::VST3Editor*) override;
 
+ bool hasSample(std::size_t row) const noexcept {return row<kRows&&samplePresent_[row];}
  bool clearSample(std::size_t row);
  bool previewSample(std::size_t row);
+ bool previewSampleEdit(std::size_t row,const SampleEdit& edit,
+                        std::uint32_t revision=UINT32_MAX);
+ bool stopSampleEditPreview();
+ bool sampleEditorSnapshot(std::size_t row,SampleEdit& edit,std::uint32_t& frames,
+                           std::array<WaveformRange,256>& envelope,
+                           std::uint32_t first=0,std::uint32_t last=0,
+                           std::uint32_t* revision=nullptr,
+                           std::array<WaveformRange,256>* rightEnvelope=nullptr,
+                           bool* stereo=nullptr);
+ bool commitSampleEdit(std::size_t row,const SampleEdit& edit,
+                       std::uint32_t revision=UINT32_MAX);
  bool toggleRowGate(std::size_t row,bool solo);
  bool cycleRowChoke(std::size_t row,int direction=1);
  bool setRowChoke(std::size_t row,unsigned group);
@@ -52,9 +68,9 @@ public:
  bool isRowSolo(std::size_t row) const noexcept {return row<kRows&&solo_[row];}
  bool toggleStep(std::size_t pattern,std::size_t row,std::size_t step);
  bool cycleStepVelocity(std::size_t pattern,std::size_t row,std::size_t step);
- bool setStepVelocity(std::size_t pattern,std::size_t row,std::size_t step,std::uint8_t velocity);
- void beginVelocityStroke(std::size_t p);
- void endVelocityStroke(bool commit);
+ bool setStepVelocity(std::size_t pattern,std::size_t row,std::size_t step,std::uint8_t velocity,const void* owner=nullptr);
+ void beginVelocityStroke(std::size_t p,const void* owner=nullptr);
+ void endVelocityStroke(bool commit,const void* owner=nullptr);
  bool changePattern(std::size_t pattern);
  bool togglePatternLength(std::size_t pattern);
  std::uint8_t patternLength(std::size_t p) const noexcept {return p<kPatterns?patternLengths_[p]:32;}
@@ -116,7 +132,12 @@ public:
  }
 private:
  void notifyViews(bool relayout);
+ bool processorConfirmsPattern(unsigned requested);
+ bool reservePreviewStop() noexcept;
  void invalidateTransientEditsForRecall() noexcept;
+ // Reusable STOP command is reserved before any audition can start.
+ Steinberg::Vst::IMessage* reservedPreviewStop_{nullptr};
+ bool previewStopPending_{false};
  std::vector<DrumatorView*> views_;
  Steinberg::tresult sendEditMessage(Steinberg::Vst::IMessage* message);
  std::array<std::uint8_t,kCells> grid_{};
@@ -128,14 +149,35 @@ private:
  KitEditGeneration editGeneration_{};
  KitEditGeneration::Token strokeGeneration_{0};
  std::size_t strokePattern_{kPatterns};
+ const void* strokeOwner_{nullptr};
  bool clipboardValid_{false};
  bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true,
                      std::uint8_t requestedLength=0);
  void rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next);
  std::array<std::string,kRows> labels_{};
+ std::array<bool,kRows> samplePresent_{};
  std::array<std::string,kRows> customNames_{};
  // Filesystem navigation is session-only. Embedded WAV data remains self-contained.
  std::array<std::string,kRows> samplePaths_{};
+ // UI thread only. A single row cache bounds decoded-PCM residency even
+ // when several View windows/16 sample rows exist. Processor revision is
+ // always checked before reusing it after edit, import or project recall.
+ DecodedWav editorWaveCache_{};
+ WaveformExtremaIndex editorWaveIndexLeft_{},editorWaveIndexRight_{};
+ std::size_t editorWaveRow_{kRows};
+ std::uint32_t editorWaveRevision_{0};
+ std::array<std::uint64_t,kRows> originIdentity_{};
+ std::array<bool,kRows> originIdentityValid_{};
+ // Last rejected per-row origin paths, held only on the controller thread.
+ // Detects a new Controller-first recall returning to a previously known
+ // project after an unrelated unpaired Component-only state.
+ std::array<std::string,kRows> invalidatedSampleOrigins_{};
+ bool pathsRestoredBeforeComponent_{false};
+ bool componentStatePendingController_{false};
+ bool dirtyPending_{false};
+ // Last host pattern callback, not yet reconciled with Component-state recall.
+ bool hostPatternPending_{false};
+ Steinberg::Vst::ParamValue hostPatternValue_{0.};
  std::array<bool,kRows> muted_{};
  std::array<bool,kRows> solo_{};
  std::array<std::uint8_t,kRows> gain_{};

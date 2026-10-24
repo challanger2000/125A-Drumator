@@ -32,7 +32,8 @@ public:
     static PrepareStatus fromWav(const std::uint8_t* bytes, std::size_t size,
                                  double outputRate, double pitchSemitones,
                                  float gain, float pan, std::uint8_t chokeGroup,
-                                 bool mute, std::unique_ptr<PreparedSample>& out) noexcept {
+                                 bool mute, std::unique_ptr<PreparedSample>& out,
+                                 SampleEdit edit={}) noexcept {
         if(!std::isfinite(outputRate)||outputRate<=0.0 ||
            !std::isfinite(pitchSemitones)||pitchSemitones< -48.0||
            pitchSemitones>48.0||!std::isfinite(gain)||gain<0.f||
@@ -43,6 +44,10 @@ public:
             if(WavPcm16Decoder::decode(bytes,size,candidate->decoded_)!=WavError::Ok)
                 return PrepareStatus::InvalidWav;
             if(candidate->decoded_.left.empty())return PrepareStatus::InvalidWav;
+            const auto frames=static_cast<std::uint32_t>(candidate->decoded_.left.size());
+            if(edit.end==0)edit=SampleEdit::reset(frames);
+            if(!edit.valid(frames))return PrepareStatus::InvalidSettings;
+            candidate->edit_=edit;
             const double ratio=static_cast<double>(candidate->decoded_.sampleRate)/
                                outputRate*std::exp2(pitchSemitones/12.0);
             if(!std::isfinite(ratio)||ratio<=0.0||ratio>16.0||
@@ -75,6 +80,7 @@ public:
                   decoded_.channels==2?decoded_.right.data():nullptr,
                   decoded_.left.size()};
         r.kernel=&kernel_;
+        r.edit=edit_;
         r.gain=gain_;r.pan=pan_;r.chokeGroup=choke_;r.mute=mute_;
         r.ownerToken=this;
         return r;
@@ -86,6 +92,7 @@ public:
 private:
     PreparedSample()=default;
     DecodedWav decoded_{};
+    SampleEdit edit_{};
     SincKernel kernel_{};
     double outputRate_{0.0};
     float gain_{1.f},pan_{0.f};

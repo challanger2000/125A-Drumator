@@ -25,6 +25,32 @@
 #include <vector>
 
 namespace drumator {
+Controller::~Controller() {
+ if(reservedPreviewStop_) {
+   reservedPreviewStop_->release();
+   reservedPreviewStop_=nullptr;
+ }
+}
+bool Controller::reservePreviewStop() noexcept {
+ if(reservedPreviewStop_)return true;
+ Steinberg::Vst::IMessage* candidate=nullptr;
+ try {
+   candidate=allocateMessage();
+   if(!candidate)return false;
+   candidate->setMessageID("Drumator.EditorPreviewStop");
+   reservedPreviewStop_=candidate;
+   return true;
+ }catch(const std::bad_alloc&) {
+   if(candidate)candidate->release();
+   return false;
+ }
+}
+// FNV-1a used only for control-side asset identity (not a security hash).
+static std::uint64_t wavIdentity(const std::vector<std::uint8_t>& data) noexcept {
+ std::uint64_t h=14695981039346656037ull;
+ for(const auto byte:data){h^=byte;h*=1099511628211ull;}
+ return h;
+}
 // Maintain pre-existing saved host automation thresholds while exposing
 // coherent A-H text and normalized-to-plain mapping.
 class LegacyPatternParameter final : public Steinberg::Vst::StringListParameter {
@@ -46,9 +72,28 @@ void Controller::registerView(DrumatorView* view) {
 }
 void Controller::unregisterView(DrumatorView* view) {
  views_.erase(std::remove(views_.begin(),views_.end(),view),views_.end());
+ if(views_.empty()){
+   editorWaveCache_=DecodedWav{};
+   editorWaveIndexLeft_.clear();
+   editorWaveIndexRight_.clear();
+   editorWaveRow_=kRows;
+ }
 }
 void Controller::notifyViews(bool relayout) {
- for(auto* view:views_)if(view)view->refreshFromHost(relayout);
+ // After sendEditMessage() succeeded, the Processor has already committed
+ // the state. A rejecting/throwing host dirty callback or a failed View
+ // refresh must NEVER make the user operation look rejected or crash the host.
+ // Keep the dirty request pending until it is acknowledged by the host.
+ if(dirtyPending_&&componentHandler2) {
+   try {
+     if(componentHandler2->setDirty(true)==Steinberg::kResultOk)
+       dirtyPending_=false;
+   }catch(...) { /* retry on the next host/UI notification */ }
+ }
+ for(auto* view:views_)if(view) {
+   try {view->refreshFromHost(relayout);}
+   catch(...) { /* one failed View must not invalidate an accepted edit */ }
+ }
 }
 void Controller::invalidateTransientEditsForRecall() noexcept {
  strokePattern_=kPatterns;
@@ -59,14 +104,42 @@ void Controller::invalidateTransientEditsForRecall() noexcept {
 Steinberg::tresult PLUGIN_API Controller::setParamNormalized(
     Steinberg::Vst::ParamID id,Steinberg::Vst::ParamValue value) {
  const auto result=EditController::setParamNormalized(id,value);
- if(result==Steinberg::kResultOk&&id==kPatternParam)notifyViews(false);
+ if(result==Steinberg::kResultOk&&id==kPatternParam) {
+   // Keep a newer host pattern callback when Component-state recall arrives late.
+   // Internal recall bypasses this override and does not set the pending flag.
+   hostPatternPending_=true;
+   hostPatternValue_=getParamNormalized(kPatternParam);
+   notifyViews(false);
+ }
  return result;
+}
+bool Controller::processorConfirmsPattern(unsigned requested) {
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {
+   msg=allocateMessage();
+   if(!msg)return false;
+   // Host allocation and message dispatch can fail even after recall commits.
+   // Always release the message and fall back to the recalled pattern.
+   struct MessageOwner {
+     Steinberg::Vst::IMessage* value;
+     ~MessageOwner(){if(value)value->release();}
+   } owner{msg};
+   msg->setMessageID("Drumator.QueryPattern");
+   const auto result=sendMessage(msg);
+   Steinberg::int64 selected=-1;
+   auto* attrs=msg->getAttributes();
+   return result==Steinberg::kResultOk&&attrs&&
+       attrs->getInt("Selected",selected)==Steinberg::kResultOk&&
+       selected==static_cast<Steinberg::int64>(requested);
+ }catch(const std::bad_alloc&) {
+   // Only allocation failure before owner construction needs manual cleanup.
+   // A post-commit query failure must not escape the VST3 recall callback.
+   return false;
+ }
 }
 Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
  const auto result=sendMessage(message);
- markSuccessfulHostEdit(result==Steinberg::kResultOk,[&](){
-   if(componentHandler2)componentHandler2->setDirty(true);
- });
+ if(result==Steinberg::kResultOk)dirtyPending_=true;
  return result;
 }
 namespace {
@@ -76,37 +149,90 @@ constexpr Steinberg::uint32 kOldState=0x31524D44u;
 constexpr Steinberg::uint32 kNewState=0x32524D44u;
 constexpr auto kRowsState=kStateMagicV3;
 }
+// DZM3 extends controller-only zoom state with optional sample-folder origins.
+// Embedded PCM remains in the Processor kit and never depends on these paths.
 Steinberg::tresult PLUGIN_API Controller::getState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
- const bool intermediate=preferredZoom_>1.05&&preferredZoom_<1.45;
- const Steinberg::uint8 code=preferredZoom_>1.45?3:
+ constexpr Steinberg::uint32 kPathState=0x334D5A44u; // DZM3
+ const Steinberg::uint8 zoom=preferredZoom_>1.45?3:
        preferredZoom_>1.25?2:preferredZoom_>1.05?1:0;
- return stream.writeInt32u(intermediate?kZoomControllerStateV2:kZoomControllerState)&&
-        stream.writeInt8u(intermediate?code:(code==3?1:0))
-     ? Steinberg::kResultOk : Steinberg::kResultFalse;
+ if(!stream.writeInt32u(kPathState)||!stream.writeInt8u(zoom))
+   return Steinberg::kResultFalse;
+ for(const auto& path:samplePaths_) {
+   if(path.size()>4096)return Steinberg::kResultFalse;
+   if(!stream.writeInt16u(static_cast<Steinberg::uint16>(path.size())))
+     return Steinberg::kResultFalse;
+   if(!path.empty()&&stream.writeRaw(path.data(),static_cast<Steinberg::TSize>(path.size()))!=
+                      static_cast<Steinberg::TSize>(path.size()))
+     return Steinberg::kResultFalse;
+ }
+ return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::setState(Steinberg::IBStream* state) {
  if(!state)return Steinberg::kInvalidArgument;
  Steinberg::IBStreamer stream(state,kLittleEndian);
+ constexpr Steinberg::uint32 kPathState=0x334D5A44u; // DZM3
  Steinberg::uint32 magic=0;
  Steinberg::uint8 zoom=0;
  if(!stream.readInt32u(magic)||!stream.readInt8u(zoom))
    return Steinberg::kResultFalse;
  if((magic==kZoomControllerState&&zoom>1)||
-    (magic==kZoomControllerStateV2&&zoom>3)||
-    (magic!=kZoomControllerState&&magic!=kZoomControllerStateV2))
+    ((magic==kZoomControllerStateV2||magic==kPathState)&&zoom>3)||
+    (magic!=kZoomControllerState&&magic!=kZoomControllerStateV2&&magic!=kPathState))
    return Steinberg::kResultFalse;
+ std::array<std::string,kRows> candidatePaths{};
+ if(magic==kPathState) {
+   try {
+     for(auto& path:candidatePaths) {
+       Steinberg::uint16 length=0;
+       if(!stream.readInt16u(length)||length>4096)return Steinberg::kResultFalse;
+       if(length) {
+         path.resize(length);
+         if(stream.readRaw(path.data(),length)!=length||
+            path.find('\0')!=std::string::npos)
+           return Steinberg::kResultFalse;
+       }
+     }
+   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+ }
  const double requested=magic==kZoomControllerState?(zoom?1.5:1.0):
      (zoom==0?1.0:zoom==1?1.2:zoom==2?1.3:1.5);
- // The host may reject both forward resize and rollback. Do not begin
- // multiple independent native view zooms as a non-atomic state change.
  std::size_t needed=0;
  DrumatorView* target=nullptr;
  for(auto* view:views_)if(view&&!view->zoomMatches(requested)){++needed;target=view;}
  if(!zoomRecallIsAtomic(needed))return Steinberg::kResultFalse;
  if(target&&!target->applyZoomFromState(requested))return Steinberg::kResultFalse;
  preferredZoom_=requested;
+ // Both VST3 state orderings are legal. Controller-first allows exactly
+ // ONE forthcoming Component restore to retain DZM3 paths. Component-first
+ // has ALREADY completed that pairing: newly populated paths must never
+ // arm an unrelated future Component-only restore.
+ // A prior unpaired Component-only recall may have invalidated an
+ // existing origin path. A subsequent DZM3 stream restoring that *known*
+ // old origin belongs to a NEW Controller-first project pair; otherwise
+ // the just-restored Component and DZM3 belong to the SAME current pair.
+ // Comparing saved path strings requires no filesystem access or allocation.
+ bool returningToKnownOrigin=false;
+ for(std::size_t row=0;row<kRows;++row)
+   if(!candidatePaths[row].empty()&&
+      candidatePaths[row]==invalidatedSampleOrigins_[row])
+     returningToKnownOrigin=true;
+ const bool pairedComponentFirst=componentStatePendingController_&&
+                                 !returningToKnownOrigin;
+ pathsRestoredBeforeComponent_=!pairedComponentFirst;
+ componentStatePendingController_=false;
+ samplePaths_.swap(candidatePaths);
+ for(auto& stale:invalidatedSampleOrigins_)stale.clear();
+ if(pairedComponentFirst) {
+   // The component just provided each row's PCM identity. The paired DZM3
+   // now provides its optional path; associate them so an unchanged
+   // Component-only recall can safely retain the path by identical bytes.
+   for(std::size_t row=0;row<kRows;++row) {
+     if(!samplePresent_[row])samplePaths_[row].clear();
+     originIdentityValid_[row]=!samplePaths_[row].empty();
+   }
+ }
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* context) {
@@ -122,7 +248,7 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
  for(std::size_t p=0;p<kPatterns;++p)
    for(std::size_t step=0;step<kSteps;step+=4)
      grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
- for(auto& name:labels_)name="LEER - WAV LADEN";
+ for(auto& name:labels_)name="EMPTY - LOAD WAV";
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
  return Steinberg::kResultOk;
@@ -133,7 +259,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  Steinberg::uint32 magic=0,next=0;
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
- if(magic==kKitMagic||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV15||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     KitState candidate;
@@ -157,9 +283,37 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     grid_=candidate.grid;
     patternLengths_=candidate.patternLengths;
     stagedNames.commit(customNames_,labels_);
+    for(std::size_t row=0;row<kRows;++row)
+      samplePresent_[row]=!candidate.wav[row].empty();
     undo_.reset();
     clipboardValid_=false;
-    for(auto& path:samplePaths_)path.clear();
+    // Component-only recall MUST NOT inherit a stale same-named sample origin.
+    // Paired Controller-before-Component recall is explicitly allowed once;
+    // otherwise only an identical previously observed asset can retain origin.
+    for(std::size_t row=0;row<kRows;++row) {
+      auto& path=samplePaths_[row];
+      const auto last=path.find_last_of("/\\\\");
+      const auto begin=last==std::string::npos?0:last+1;
+      const auto identity=wavIdentity(candidate.wav[row]);
+      const bool sameName=!candidate.names[row].empty()&&
+          path.compare(begin,std::string::npos,candidate.names[row])==0;
+      if(!sameName||(!pathsRestoredBeforeComponent_&&
+                     (!originIdentityValid_[row]||originIdentity_[row]!=identity))) {
+        // Keep the old pathname as an allocation-free, controller-owned
+        // witness for a subsequent explicit DZM3 restoring that origin.
+        // Never let it authorize an unrelated Component-only recall.
+        if(!path.empty())invalidatedSampleOrigins_[row].swap(path);
+        path.clear();
+      }
+      originIdentity_[row]=identity;
+      originIdentityValid_[row]=!path.empty();
+    }
+    if(pathsRestoredBeforeComponent_) {
+      pathsRestoredBeforeComponent_=false;
+      componentStatePendingController_=false;
+    }else {
+      componentStatePendingController_=true;
+    }
     visibleRows_=candidate.visible;
     swingPercent_=candidate.swing;
     humanizePercent_=candidate.humanize;
@@ -178,8 +332,15 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     // failure to refresh an editor must not be reported as rejected kit state.
     // Update the registered parameter independently from native editor focus.
     // A failed HWND teardown must not leave the selected parameter stale.
-    const auto selectedResult=EditController::setParamNormalized(
-                  kPatternParam,static_cast<double>(candidate.selected)/7.0);
+    const auto restoredPattern=hostPatternPending_&&processorConfirmsPattern(patternFromNormalized(hostPatternValue_))
+        ? hostPatternValue_ : static_cast<double>(candidate.selected)/7.0;
+    hostPatternPending_=false;
+    Steinberg::tresult selectedResult=Steinberg::kResultFalse;
+    try {
+      selectedResult=EditController::setParamNormalized(kPatternParam,restoredPattern);
+    }catch(const std::bad_alloc&) {
+      // Recall state has already committed; UI parameter refresh is best-effort.
+    }
     for(auto* view:views_)if(view) {
        try {view->finishTransientEditsAfterRecall();}
        catch(const std::bad_alloc&) { /* old edit token already invalid */ }
@@ -225,13 +386,21 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  // Successful legacy state already invalidated all pending edits.
  clipboardValid_=false;
  for(auto& path:samplePaths_)path.clear();
+ samplePresent_.fill(false);
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  randomVelocity_.fill(0);masterVolume_=100;
  songEnabled_=false;songChain_=SongChain{};
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
- const auto selectedResult=EditController::setParamNormalized(
-      kPatternParam,static_cast<double>(next)/7.0);
+ const auto restoredPattern=hostPatternPending_&&processorConfirmsPattern(patternFromNormalized(hostPatternValue_))
+     ? hostPatternValue_ : static_cast<double>(next)/7.0;
+ hostPatternPending_=false;
+ Steinberg::tresult selectedResult=Steinberg::kResultFalse;
+ try {
+   selectedResult=EditController::setParamNormalized(kPatternParam,restoredPattern);
+ }catch(const std::bad_alloc&) {
+   // Recall state has already committed; UI parameter refresh is best-effort.
+ }
  for(auto* view:views_)if(view) {
    try {view->finishTransientEditsAfterRecall();}
    catch(const std::bad_alloc&) { /* legacy model already committed */ }
@@ -379,6 +548,7 @@ bool Controller::replacePattern(std::size_t p,const PatternSteps& data,bool reme
                                 std::uint8_t requestedLength) {
  if(p>=kPatterns||(requestedLength!=0&&requestedLength!=16&&requestedLength!=32))
    return false;
+ if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);
  const auto oldLength=patternLengths_[p];
  const auto nextLength=requestedLength==0?oldLength:requestedLength;
  PatternSteps old{};
@@ -442,9 +612,12 @@ bool Controller::duplicateCurrentPattern(bool* selectedCopy){
 bool Controller::clearCurrentPattern(){return replacePattern(currentPattern(),{});}
 bool Controller::undoCurrentPattern(){
  const auto p=currentPattern();
+ if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);
  const auto* old=undo_.snapshot(p);
  if(!old)return false;
- if(!replacePattern(p,*old,false,undo_.snapshotLength(p)))return false;
+ const PatternSteps immutable=*old;
+ const auto length=undo_.snapshotLength(p);
+ if(!replacePattern(p,immutable,false,length))return false;
  undo_.consume(p);
  return true;
 }
@@ -530,7 +703,7 @@ bool Controller::fillRow(std::size_t row,RowFill mode){
 bool Controller::canHideLast() const noexcept {
  if(visibleRows_<=1||visibleRows_>kRows)return false;
  const auto row=static_cast<std::size_t>(visibleRows_-1);
- if(labels_[row]!="LEER - WAV LADEN"||!customNames_[row].empty()||solo_[row])return false;
+ if(labels_[row]!="EMPTY - LOAD WAV"||!customNames_[row].empty()||solo_[row])return false;
  struct GridView {
   const Controller& ctrl;
   std::uint8_t get(std::size_t p,std::size_t r,std::size_t s) const noexcept {
@@ -579,17 +752,19 @@ bool Controller::hideLastEmptyRow() {
  if(good){--visibleRows_;notifyViews(false);}
  return good;
 }
-void Controller::beginVelocityStroke(std::size_t p) {
+void Controller::beginVelocityStroke(std::size_t p,const void* owner) {
  if(p>=kPatterns)return;
- if(strokePattern_<kPatterns)endVelocityStroke(true);
+ if(strokePattern_<kPatterns)endVelocityStroke(true,strokeOwner_);
+ strokeOwner_=owner;
  strokePattern_=p;
  strokeGeneration_=editGeneration_.current();
  std::copy_n(grid_.begin()+p*kRows*kSteps,strokeBefore_.size(),strokeBefore_.begin());
 }
-void Controller::endVelocityStroke(bool commit) {
- if(strokePattern_>=kPatterns)return;
+void Controller::endVelocityStroke(bool commit,const void* owner) {
+ if(strokePattern_>=kPatterns||owner!=strokeOwner_)return;
  const auto p=strokePattern_;
  strokePattern_=kPatterns;
+ strokeOwner_=nullptr;
  if(!editGeneration_.matches(strokeGeneration_))return;
  strokeGeneration_=0;
  PatternSteps after{};
@@ -604,8 +779,12 @@ void Controller::rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std:
  auto changed=old;changed[r*kSteps+s]=next;
  undo_.capture(p,old,changed);
 }
-bool Controller::setStepVelocity(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next){
+bool Controller::setStepVelocity(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next,const void* owner){
  if(p>=kPatterns||r>=kRows||s>=kSteps||next>127)return false;
+ // Peer edits must commit the previous owner's gesture before mutation.
+ // Late Cancel from that owner is then inert; no stale whole-grid restore.
+ if(strokePattern_<kPatterns&&strokeOwner_!=owner)
+   endVelocityStroke(true,strokeOwner_);
  if(velocity(p,r,s)==next)return true;
  auto* msg=allocateMessage();if(!msg)return false;
  msg->setMessageID("Drumator.StepEdit");
@@ -678,32 +857,219 @@ bool Controller::adjustSwing(int delta) {
  if(ok){swingPercent_=static_cast<std::uint8_t>(next);notifyViews(false);}
  return ok;
 }
+
+bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
+                                      std::uint32_t& frames,
+                                      std::array<WaveformRange,256>& envelope,
+                                      std::uint32_t first,std::uint32_t last,
+                                      std::uint32_t* revision,
+                                      std::array<WaveformRange,256>* rightEnvelope,
+                                      bool* stereo) {
+ if(row>=kRows)return false;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
+ if(!msg)return false;
+ struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
+ try {
+   msg->setMessageID("Drumator.SampleEditorQuery");
+   auto* a=msg->getAttributes();
+   if(!a||a->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk)
+     return false;
+   // A metadata-only roundtrip detects another View's source replacement.
+   if(editorWaveRow_==row&&
+      a->setInt("KnownRevision",editorWaveRevision_)!=Steinberg::kResultOk)
+     return false;
+   if(sendMessage(msg)!=Steinberg::kResultOk)return false;
+   Steinberg::int64 start=0,end=0,fadeIn=0,fadeOut=0,gainBits=0,version=-1;
+   if(a->getInt("Start",start)!=Steinberg::kResultOk||
+      a->getInt("End",end)!=Steinberg::kResultOk||
+      a->getInt("FadeIn",fadeIn)!=Steinberg::kResultOk||
+      a->getInt("FadeOut",fadeOut)!=Steinberg::kResultOk||
+      a->getInt("GainBits",gainBits)!=Steinberg::kResultOk||
+      a->getInt("Revision",version)!=Steinberg::kResultOk||
+      version<0||version>UINT32_MAX||
+      start<0||end<0||fadeIn<0||fadeOut<0||
+      start>UINT32_MAX||end>UINT32_MAX||fadeIn>UINT32_MAX||
+      fadeOut>UINT32_MAX||gainBits<0||gainBits>UINT32_MAX)
+     return false;
+   const auto rev=static_cast<std::uint32_t>(version);
+   const bool hit=editorWaveRow_==row&&editorWaveRevision_==rev;
+   DecodedWav fresh;
+   WaveformExtremaIndex stagedLeft,stagedRight;
+   const DecodedWav* wave=&editorWaveCache_;
+   if(!hit) {
+     const void* bytes=nullptr;Steinberg::uint32 length=0;
+     if(a->getBinary("Wave",bytes,length)!=Steinberg::kResultOk||
+        !bytes||WavPcm16Decoder::decode(static_cast<const std::uint8_t*>(bytes),
+                                        length,fresh)!=WavError::Ok||
+        fresh.left.size()>UINT32_MAX)
+       return false;
+     // Full source scan is done once per accepted PCM revision, never in audio.
+     if(!stagedLeft.build(fresh.left.data(),fresh.left.size())||
+        (fresh.channels==2&&
+         !stagedRight.build(fresh.right.data(),fresh.right.size())))
+       return false;
+     wave=&fresh;
+   }
+   const auto count=static_cast<std::uint32_t>(wave->left.size());
+   if(count==0||(wave->channels!=1&&wave->channels!=2))return false;
+   SampleEdit next;
+   next.start=static_cast<std::uint32_t>(start);
+   next.end=static_cast<std::uint32_t>(end);
+   next.fadeIn=static_cast<std::uint32_t>(fadeIn);
+   next.fadeOut=static_cast<std::uint32_t>(fadeOut);
+   const auto bits=static_cast<std::uint32_t>(gainBits);
+   std::memcpy(&next.gain,&bits,sizeof(bits));
+   if(next.end==0)next=SampleEdit::reset(count);
+   if(!next.valid(count))return false;
+   if(last==0)last=count;
+   if(first>=last||last>count)return false;
+   const auto& indexedLeft=hit?editorWaveIndexLeft_:stagedLeft;
+   const auto& indexedRight=hit?editorWaveIndexRight_:stagedRight;
+   // Preserve the original half-open bin boundaries and min/max tie order.
+   for(std::size_t i=0;i<envelope.size();++i) {
+     const auto binFirst=static_cast<std::size_t>(first)+
+                         (static_cast<std::size_t>(last-first)*i)/envelope.size();
+     const auto binLast=static_cast<std::size_t>(first)+
+                        (static_cast<std::size_t>(last-first)*(i+1))/envelope.size();
+     auto bounds=indexedLeft.range(wave->left.data(),wave->left.size(),
+                        binFirst,std::max(binFirst+std::size_t{1},binLast));
+     if(wave->channels==2) {
+       const auto other=indexedRight.range(wave->right.data(),wave->right.size(),
+                          binFirst,std::max(binFirst+std::size_t{1},binLast));
+       if(rightEnvelope)(*rightEnvelope)[i]=other;
+       else {bounds.minimum=std::min(bounds.minimum,other.minimum);
+             bounds.maximum=std::max(bounds.maximum,other.maximum);}
+     }
+     envelope[i]=bounds;
+   }
+   if(!hit) {
+     editorWaveIndexLeft_=std::move(stagedLeft);
+     editorWaveIndexRight_=std::move(stagedRight);
+     editorWaveCache_=std::move(fresh);
+     editorWaveRow_=row;
+     editorWaveRevision_=rev;
+     wave=&editorWaveCache_;
+   }
+   edit=next;frames=count;
+   if(stereo)*stereo=wave->channels==2;
+   if(revision)*revision=rev;
+   return true;
+ }catch(const std::bad_alloc&){return false;}
+}
+bool Controller::commitSampleEdit(std::size_t row,const SampleEdit& edit,
+                                  std::uint32_t revision) {
+ if(row>=kRows||!edit.end)return false;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
+ if(!msg)return false;
+ struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
+ try {
+ msg->setMessageID("Drumator.SampleEditorCommit");
+ auto* a=msg->getAttributes();
+ std::uint32_t bits=0;std::memcpy(&bits,&edit.gain,sizeof(bits));
+ bool ready=a&&
+     a->setInt("Row",static_cast<Steinberg::int64>(row))==Steinberg::kResultOk&&
+     a->setInt("Start",edit.start)==Steinberg::kResultOk&&
+     a->setInt("End",edit.end)==Steinberg::kResultOk&&
+     a->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
+     a->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
+     a->setInt("GainBits",bits)==Steinberg::kResultOk;
+ if(ready&&revision!=UINT32_MAX)
+   ready= a->setInt("Revision",revision)==Steinberg::kResultOk;
+ const bool success=ready&&sendEditMessage(msg)==Steinberg::kResultOk;
+ 
+ if(success){try {notifyViews(false);}catch(const std::bad_alloc&){ /* committed state remains authoritative */ }}
+ return success;
+ }catch(const std::bad_alloc&){return false;}
+}
+
+
+bool Controller::previewSampleEdit(std::size_t row,const SampleEdit& edit,
+                                   std::uint32_t revision){
+ if(row>=kRows||edit.end==0)return false;
+ // An accepted preview must always have an allocation-free STOP path.
+ // A previous rejected STOP must be delivered before accepting another START.
+ if(previewStopPending_&&!stopSampleEditPreview())return false;
+ if(!reservePreviewStop())return false;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}catch(const std::bad_alloc&){return false;}
+ if(!msg)return false;
+ struct MessageOwner {decltype(msg) value;~MessageOwner(){if(value)value->release();}} owner{msg};
+ try {
+ msg->setMessageID("Drumator.EditorPreview");
+ auto* a=msg->getAttributes();std::uint32_t bits=0;
+ std::memcpy(&bits,&edit.gain,sizeof(bits));
+ bool ready=a&&a->setInt("Row",static_cast<Steinberg::int64>(row))==Steinberg::kResultOk&&
+ a->setInt("Start",edit.start)==Steinberg::kResultOk&&
+ a->setInt("End",edit.end)==Steinberg::kResultOk&&
+ a->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
+ a->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
+ a->setInt("GainBits",bits)==Steinberg::kResultOk;
+ if(ready&&revision!=UINT32_MAX)
+   ready=a->setInt("Revision",revision)==Steinberg::kResultOk;
+ const bool ok=ready&&sendMessage(msg)==Steinberg::kResultOk;
+ return ok;
+ }catch(const std::bad_alloc&){return false;}
+}
+bool Controller::stopSampleEditPreview(){
+ // The STOP message is prepared before Preview, so retries do not allocate.
+ // A bounded second attempt covers one transient host rejection while an
+ // editor is being destroyed. STOP is idempotent in the processor.
+ if(!reservedPreviewStop_)return true; // no editor preview accepted
+ previewStopPending_=true;
+ for(unsigned attempt=0;attempt<2;++attempt) {
+   try {
+     if(sendMessage(reservedPreviewStop_)==Steinberg::kResultOk) {
+       previewStopPending_=false;
+       return true;
+     }
+   }catch(const std::bad_alloc&) { /* retry without allocating */ }
+ }
+ return false;
+}
 bool Controller::previewSample(std::size_t row) {
  if(row>=visibleRows_)return false;
- auto* msg=allocateMessage();if(!msg)return false;
- msg->setMessageID("Drumator.PreviewRow");
- auto* attrs=msg->getAttributes();
- if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk) {
-   msg->release();return false;
- }
- // A preview must not mark the DAW project dirty.
- const auto result=sendMessage(msg);
- msg->release();
- return result==Steinberg::kResultOk;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}
+ catch(const std::bad_alloc&) {return false;}
+ if(!msg)return false;
+ struct MessageOwner {Steinberg::Vst::IMessage* p;~MessageOwner(){p->release();}} owner{msg};
+ try {
+   msg->setMessageID("Drumator.PreviewRow");
+   auto* attrs=msg->getAttributes();
+   if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk)
+     return false;
+   // A preview must not mark the DAW project dirty.
+   return sendMessage(msg)==Steinberg::kResultOk;
+ }catch(const std::bad_alloc&) {return false;}
 }
 bool Controller::clearSample(std::size_t row) {
  if(row>=kRows)return false;
  std::string emptyLabel;
- try {emptyLabel="LEER - WAV LADEN";}
+ try {emptyLabel="EMPTY - LOAD WAV";}
  catch(const std::bad_alloc&) {return false;}
- auto* msg=allocateMessage();if(!msg)return false;
- msg->setMessageID("Drumator.ClearSample");
- auto* attrs=msg->getAttributes();if(!attrs){msg->release();return false;}
- attrs->setInt("Row",static_cast<Steinberg::int64>(row));
- const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();
- if(ok){labels_[row].swap(emptyLabel);samplePaths_[row].clear();notifyViews(false);}
- return ok;
+ Steinberg::Vst::IMessage* msg=nullptr;
+ try {msg=allocateMessage();}
+ catch(const std::bad_alloc&) {return false;}
+ if(!msg)return false;
+ struct MessageOwner {Steinberg::Vst::IMessage* p;~MessageOwner(){p->release();}} owner{msg};
+ bool accepted=false;
+ try {
+   msg->setMessageID("Drumator.ClearSample");
+   auto* attrs=msg->getAttributes();
+   if(!attrs||attrs->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk)
+     return false;
+   accepted=sendEditMessage(msg)==Steinberg::kResultOk;
+ }catch(const std::bad_alloc&) {return false;}
+ if(accepted) {
+   // Processor accepted: commit metadata without further allocations.
+   labels_[row].swap(emptyLabel);samplePaths_[row].clear();
+   samplePresent_[row]=false;
+   try {notifyViews(false);}
+   catch(const std::bad_alloc&) { /* committed state must not be reported as rejection */ }
+ }
+ return accepted;
 }
 bool Controller::setRowOutput(std::size_t row,unsigned requested) {
  if(row>=kRows||requested>=kRows)return false;
@@ -785,7 +1151,7 @@ bool Controller::toggleRowGate(std::size_t row,bool solo) {
 }
 bool Controller::toggleStep(std::size_t p,std::size_t r,std::size_t s) {
  if(p>=kPatterns||r>=kRows||s>=kSteps)return false;
- return setStepVelocity(p,r,s,velocity(p,r,s)>0?0:127);
+ return setStepVelocity(p,r,s,velocity(p,r,s)>0?0:100);
 }
 Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
  if(row>=kRows)return LoadStatus::InvalidRow;
@@ -825,6 +1191,7 @@ Controller::LoadStatus Controller::stepSample(std::size_t row,int direction) {
 Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& path) {
  if(row>=kRows)return LoadStatus::InvalidRow;
  if(path.empty())return LoadStatus::NotFound;
+ if(path.size()>4096u)return LoadStatus::Rejected;
  try {
  const auto suffix=pathToUtf8(pathFromUtf8(path).extension());
  std::string ext=suffix;
@@ -869,28 +1236,35 @@ Controller::LoadStatus Controller::loadWav(std::size_t row,const std::string& pa
  }catch(const std::bad_alloc&) {return LoadStatus::ReadError;}
  if(name.empty()||name.size()>kMaxKitName||name.find('\0')!=std::string::npos)
     return LoadStatus::Rejected;
+ // A successful Processor commit must never later be reported as failure.
+ // Establish IMessage ownership before any potentially allocating SDK call.
  auto* msg=allocateMessage();
  if(!msg)return LoadStatus::NoProcessorConnection;
+ struct MessageOwner {
+   Steinberg::Vst::IMessage* message;
+   ~MessageOwner(){if(message)message->release();}
+ } owner{msg};
  msg->setMessageID("Drumator.LoadPcm16Wav");
  auto* attr=msg->getAttributes();
- if(!attr){msg->release();return LoadStatus::Rejected;}
- attr->setInt("Row",static_cast<Steinberg::int64>(row));
- if(attr->setBinary("SampleName",name.data(),
-                    static_cast<Steinberg::uint32>(name.size()))!=Steinberg::kResultOk) {
-    msg->release();return LoadStatus::Rejected;
- }
- if(attr->setBinary("WavBytes",data.data(),
-                    static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk) {
-     msg->release();return LoadStatus::Rejected;
- }
- const bool accepted=sendEditMessage(msg)==Steinberg::kResultOk;
- msg->release();
- if(!accepted)return LoadStatus::Rejected;
+ if(!attr||attr->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk||
+    attr->setBinary("SampleName",name.data(),
+                    static_cast<Steinberg::uint32>(name.size()))!=Steinberg::kResultOk||
+    attr->setBinary("WavBytes",data.data(),
+                    static_cast<Steinberg::uint32>(data.size()))!=Steinberg::kResultOk)
+   return LoadStatus::Rejected;
+ if(sendEditMessage(msg)!=Steinberg::kResultOk)return LoadStatus::Rejected;
  // Success means the processor accepted the immutable asset for the
  // next audio block; no claim is made that the buffer has already rendered.
  labels_[row].swap(name);
  samplePaths_[row].swap(stagedPath);
- notifyViews(false);
+ samplePresent_[row]=true;
+ originIdentity_[row]=wavIdentity(data);
+ originIdentityValid_[row]=true;
+ pathsRestoredBeforeComponent_=false;
+ componentStatePendingController_=false;
+ // The embedded WAV and UI metadata are committed. Host repaint/dirty
+ // notification failures must not turn that accepted import into ReadError.
+ try {notifyViews(false);}catch(...) { /* committed; next repaint refreshes */ }
  return LoadStatus::Accepted;
  }catch(const std::filesystem::filesystem_error&) {return LoadStatus::NotFound;}
   catch(const std::exception&) {return LoadStatus::ReadError;}

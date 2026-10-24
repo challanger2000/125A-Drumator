@@ -90,14 +90,30 @@ Steinberg::tresult PLUGIN_API Processor::canProcessSampleSize(Steinberg::int32 s
 }
 Steinberg::tresult PLUGIN_API Processor::setActive(Steinberg::TBool state) {
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
-             previewPending_.store(0,std::memory_order_release);}
+             haveCycleBounds_=false;
+             previewPending_.store(0,std::memory_order_release);
+             auditionStart_.store(false,std::memory_order_release);
+             auditionStop_.store(true,std::memory_order_release);
+             auto command=auditionCommand_.load(std::memory_order_relaxed);
+             while(!auditionCommand_.compare_exchange_weak(
+                 command,((command>>1)+1u)<<1,
+                 std::memory_order_release,std::memory_order_relaxed)){}
+            }
  return AudioEffect::setActive(state);
 }
 Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
  // Steinberg's AudioEffect default returns kNotImplemented. A real host
  // may invoke this independently of setActive; honor the lifecycle.
  if(!state) {voices_.reset();wasPlaying_=false;haveExpectedPpq_=false;
-             previewPending_.store(0,std::memory_order_release);}
+             haveCycleBounds_=false;
+             previewPending_.store(0,std::memory_order_release);
+             auditionStart_.store(false,std::memory_order_release);
+             auditionStop_.store(true,std::memory_order_release);
+             auto command=auditionCommand_.load(std::memory_order_relaxed);
+             while(!auditionCommand_.compare_exchange_weak(
+                 command,((command>>1)+1u)<<1,
+                 std::memory_order_release,std::memory_order_relaxed)){}
+            }
  return Steinberg::kResultOk;
 }
 // Messages are delivered on the UI thread by the VST3 IConnectionPoint
@@ -106,7 +122,173 @@ Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
 Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  if(!msg||!msg->getMessageID())return AudioEffect::notify(msg);
  const auto* id=msg->getMessageID();
- if(std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
+ // Control-thread-only state query. The audio selection is atomic; no
+ // callback lock, heap work or mutation is required.
+ if(std::strcmp(id,"Drumator.QueryPattern")==0) {
+   auto* attributes=msg->getAttributes();
+   if(!attributes)return Steinberg::kResultFalse;
+   // SDK message attribute insertion may allocate: never escape notify().
+   try {
+     return attributes->setInt("Selected",
+         static_cast<Steinberg::int64>(selected_.load(std::memory_order_acquire)))==Steinberg::kResultOk
+         ? Steinberg::kResultOk : Steinberg::kResultFalse;
+   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+ }
+
+
+ // UI/control-thread-only query: read the *embedded* sample so the editor
+ // works after project recall even without the original filesystem path.
+ if(std::strcmp(id,"Drumator.SampleEditorQuery")==0) {
+   auto* attrs=msg->getAttributes();
+   Steinberg::int64 index=-1;
+   if(!attrs||attrs->getInt("Row",index)!=Steinberg::kResultOk||
+      index<0||index>=static_cast<Steinberg::int64>(kRows))
+     return Steinberg::kInvalidArgument;
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   const auto row=static_cast<std::size_t>(index);
+   const auto& wav=kit_.wav[row];
+   if(wav.empty()||wav.size()>kMaxSingleWav)return Steinberg::kResultFalse;
+   const auto& edit=kit_.sampleEdits[row];
+   const auto revision=editorRevisions_[row];
+   Steinberg::uint32 gainBits=0;
+   static_assert(sizeof(gainBits)==sizeof(edit.gain));
+   std::memcpy(&gainBits,&edit.gain,sizeof(gainBits));
+   // Legacy callers receive Wave unconditionally. A matching cached
+   // revision omits only the large binary, never the authoritative edit.
+   Steinberg::int64 known=-1;
+   const bool sameWaveRevision=
+       attrs->getInt("KnownRevision",known)==Steinberg::kResultOk&&
+       known>=0&&known==static_cast<Steinberg::int64>(revision);
+   try {return (sameWaveRevision||
+                 attrs->setBinary("Wave",wav.data(),static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk)&&
+          attrs->setInt("Start",edit.start)==Steinberg::kResultOk&&
+          attrs->setInt("End",edit.end)==Steinberg::kResultOk&&
+          attrs->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
+          attrs->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
+          attrs->setInt("GainBits",gainBits)==Steinberg::kResultOk&&
+          attrs->setInt("Revision",revision)==Steinberg::kResultOk
+          ?Steinberg::kResultOk:Steinberg::kResultFalse;
+   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+ }
+ // The commit is prepared off the audio thread. Active voices retain the
+ // old immutable PreparedSample via SampleExchange retirement.
+
+ if(std::strcmp(id,"Drumator.EditorPreviewStop")==0){
+   auditionStopGeneration_.fetch_add(1,std::memory_order_acq_rel);
+   auditionStart_.store(false,std::memory_order_release);
+   auditionStop_.store(true,std::memory_order_release);
+   // Publish STOP as one linearized command, not three independent flags.
+   auto current=auditionCommand_.load(std::memory_order_relaxed);
+   while(!auditionCommand_.compare_exchange_weak(
+       current,((current>>1)+1u)<<1,
+       std::memory_order_release,std::memory_order_relaxed)){}
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.EditorPreview")==0){
+   auto* a=msg->getAttributes();
+   Steinberg::int64 row=-1,start=-1,end=-1,fi=-1,fo=-1,bits=-1;
+   if(!a||a->getInt("Row",row)!=Steinberg::kResultOk||
+      a->getInt("Start",start)!=Steinberg::kResultOk||
+      a->getInt("End",end)!=Steinberg::kResultOk||
+      a->getInt("FadeIn",fi)!=Steinberg::kResultOk||
+      a->getInt("FadeOut",fo)!=Steinberg::kResultOk||
+      a->getInt("GainBits",bits)!=Steinberg::kResultOk||
+      row<0||row>=static_cast<Steinberg::int64>(kRows)||
+      start<0||end<=0||fi<0||fo<0||bits<0||
+      start>UINT32_MAX||end>UINT32_MAX||fi>UINT32_MAX||
+      fo>UINT32_MAX||bits>UINT32_MAX)return Steinberg::kInvalidArgument;
+   SampleEdit edit{static_cast<std::uint32_t>(start),
+      static_cast<std::uint32_t>(end),static_cast<std::uint32_t>(fi),
+      static_cast<std::uint32_t>(fo),1.f};
+   const auto gainBits=static_cast<std::uint32_t>(bits);
+   std::memcpy(&edit.gain,&gainBits,sizeof(gainBits));
+   std::lock_guard<std::mutex> lock(kitMutex_);
+   const auto idx=static_cast<std::size_t>(row);
+   Steinberg::int64 expected=-1;
+   if(a->getInt("Revision",expected)==Steinberg::kResultOk&&
+      (expected<0||expected!=editorRevisions_[idx]))return Steinberg::kResultFalse;
+   const auto& wav=kit_.wav[idx];
+   if(wav.empty())return Steinberg::kResultFalse;
+   const auto rate=outputRate_.load(std::memory_order_acquire);
+   if(!(rate>0.)||!std::isfinite(rate))return Steinberg::kResultFalse;
+   std::unique_ptr<PreparedSample> prepared;
+   if(PreparedSample::fromWav(wav.data(),wav.size(),rate,
+      static_cast<double>(static_cast<int>(kit_.pitch[static_cast<std::size_t>(row)])-24),
+      1.f,0.f,0,false,prepared,edit)!=PrepareStatus::Ok)
+       return Steinberg::kInvalidArgument;
+   for(;;){auto old=auditionExchange_.pollReclaim();if(!old)break;}
+   // Single control-side writer brackets asset + START publication as a unit.
+   auditionPublishSequence_.fetch_add(1,std::memory_order_seq_cst); // odd
+   auto stale=auditionExchange_.withdraw(0);
+   (void)stale;
+   if(!auditionExchange_.publish(0,prepared)){
+     auditionPublishSequence_.fetch_add(1,std::memory_order_seq_cst);
+     return Steinberg::kResultFalse;
+   }
+   auditionStart_.store(true,std::memory_order_release);
+   auto current=auditionCommand_.load(std::memory_order_relaxed);
+   while(!auditionCommand_.compare_exchange_weak(
+       current,((((current>>1)+1u)<<1)|1u),
+       std::memory_order_release,std::memory_order_relaxed)){}
+   auditionPublishSequence_.fetch_add(1,std::memory_order_seq_cst); // even
+   return Steinberg::kResultOk;
+ }
+ if(std::strcmp(id,"Drumator.SampleEditorCommit")==0) {
+   auto* attrs=msg->getAttributes();
+   Steinberg::int64 index=-1,start=-1,end=-1,fadeIn=-1,fadeOut=-1,gainBits=-1,expectedRevision=-1;
+   if(!attrs||attrs->getInt("Row",index)!=Steinberg::kResultOk||
+      attrs->getInt("Start",start)!=Steinberg::kResultOk||
+      attrs->getInt("End",end)!=Steinberg::kResultOk||
+      attrs->getInt("FadeIn",fadeIn)!=Steinberg::kResultOk||
+      attrs->getInt("FadeOut",fadeOut)!=Steinberg::kResultOk||
+      attrs->getInt("GainBits",gainBits)!=Steinberg::kResultOk||
+      index<0||index>=static_cast<Steinberg::int64>(kRows)||
+      start<0||end<0||fadeIn<0||fadeOut<0||
+      start>UINT32_MAX||end>UINT32_MAX||fadeIn>UINT32_MAX||
+      fadeOut>UINT32_MAX||gainBits<0||gainBits>UINT32_MAX)
+     return Steinberg::kInvalidArgument;
+   SampleEdit edit;
+   edit.start=static_cast<std::uint32_t>(start);
+   edit.end=static_cast<std::uint32_t>(end);
+   edit.fadeIn=static_cast<std::uint32_t>(fadeIn);
+   edit.fadeOut=static_cast<std::uint32_t>(fadeOut);
+   const auto bits=static_cast<std::uint32_t>(gainBits);
+   std::memcpy(&edit.gain,&bits,sizeof(bits));
+   std::lock_guard<std::mutex> guard(kitMutex_);
+   const auto row=static_cast<std::size_t>(index);
+   if(attrs->getInt("Revision",expectedRevision)==Steinberg::kResultOk&&
+      (expectedRevision<0||expectedRevision!=editorRevisions_[row]))
+     return Steinberg::kResultFalse;
+   if(kit_.wav[row].empty())return Steinberg::kResultFalse;
+   DecodedWav decoded;
+   const auto& wav=kit_.wav[row];
+   if(WavPcm16Decoder::decode(wav.data(),wav.size(),decoded)!=WavError::Ok||
+      decoded.left.size()>UINT32_MAX||
+      !edit.valid(static_cast<std::uint32_t>(decoded.left.size())))
+      return Steinberg::kInvalidArgument;
+   if(kit_.sampleEdits[row].start==edit.start&&kit_.sampleEdits[row].end==edit.end&&
+      kit_.sampleEdits[row].fadeIn==edit.fadeIn&&
+      kit_.sampleEdits[row].fadeOut==edit.fadeOut&&
+      kit_.sampleEdits[row].gain==edit.gain)return Steinberg::kResultOk;
+   const auto rate=outputRate_.load(std::memory_order_acquire);
+   if(!(rate>0.)||!std::isfinite(rate))return Steinberg::kResultFalse;
+   std::unique_ptr<PreparedSample> prepared;
+   if(PreparedSample::fromWav(wav.data(),wav.size(),rate,
+       static_cast<double>(static_cast<int>(kit_.pitch[row])-24),
+       1.f,0.f,0,false,prepared,edit)!=PrepareStatus::Ok)
+     return Steinberg::kResultFalse;
+   for(;;){auto unused=exchange_.pollReclaim();if(!unused)break;}
+   auto previous=exchange_.withdraw(row);
+   (void)previous;
+   if(!exchange_.publish(row,prepared))return Steinberg::kResultFalse;
+   kit_.sampleEdits[row]=edit;
+   ++editorRevisions_[row];
+   return Steinberg::kResultOk;
+ }
+
+ if(std::strcmp(id,"Drumator.EditorPreview")!=0&&
+    std::strcmp(id,"Drumator.EditorPreviewStop")!=0&&
+    std::strcmp(id,"Drumator.LoadPcm16Wav")!=0&&
     std::strcmp(id,"Drumator.StepEdit")!=0&&
     std::strcmp(id,"Drumator.PatternReplace")!=0&&
     std::strcmp(id,"Drumator.VisibleRows")!=0&&
@@ -136,6 +318,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       (steps!=16&&steps!=32))return Steinberg::kInvalidArgument;
    const auto i=static_cast<std::size_t>(index);
    {std::lock_guard<std::mutex> guard(kitMutex_);
+    if(!patterns_.setLength(i,static_cast<std::uint8_t>(steps)))return Steinberg::kResultFalse;
     kit_.patternLengths[i]=static_cast<std::uint8_t>(steps);
     patternLengths_[i].store(static_cast<std::uint8_t>(steps),std::memory_order_release);
    }
@@ -193,6 +376,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
                              std::memory_order_acq_rel);
    kit_.wav[static_cast<std::size_t>(index)].clear();
    kit_.names[static_cast<std::size_t>(index)].clear();
+   kit_.sampleEdits[static_cast<std::size_t>(index)]=SampleEdit{};
+   ++editorRevisions_[static_cast<std::size_t>(index)];
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.SongConfig")==0) {
@@ -286,7 +471,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
      catch(const std::bad_alloc&) {return Steinberg::kOutOfMemory;}
    }else if(PreparedSample::fromWav(
        kit_.wav[idx].data(),kit_.wav[idx].size(),rate,
-       static_cast<double>(semitones),1.f,0.f,0,false,candidate)!=
+       static_cast<double>(semitones),1.f,0.f,0,false,candidate,
+       kit_.sampleEdits[idx])!=
        PrepareStatus::Ok)return Steinberg::kResultFalse;
    if(!candidate)return Steinberg::kResultFalse;
    for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
@@ -358,7 +544,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    const auto index=static_cast<std::size_t>(target);
    // The exporter holds kitMutex_ before the pattern-bank write lock.
    std::lock_guard<std::mutex> guard(kitMutex_);
-   if(!patterns_.replacePattern(index,values,count))return Steinberg::kResultFalse;
+   if(!patterns_.replacePattern(index,values,count,
+        updateLength?static_cast<std::uint8_t>(desiredLength):0))return Steinberg::kResultFalse;
    if(updateLength) {
       const auto length=static_cast<std::uint8_t>(desiredLength);
       patternLengths_[index].store(length,std::memory_order_release);
@@ -420,7 +607,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
      static_cast<const std::uint8_t*>(bytes),
      static_cast<std::size_t>(size),rate,
      static_cast<double>(static_cast<int>(kit_.pitch[static_cast<std::size_t>(row)])-24),
-     1.f,0.f,0,false,candidate);
+     1.f,0.f,0,false,candidate,SampleEdit{});
  if(prepared!=PrepareStatus::Ok)return Steinberg::kResultFalse;
  {
     std::size_t total=size;
@@ -440,6 +627,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     previewPending_.fetch_and(~(std::uint32_t{1}<<static_cast<unsigned>(row)),
                               std::memory_order_acq_rel);
     kit_.wav[static_cast<std::size_t>(row)].swap(retained);
+    kit_.sampleEdits[static_cast<std::size_t>(row)]=SampleEdit{};
+    ++editorRevisions_[static_cast<std::size_t>(row)];
     kit_.names[static_cast<std::size_t>(row)].swap(fileName);
  }
  return Steinberg::kResultOk;
@@ -460,12 +649,26 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  wasPlaying_=false;
  haveExpectedPpq_=false;
  expectedNextPpq_=0.0;
+ lastClockTempo_=0.0;
+ haveCycleBounds_=false;
  phaseOriginStep_=0;
  // A rate change invalidates any prior per-voice interpolation kernel.
  // Preserve retired asset ownership; mute existing rows until reloaded.
  for(std::size_t row=0;row<kRows;++row)voices_.setRow(row,RowSound{});
  // Deliberately silent until a real user sample was actually accepted.
  // No hidden synthesized kick to confuse failed import with working audio.
+ if(!auditionVoices_.setOutputRate(setup.sampleRate))return Steinberg::kResultFalse;
+ try {auditionLeft_.resize(static_cast<std::size_t>(setup.maxSamplesPerBlock));
+      auditionRight_.resize(static_cast<std::size_t>(setup.maxSamplesPerBlock));}
+ catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+ // Host reconfiguration is an audition discontinuity, even when no STOP
+ // callback has been rendered. Old prepared asset ownership stays in the
+ // SampleExchange until safely reclaimed by the control thread.
+ auditionVoices_.reset();
+ (void)auditionVoices_.setRow(0,RowSound{});
+ lastAudioAuditionCommand_=auditionCommand_.load(std::memory_order_acquire);
+ auditionStart_.store(false,std::memory_order_release);
+ auditionStop_.store(false,std::memory_order_release);
  if(!voices_.setOutputRate(setup.sampleRate)||
     !masterRamp_.prepare(setup.sampleRate))return Steinberg::kResultFalse;
  masterRamp_.reset(masterVolume_.load(std::memory_order_relaxed)/100.f);
@@ -576,6 +779,18 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    }
    return Steinberg::kResultOk;
  }
+ // A valid zero-frame callback can itself be the host's only Stop edge.
+ // Observe the explicit transport transition before the parameter-only
+ // fast path; otherwise old voices survive a continuous-PPQ restart.
+ // Never interpret a missing optional ProcessContext as an explicit Stop.
+ if(data.numSamples==0&&data.processContext&&wasPlaying_&&
+    (data.processContext->state&Steinberg::Vst::ProcessContext::kPlaying)==0) {
+   voices_.reset();
+   wasPlaying_=false;
+   haveExpectedPpq_=false;
+   haveCycleBounds_=false;
+   previewPending_.store(0,std::memory_order_release);
+ }
  // Hosts may flush discrete automation without providing any audio buffers.
  if(data.numSamples==0||data.numOutputs==0) {
    // A nonzero block without output buses still carries genuine host and
@@ -586,9 +801,16 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      voices_.reset();
      wasPlaying_=false;
      haveExpectedPpq_=false;
+     haveCycleBounds_=false;
      // An audition requested while there is no audio sink must not fire
      // unexpectedly when the host restores its outputs.
      previewPending_.store(0,std::memory_order_release);
+     auditionStart_.store(false,std::memory_order_release);
+     auditionStop_.store(true,std::memory_order_release);
+     // Old preview flags no longer carry the definitive command generation:
+     // explicitly retire the most recent START across outputless intervals.
+     lastAudioAuditionCommand_=auditionCommand_.load(std::memory_order_acquire);
+     auditionVoices_.reset();
      if(!patternTimeline_.reset(static_cast<std::size_t>(data.numSamples)))
        return Steinberg::kInvalidArgument;
      if(data.inputParameterChanges)
@@ -665,20 +887,94 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  // An inactive MAIN bus may legally omit audio buffers while aux buses run.
  const bool mainReady=left&&right;
  if(!mainReady&&((left!=nullptr)!=(right!=nullptr)))return Steinberg::kResultFalse;
- const auto* context=data.processContext;
- const bool playing=context&&
-     ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);
- // Never propagate a malformed host clock into expectedNextPpq_: otherwise
- // NaN comparison is always false and the next real locate cannot reset phase.
- const bool validHostClock=context&&
-     (context->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                      Steinberg::Vst::ProcessContext::kTempoValid))==
-                     (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                      Steinberg::Vst::ProcessContext::kTempoValid)&&
-     std::isfinite(context->projectTimeMusic)&&
-     std::isfinite(context->tempo)&&context->tempo>0.0;
- if(wasPlaying_&&!playing)voices_.reset(); // stop old sequencer tails once
+ // The VST3 ProcessContext and its tempo/PPQ fields are optional. Missing
+ // timing is not a transport STOP; retain and extrapolate only a previously
+ // confirmed playing clock to avoid a missing drum hit or cut sample tail.
+ const auto* suppliedContext=data.processContext;
+ const bool explicitStop=suppliedContext&&
+     (suppliedContext->state&Steinberg::Vst::ProcessContext::kPlaying)==0;
+ const auto hasClock=[](const Steinberg::Vst::ProcessContext* c) noexcept {
+   return c&&
+     (c->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                Steinberg::Vst::ProcessContext::kTempoValid))==
+               (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                Steinberg::Vst::ProcessContext::kTempoValid)&&
+     std::isfinite(c->projectTimeMusic)&&
+     std::isfinite(c->tempo)&&c->tempo>0.0;
+ };
+ // The host alone establishes or clears Cycle metadata. A missing
+ // ProcessContext is not proof that a previously valid Cycle has ended.
+ // Even when PPQ/tempo are omitted, the presence of ProcessContext
+ // explicitly reports whether Cycle is active. Do not synthesize a new
+ // loop after the host has switched Cycle off.
+ if(explicitStop||(suppliedContext&&
+    (suppliedContext->state&Steinberg::Vst::ProcessContext::kCycleActive)==0))
+   haveCycleBounds_=false;
+ else if(hasClock(suppliedContext)) {
+   haveCycleBounds_=
+     (suppliedContext->state&
+       (Steinberg::Vst::ProcessContext::kCycleActive|
+        Steinberg::Vst::ProcessContext::kCycleValid))==
+       (Steinberg::Vst::ProcessContext::kCycleActive|
+        Steinberg::Vst::ProcessContext::kCycleValid)&&
+     std::isfinite(suppliedContext->cycleStartMusic)&&
+     std::isfinite(suppliedContext->cycleEndMusic)&&
+     suppliedContext->cycleEndMusic>suppliedContext->cycleStartMusic&&
+     suppliedContext->projectTimeMusic>=suppliedContext->cycleStartMusic&&
+     suppliedContext->projectTimeMusic<suppliedContext->cycleEndMusic;
+   if(haveCycleBounds_) {
+     lastCycleStartMusic_=suppliedContext->cycleStartMusic;
+     lastCycleEndMusic_=suppliedContext->cycleEndMusic;
+   }
+ }
+ Steinberg::Vst::ProcessContext inferred{};
+ const auto* context=suppliedContext;
+ if(!explicitStop&&!hasClock(suppliedContext)&&wasPlaying_&&
+    haveExpectedPpq_&&std::isfinite(expectedNextPpq_)&&
+    std::isfinite(lastClockTempo_)&&lastClockTempo_>0.0) {
+   inferred.state=Steinberg::Vst::ProcessContext::kPlaying|
+                  Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                  Steinberg::Vst::ProcessContext::kTempoValid;
+   // Validity flags are independent: a host can locate with valid PPQ
+   // while the tempo field is temporarily unavailable. Never overwrite an
+   // authoritative position with an extrapolated value in that case.
+   const bool partialPpqValid=suppliedContext&&
+     (suppliedContext->state&Steinberg::Vst::ProcessContext::kProjectTimeMusicValid)!=0&&
+     std::isfinite(suppliedContext->projectTimeMusic);
+   inferred.projectTimeMusic=partialPpqValid?
+       suppliedContext->projectTimeMusic:expectedNextPpq_;
+   // A host can provide the *current* tempo while PPQ is unavailable.
+   // The position at this callback's start was advanced with the previous
+   // block's tempo; all samples in this callback use the new valid tempo.
+   const bool partialTempoValid=suppliedContext&&
+     (suppliedContext->state&Steinberg::Vst::ProcessContext::kTempoValid)!=0&&
+     std::isfinite(suppliedContext->tempo)&&suppliedContext->tempo>0.0;
+   inferred.tempo=partialTempoValid?suppliedContext->tempo:lastClockTempo_;
+   // Extrapolate modulo the most recent valid host Cycle, never against
+   // guessed or stale settings from a new transport run.
+   if(haveCycleBounds_) {
+     const double cycleLength=lastCycleEndMusic_-lastCycleStartMusic_;
+     if(inferred.projectTimeMusic>=lastCycleEndMusic_) {
+       inferred.projectTimeMusic=lastCycleStartMusic_+
+         std::fmod(inferred.projectTimeMusic-lastCycleEndMusic_,cycleLength);
+     }
+     if(inferred.projectTimeMusic>=lastCycleStartMusic_&&
+        inferred.projectTimeMusic<lastCycleEndMusic_) {
+       inferred.state|=Steinberg::Vst::ProcessContext::kCycleActive|
+                       Steinberg::Vst::ProcessContext::kCycleValid;
+       inferred.cycleStartMusic=lastCycleStartMusic_;
+       inferred.cycleEndMusic=lastCycleEndMusic_;
+     }
+   }
+   context=&inferred;
+ }
+ const bool playing=explicitStop?false:context?
+     ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0):
+     wasPlaying_;
+ const bool validHostClock=playing&&hasClock(context);
+ if(wasPlaying_&&!playing)voices_.reset(); // only explicit host STOP
  if(!playing||!validHostClock)haveExpectedPpq_=false;
+ if(!playing)haveCycleBounds_=false;
  wasPlaying_=playing;
  // The first full block after a kit commit starts with no old-kit voices.
  const auto revision=kitRevision_.load(std::memory_order_acquire);
@@ -689,6 +985,13 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  }
  // Adopt only complete prepared assets, without deleting on audio.
  exchange_.audioAdopt(voices_,processSetup.sampleRate);
+ const auto auditionGeneration=auditionStopGeneration_.load(std::memory_order_acquire);
+ const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);
+ // Keep the legacy probe point for existing FA23/FR01 instrumentation.
+ // The authoritative ordered event is auditionCommand_, never fireAudition.
+ const auto sequenceBeforeAdopt=auditionPublishSequence_.load(std::memory_order_seq_cst);
+ const auto commandBeforeAdopt=auditionCommand_.load(std::memory_order_acquire);
+ auditionExchange_.audioAdopt(auditionVoices_,processSetup.sampleRate);
  triggers_.clear();
  // Collect MIDI A-H and host automation before scheduling. Fixed storage
  // avoids allocations in the audio callback; equal-offset host wins.
@@ -734,14 +1037,66 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  };
  // Process program changes at their actual sample offset. Schedule each
  // constant-pattern interval separately; no allocation in the audio callback.
+ double velocityCycleStart=0.0,velocityCycleEnd=0.0;
+ bool velocityCycleValid=false;
  if(playing&&validHostClock) {
    const auto initialPpq=context->projectTimeMusic;
    // A new transport run or a locate/loop jump starts at pattern step 1.
    // Normal continuous blocks keep the same origin; switching A-H does not reset it.
    const double rateForClock=processSetup.sampleRate;
    const double expectedTolerance=std::max(1e-7,4.0*context->tempo/(60.0*rateForClock));
-   if(!haveExpectedPpq_||std::abs(initialPpq-expectedNextPpq_)>expectedTolerance) {
-      const double initialStep=std::floor(initialPpq*4.0+1e-8);
+   const bool transportJump=haveExpectedPpq_&&
+       std::abs(initialPpq-expectedNextPpq_)>expectedTolerance;
+   // Some hosts stop invoking process() while stopped. A subsequent backward
+   // locate/restart must not carry old sample voices into the new timeline.
+   // Ordinary continuous blocks and the first playing block are unaffected.
+   // A genuine VST3 Cycle wrap is not a Locate. Preserve existing one-shot
+   // tails at the loop seam, while the new cycle still schedules its notes.
+   // Never infer Cycle from an unflagged backward project-position jump.
+   // A host may deliver its next block a few samples AFTER the loop
+   // start when the last processed block crossed the cycle end. Its reported
+   // PPQ then includes exactly that overshoot. Recognize this modular clock
+   // relationship, but reject unrelated locates and bogus cycle metadata.
+   const double cycleOvershoot=context&&
+       std::isfinite(context->cycleEndMusic)?
+       expectedNextPpq_-context->cycleEndMusic:0.0;
+   const double priorCycleLength=context?
+       context->cycleEndMusic-context->cycleStartMusic:0.0;
+   const double wrappedOvershoot=std::isfinite(priorCycleLength)&&
+       priorCycleLength>0.0&&std::isfinite(cycleOvershoot)?
+       std::fmod(std::max(0.0,cycleOvershoot),priorCycleLength):0.0;
+   const double actualCycleOffset=context?
+       initialPpq-context->cycleStartMusic:0.0;
+   const double cycleOffsetError=std::abs(actualCycleOffset-wrappedOvershoot);
+   const double cyclePhaseError=std::isfinite(priorCycleLength)&&priorCycleLength>0.0?
+       std::min(cycleOffsetError,std::abs(cycleOffsetError-priorCycleLength)):
+       cycleOffsetError;
+   const double maximumPriorBlockPpq=lastClockTempo_>0.0?
+       static_cast<double>(processSetup.maxSamplesPerBlock)*lastClockTempo_/
+       (60.0*rateForClock):0.0;
+   const bool confirmedCycleWrap=transportJump&&context&&
+       (context->state&
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid))==
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid)&&
+       std::isfinite(context->cycleStartMusic)&&
+       std::isfinite(context->cycleEndMusic)&&
+       context->cycleEndMusic>context->cycleStartMusic&&
+       std::isfinite(maximumPriorBlockPpq)&&maximumPriorBlockPpq>0.0&&
+       std::isfinite(cycleOvershoot)&&
+       cycleOvershoot>=-expectedTolerance&&
+       cycleOvershoot<=maximumPriorBlockPpq+expectedTolerance&&
+       initialPpq>=context->cycleStartMusic-expectedTolerance&&
+       initialPpq<context->cycleEndMusic+expectedTolerance&&
+       expectedNextPpq_>initialPpq&&
+       cyclePhaseError<=expectedTolerance;
+   if(transportJump&&!confirmedCycleWrap)voices_.reset();
+   if(!haveExpectedPpq_||transportJump) {
+      // Cycle origin is the musical loop start, not the host's post-seam overshoot.
+      const double originPpq=confirmedCycleWrap?
+          context->cycleStartMusic:initialPpq;
+      const double initialStep=std::floor(originPpq*4.0+1e-8);
       phaseOriginStep_=std::isfinite(initialStep)&&
          initialStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
          initialStep<=static_cast<double>(std::numeric_limits<std::int64_t>::max()/2)
@@ -750,6 +1105,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    expectedNextPpq_=initialPpq+static_cast<double>(data.numSamples)*
        context->tempo/(60.0*rateForClock);
    haveExpectedPpq_=true;
+   lastClockTempo_=context->tempo;
    const auto tempo=context->tempo;
    const auto rate=processSetup.sampleRate;
    const auto swing=swingPercent_.load(std::memory_order_relaxed)/100.0;
@@ -757,23 +1113,99 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    std::uint32_t activePattern=selected_.load(std::memory_order_relaxed);
    std::array<std::uint8_t,kPatterns> lengths{};
    for(std::size_t i=0;i<kPatterns;++i)
-     lengths[i]=patternLengths_[i].load(std::memory_order_acquire);
+     lengths[i]=audioPatternValid_[i]?audioPatternLengthCache_[i]:32;
+   // VST3 permits a fixed host block to straddle an active Cycle boundary.
+   // Subdivide the sequencer's timing only; existing sample voices keep ringing.
+   // Never infer a loop from an unflagged PPQ discontinuity.
+   const double ppqPerFrame=tempo/(60.0*rate);
+   const bool cycleFlags=context&&
+       (context->state&
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid))==
+           (Steinberg::Vst::ProcessContext::kCycleActive|
+            Steinberg::Vst::ProcessContext::kCycleValid);
+   const double cycleStart=cycleFlags?context->cycleStartMusic:0.0;
+   const double cycleEnd=cycleFlags?context->cycleEndMusic:0.0;
+   const double cycleLength=cycleEnd-cycleStart;
+   const double firstWrapFrame=(cycleEnd-initialPpq)/ppqPerFrame;
+   const double cycleFrames=cycleLength/ppqPerFrame;
+   const double approximateWraps=std::isfinite(firstWrapFrame)&&
+       std::isfinite(cycleFrames)&&cycleFrames>0.0?
+       std::max(0.0,(static_cast<double>(data.numSamples)-firstWrapFrame)/cycleFrames)+1.0:0.0;
+   const double originStep=cycleFlags?std::floor(cycleStart*4.0+1e-8):0.0;
+   const bool splitCycle=cycleFlags&&std::isfinite(cycleStart)&&
+       std::isfinite(cycleEnd)&&cycleEnd>cycleStart&&
+       std::isfinite(ppqPerFrame)&&ppqPerFrame>0.0&&
+       initialPpq>=cycleStart-expectedTolerance&&
+       initialPpq<cycleEnd&&std::isfinite(firstWrapFrame)&&
+       std::isfinite(cycleFrames)&&cycleFrames>=1.0&&
+       approximateWraps<=StepScheduler::maxBoundariesPerBlock&&
+       std::isfinite(originStep)&&
+       originStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
+       originStep<=static_cast<double>(std::numeric_limits<std::int64_t>::max()/2);
+   velocityCycleStart=cycleStart;
+   velocityCycleEnd=cycleEnd;
+   velocityCycleValid=splitCycle;
+   // One coherent SONG snapshot per audio callback, not once per host
+   // pattern event or every Cycle sub-segment. This bounds realtime work
+   // and prevents different musical positions of the same host buffer
+   // from observing different partially published pattern generations.
+   std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> songPrograms{};
+   if(audioSongEnabled_) {
+     for(std::size_t program=0;program<kPatterns;++program){
+       std::array<std::uint8_t,kRows*kSteps> coherent{};
+       std::uint8_t coherentSongLength=32;
+       if(patterns_.coherentPattern(program,coherent,coherentSongLength)){
+         audioPatternCache_[program]=coherent;
+         audioPatternLengthCache_[program]=coherentSongLength;
+         audioPatternValid_[program]=true;
+       }
+       if(audioPatternValid_[program]) {
+         songPrograms[program]=audioPatternCache_[program];
+         lengths[program]=audioPatternLengthCache_[program];
+       }
+     }
+   }
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
-     if(finish<=cursor)return;
+     if(finish<=cursor)return; // retained for unique QA instrumentation anchor
+     while(cursor<finish) {
+       Steinberg::int32 segmentEnd=finish;
+       double segmentPpq=initialPpq+static_cast<double>(cursor)*ppqPerFrame;
+       if(splitCycle) {
+         constexpr double epsilonSamples=1e-8;
+         const double first=std::ceil(firstWrapFrame-epsilonSamples);
+         if(static_cast<double>(cursor)>=first) {
+           const double elapsed=static_cast<double>(cursor)-firstWrapFrame;
+           const double loops=std::floor(std::max(0.0,elapsed)/cycleFrames+1e-12);
+           const double remainder=std::max(0.0,elapsed-loops*cycleFrames);
+           segmentPpq=cycleStart+remainder*ppqPerFrame;
+           phaseOriginStep_=static_cast<std::int64_t>(originStep);
+           const double next=std::ceil(firstWrapFrame+(loops+1.0)*cycleFrames-epsilonSamples);
+           if(std::isfinite(next)&&next<segmentEnd)
+             segmentEnd=std::max(cursor+1,static_cast<Steinberg::int32>(next));
+         }else if(first<segmentEnd) {
+           segmentEnd=std::max(cursor+1,static_cast<Steinberg::int32>(first));
+         }
+       }
      // Read exactly one generation; a concurrently replaced pattern is
      // deferred to a later block rather than rendered in a mixed state.
      std::array<std::uint8_t,kRows*kSteps> consistent{};
-     if(patterns_.coherentPattern(activePattern,consistent)) {
+     std::uint8_t coherentLength=32;
+     if(!audioSongEnabled_&&
+        patterns_.coherentPattern(activePattern,consistent,coherentLength)) {
        audioPatternCache_[activePattern]=consistent;
+       audioPatternLengthCache_[activePattern]=coherentLength;
        audioPatternValid_[activePattern]=true;
      }else if(audioPatternValid_[activePattern]) {
        // A controller-side edit must not mute an otherwise valid audio block.
        consistent=audioPatternCache_[activePattern];
      }else if(!audioSongEnabled_) {
        // No previously validated generation exists; never render a partial edit.
-       cursor=finish;return;
+       cursor=segmentEnd;continue;
      }
+     if(audioPatternValid_[activePattern])
+       lengths[activePattern]=audioPatternLengthCache_[activePattern];
      struct CoherentView {
        const std::array<std::uint8_t,kRows*kSteps>& values;
        std::uint8_t program;
@@ -788,9 +1220,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
           return p==program?values[r*kSteps+step]:0;
        }
      } read{consistent,static_cast<std::uint8_t>(activePattern),lengths[activePattern]};
-     const Clock clock{initialPpq+static_cast<double>(cursor)*tempo/(60.0*rate),
-                       tempo,rate,finish-cursor,true,swing,humanize,phaseOriginStep_};
-     std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> songPrograms{};
+     const Clock clock{segmentPpq,tempo,rate,segmentEnd-cursor,
+                       true,swing,humanize,phaseOriginStep_};
      struct SongRead {
        const std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns>& values;
        const SongChain& chain;
@@ -806,17 +1237,6 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
             values[program][row*kSteps+step]:0;
        }
      } songRead{songPrograms,audioSongChain_,lengths};
-     if(audioSongEnabled_) {
-       for(std::size_t program=0;program<kPatterns;++program){
-         std::array<std::uint8_t,kRows*kSteps> coherent{};
-         if(patterns_.coherentPattern(program,coherent)){
-           audioPatternCache_[program]=coherent;
-           audioPatternValid_[program]=true;
-         }
-         if(audioPatternValid_[program])
-           songPrograms[program]=audioPatternCache_[program];
-       }
-     }
      auto emitTrigger=[&](Trigger hit){
        hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
        triggers_.appendStep(hit);
@@ -825,17 +1245,25 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
            StepScheduler::run(songRead,clock,emitTrigger):
            StepScheduler::run(read,clock,emitTrigger);
      if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
-     cursor=finish;
+     cursor=segmentEnd;
+     }
    };
+   // SongChain determines the audio independently of host-selected A-H.
+   // Dense host automation still changes the selected parameter at its
+   // exact sample offset, but must not re-snapshot all 8 Song programs.
+   if(audioSongEnabled_)scheduleRange(data.numSamples);
    for(Steinberg::int32 offset=0;offset<data.numSamples;++offset) {
      const auto point=patternTimeline_.get(static_cast<std::size_t>(offset));
      if(!point.source)continue;
-     scheduleRange(offset);
+     if(!audioSongEnabled_)scheduleRange(offset);
      activePattern=point.pattern;
-      if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
-      else if(point.source==PatternEventTimeline::kMidi){selected_.midiSubmit(point.pattern);reportMidi(offset,point.pattern);}
+     if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
+     else if(point.source==PatternEventTimeline::kMidi) {
+       selected_.midiSubmit(point.pattern);
+       reportMidi(offset,point.pattern);
+     }
    }
-   scheduleRange(data.numSamples);
+   if(!audioSongEnabled_)scheduleRange(data.numSamples);
 
  }else {
    auto active=selected_.load(std::memory_order_relaxed);
@@ -889,7 +1317,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      std::isfinite(context->tempo)&&context->tempo>0.0;
  triggers_.varyVelocity(variation,validTiming?context->projectTimeMusic:0.0,
                         validTiming?context->tempo:120.0,
-                        processSetup.sampleRate);
+                        processSetup.sampleRate,velocityCycleStart,
+                        velocityCycleEnd,velocityCycleValid);
  triggers_.sort();
  std::array<float*,kRows> stemsL{},stemsR{};
  for(Steinberg::int32 bus=1;bus<data.numOutputs&&
@@ -908,6 +1337,32 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                                    stemsL.data(),stemsR.data());
  exchange_.audioCollect(voices_);
  if(rendered.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
+ (void)auditionGeneration;
+ (void)fireAudition;
+ (void)auditionStop_.exchange(false,std::memory_order_acq_rel);
+ // A command changed during adoption is deferred, never consumed against
+ // an older sample. A later STOP always supersedes earlier START commands.
+ const auto commandNow=auditionCommand_.load(std::memory_order_acquire);
+ const auto sequenceAfterAdopt=auditionPublishSequence_.load(std::memory_order_seq_cst);
+ const bool stableCommand=commandNow==commandBeforeAdopt &&
+        sequenceBeforeAdopt==sequenceAfterAdopt &&
+        (sequenceAfterAdopt&1u)==0u;
+ const bool pendingCommand=commandNow!=lastAudioAuditionCommand_;
+ const bool stopCommand=pendingCommand&&(commandNow&1u)==0u;
+ const bool validAuditionStart=stableCommand&&pendingCommand&&
+                                (commandNow&1u)!=0u;
+ if(stopCommand||validAuditionStart)auditionVoices_.reset();
+ if(stopCommand||validAuditionStart)
+    lastAudioAuditionCommand_=commandNow;
+ Trigger one{};one.row=0;one.velocity=127;
+ const auto audition=auditionVoices_.render(validAuditionStart?&one:nullptr,validAuditionStart?1:0,
+    auditionLeft_.data(),auditionRight_.data(),static_cast<std::uint32_t>(data.numSamples));
+ auditionExchange_.audioCollect(auditionVoices_);
+ if(audition.status!=RenderStatus::Ok)return Steinberg::kResultFalse;
+ if(left&&right)for(Steinberg::int32 i=0;i<data.numSamples;++i){
+   left[i]+=auditionLeft_[static_cast<std::size_t>(i)];
+   right[i]+=auditionRight_[static_cast<std::size_t>(i)];
+ }
  const float master=static_cast<float>(masterVolume_.load(std::memory_order_relaxed))/100.f;
  masterRamp_.request(master);
  // MAIN and every active stem share one sample envelope, regardless of bus
@@ -946,7 +1401,7 @@ bool Processor::publishRestoredKit(const KitState& kit,double rate) {
     }else if(PreparedSample::fromWav(
          kit.wav[row].data(),kit.wav[row].size(),rate,
          static_cast<double>(static_cast<int>(kit.pitch[row])-24),1.f,0.f,0,false,
-         fresh[row])!=PrepareStatus::Ok)return false;
+         fresh[row],kit.sampleEdits[row])!=PrepareStatus::Ok)return false;
  }
  for(;;) {auto unused=exchange_.pollReclaim();if(!unused)break;}
  for(std::size_t row=0;row<kRows;++row) {
@@ -996,7 +1451,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
  if(!stream.readInt32u(magic)||!stream.readInt32u(next))
     return Steinberg::kResultFalse;
  KitState candidate;
- if(magic==kKitMagic||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
+ if(magic==kKitMagic||magic==kKitMagicV15||magic==kKitMagicV14||magic==kKitMagicV13||magic==kKitMagicV12||magic==kKitMagicV11||magic==kKitMagicV10||magic==kKitMagicV9||magic==kKitMagicV8||magic==kKitMagicV7||magic==kKitMagicV6||magic==kKitMagicV5||magic==kKitMagicV4) {
     if(next<2+kCells+kRows*6+4||next>kMaxKitBytes-8)
        return Steinberg::kResultFalse;
     try {
@@ -1041,6 +1496,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
        return Steinberg::kResultFalse;
     previewPending_.store(0,std::memory_order_release);
     kit_=std::move(candidate);
+    for(auto& revision:editorRevisions_)++revision;
     for(std::size_t i=0;i<kPatterns;++i)
       patternLengths_[i].store(kit_.patternLengths[i],std::memory_order_relaxed);
     songMailbox_.publish(kit_.chain,kit_.songEnabled!=0);
@@ -1054,7 +1510,7 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     // scheduler must never observe a half-restored pattern.
     for(std::size_t p=0;p<kPatterns;++p)
       if(!patterns_.replacePattern(p,
-             kit_.grid.data()+p*kRows*kSteps,kRows*kSteps))
+             kit_.grid.data()+p*kRows*kSteps,kRows*kSteps,kit_.patternLengths[p]))
         return Steinberg::kResultFalse;
     selected_.restoreIfUnchanged(selectionAtStart,kit_.selected);
     patterns_.select(kit_.selected);

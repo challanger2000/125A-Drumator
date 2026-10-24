@@ -11,7 +11,8 @@ struct UiCompactLayout final {
  static constexpr double stepX=622.,stepWidth=19.;
  static constexpr double knobRadius=17.;
  struct Slot {double left,right;};
- static constexpr Slot select{16.,74.},sample{78.,272.},sampleMenu{275.,301.},previous{303.,329.},
+ static constexpr Slot barOne{280.,364.},barTwo{372.,456.},edit{208.,272.};
+ static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
    velocityToggle{1233.,1266.},rowAdd{16.,110.},rowRemove{116.,210.};

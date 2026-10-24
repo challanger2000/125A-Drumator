@@ -19,22 +19,22 @@ void testSecondAuditViewInvalidation() {
  other->invalid();
  check(GetUpdateRect(otherWindow,nullptr,FALSE),"SA01 invalidation oracle misses real repaint request");
  ValidateRect(otherWindow,nullptr);
- auto bothInvalidated=[&](const auto& edit) {
+ auto bothInvalidated=[&](const char* action,const auto& edit) {
    ValidateRect(originalWindow,nullptr);ValidateRect(otherWindow,nullptr);
-   check(edit(),"SA01 actual accepted edit failed");
+   if(!edit())throw std::runtime_error(std::string("SA01 actual accepted edit failed: ")+action);
    check(GetUpdateRect(originalWindow,nullptr,FALSE)&&GetUpdateRect(otherWindow,nullptr,FALSE),
          "SA01 accepted row/global edit did not invalidate BOTH native editors");
  };
  // This path includes the real first View's click handler, not just a direct
  // Controller call. Its local invalid() must not conceal the stale other HWND.
- bothInvalidated([&]{click(*first,475.,126.);return f.c->isRowMuted(0);});
- bothInvalidated([&]{return f.c->toggleRowGate(0,true);});
- bothInvalidated([&]{return f.c->adjustRowMix(0,false,1);});
- bothInvalidated([&]{return f.c->adjustRowMix(0,true,1);});
- bothInvalidated([&]{return f.c->adjustRowPitch(0,1);});
- bothInvalidated([&]{return f.c->adjustSwing(1);});
- bothInvalidated([&]{return f.c->adjustHumanize(1);});
- bothInvalidated([&]{return f.c->clearSample(0);});
+ bothInvalidated("MUTE VIA VIEW",[&]{click(*first,475.,126.);return f.c->isRowMuted(0);});
+ bothInvalidated("SOLO CONTROLLER",[&]{return f.c->toggleRowGate(0,true);});
+ bothInvalidated("ROW VOL",[&]{return f.c->adjustRowMix(0,false,1);});
+ bothInvalidated("ROW PAN",[&]{return f.c->adjustRowMix(0,true,1);});
+ bothInvalidated("ROW PITCH",[&]{return f.c->adjustRowPitch(0,1);});
+ bothInvalidated("SWING",[&]{return f.c->adjustSwing(1);});
+ bothInvalidated("HUMANIZE",[&]{return f.c->adjustHumanize(1);});
+ bothInvalidated("CLEAR SAMPLE",[&]{return f.c->clearSample(0);});
  const auto path=std::filesystem::current_path()/"125A-second-audit-load.wav";
  struct Cleanup {std::filesystem::path file;~Cleanup(){std::error_code ec;std::filesystem::remove(file,ec);}} cleanup{path};
  const auto wav=constantStereo(.125f,-.25f);
@@ -42,7 +42,7 @@ void testSecondAuditViewInvalidation() {
   file.write(reinterpret_cast<const char*>(wav.data()),static_cast<std::streamsize>(wav.size()));
   check(file.good(),"SA01 actual sample file fixture");}
  const auto pathText=pathToUtf8(path);
- bothInvalidated([&]{return f.c->loadWav(0,pathText)==Controller::LoadStatus::Accepted;});
+ bothInvalidated("LOAD SAMPLE",[&]{return f.c->loadWav(0,pathText)==Controller::LoadStatus::Accepted;});
  // Start with a short editor. A change in the shared count must leave every
  // row reachable in the other editor, without unsolicited resize requests.
  auto one=kit;one.visible=1;
@@ -51,18 +51,18 @@ void testSecondAuditViewInvalidation() {
  for(std::size_t row=1;row<kRows;++row){one.names[row].clear();one.displayNames[row].clear();}
  f.kit(one);
  const auto resizeCalls=f.frames[0].calls+f.frames[1].calls;
- bothInvalidated([&]{return f.c->addRow();});
- bothInvalidated([&]{return f.c->addRow();});
+ bothInvalidated("ADD FIRST ROW",[&]{return f.c->addRow();});
+ bothInvalidated("ADD SECOND ROW",[&]{return f.c->addRow();});
  check(f.c->visibleRows()==3&&other->visibleRowsForHit()==2&&
        f.frames[0].calls+f.frames[1].calls==resizeCalls,
        "SA01 peer editor clipped added rows or issued an extra host resize");
  click(*other,1180.,108.+2.*94.+15.);
  check(IntegrationAccess::firstRow(*other)==2&&other->visibleRowsForHit()==1,
        "SA01 newly added row inaccessible in peer compact page");
- bothInvalidated([&]{return f.c->hideLastEmptyRow();});
+ bothInvalidated("HIDE LAST ROW",[&]{return f.c->hideLastEmptyRow();});
  check(f.c->visibleRows()==2&&IntegrationAccess::firstRow(*other)<2,
        "SA01 peer page invalid after row removal");
- bothInvalidated([&]{return f.c->restoreVisibleRows(1);});
+ bothInvalidated("RESTORE ROW COUNT",[&]{return f.c->restoreVisibleRows(1);});
  check(other->visibleRowsForHit()==1,"SA01 row rollback left a stale viewport");
  auto prior=IntegrationAccess::snapshot(*f.c);
  ValidateRect(originalWindow,nullptr);ValidateRect(otherWindow,nullptr);

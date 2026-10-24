@@ -3,6 +3,7 @@
 // This module is NOT the VST3 adapter or a file decoder.
 #pragma once
 #include "SequencerCore.h"
+#include "SampleEdit.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -35,6 +36,15 @@ public:
     bool prepare(double playbackRatio) noexcept {
         if (!std::isfinite(playbackRatio) || playbackRatio<=0.0) return false;
         constexpr double pi=3.141592653589793238462643383279502884;
+        // The renderer copies integer-position samples directly at unity.
+        // Preparing 1024 sinc phases here only stalls the UI/host control
+        // thread when a WAV is replaced during playback; no render uses them.
+        if(playbackRatio==1.0) {
+            ratio_=1.0;
+            taps_=32;
+            ready_=true;
+            return true;
+        }
         const double cutoff=std::min(1.0,1.0/playbackRatio);
         taps_=playbackRatio>=8.0?256:(playbackRatio>=4.0?128:(playbackRatio>=2.0?64:32));
         // Allocate on the control thread, not on the stack or audio thread.
@@ -77,6 +87,7 @@ private:
 
 struct RowSound {
     SampleView sample{};
+    SampleEdit edit{}; // end==0: legacy full-sample playback
     const SincKernel* kernel{nullptr};
     float gain{1.f}; // linear amplitude, 1 = 0 dB.
     float pan{0.f};  // -1 left, 0 center, +1 right.
@@ -114,6 +125,9 @@ public:
            !std::isfinite(sound.pan)||sound.pan< -1.f||sound.pan>1.f)
             return false;
         if(sound.sample.frames!=0) {
+            if(sound.sample.frames>std::numeric_limits<std::uint32_t>::max()||
+               (sound.edit.end!=0&&!sound.edit.valid(static_cast<std::uint32_t>(sound.sample.frames))))
+                return false;
             if(!sound.sample.left||!sound.kernel||!sound.kernel->ready()||
                 sound.sample.frames>static_cast<std::size_t>(
                     std::numeric_limits<std::int64_t>::max()-64))
@@ -186,9 +200,25 @@ public:
              std::fill_n(stemRight[bus],frames,0.f);
            }
         }
+        // Frame-local interpolation memo: simultaneous retriggers of the
+        // same row can share their *unscaled* sinc convolution when the PCM,
+        // SRC kernel, trim boundaries and fractional source position match.
+        // Envelopes, pan, gain, voice lifetime and output routing remain
+        // per voice. Fixed 16-entry scratch; no allocations or locks.
+        struct SincMemo {
+            const float* left{nullptr};
+            const float* right{nullptr};
+            const SincKernel* kernel{nullptr};
+            double position{0.0}, leftValue{0.0}, rightValue{0.0};
+            std::uint32_t trimStart{0},trimEnd{0};
+            bool valid{false};
+        };
+        std::array<SincMemo,kRows> memo{};
         RenderResult result{};
         std::size_t event=0;
         for(std::uint32_t f=0;f<frames;++f) {
+            // The same frame's convolution can be reused, never across frames.
+            for(auto& entry:memo)entry.valid=false;
             while(event<triggerCount&&triggers[event].sampleOffset==f) {
                 fire(triggers[event],result);
                 ++event;
@@ -196,7 +226,7 @@ public:
             double l=0.0,r=0.0;
             for(auto& voice:voices_) {
                 if(!voice.active)continue;
-                if(voice.position>=static_cast<double>(voice.sample.frames)) {
+                if(voice.position>=static_cast<double>(voice.edit.end)) {
                     voice.active=false;
                     continue;
                 }
@@ -213,6 +243,15 @@ public:
                                            voice.sample.right[at]:
                                            voice.sample.left[at]);
                 }else {
+                auto& cached=memo[voice.row];
+                if(cached.valid&&cached.left==voice.sample.left&&
+                   cached.right==voice.sample.right&&
+                   cached.kernel==voice.kernel&&cached.position==x&&
+                   cached.trimStart==voice.edit.start&&
+                   cached.trimEnd==voice.edit.end) {
+                    vl=cached.leftValue;
+                    vr=cached.rightValue;
+                }else {
                 const double fractional=x-static_cast<double>(base);
                 const auto phase=std::min<std::size_t>(
                     static_cast<std::size_t>(fractional*kSincPhases),kSincPhases-1);
@@ -222,27 +261,63 @@ public:
                 // Interior samples have no boundary padding. Hoist this
                 // condition out of the tap loop without changing tap order,
                 // coefficients, or the floating-point accumulation sequence.
-                if(first>=0&&static_cast<std::uint64_t>(first)+taps<=voice.sample.frames) {
+                if(first>=static_cast<std::int64_t>(voice.edit.start)&&
+                   static_cast<std::uint64_t>(first)+taps<=voice.edit.end) {
                     const auto* srcL=voice.sample.left+static_cast<std::size_t>(first);
-                    const auto* srcR=voice.sample.right?
-                        voice.sample.right+static_cast<std::size_t>(first):srcL;
-                    for(std::size_t i=0;i<taps;++i) {
-                        const auto w=static_cast<double>(coeff[i]);
-                        vl+=static_cast<double>(srcL[i])*w;
-                        vr+=static_cast<double>(srcR[i])*w;
+                    if(voice.sample.right) {
+                        const auto* srcR=voice.sample.right+
+                            static_cast<std::size_t>(first);
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto w=static_cast<double>(coeff[i]);
+                            vl+=static_cast<double>(srcL[i])*w;
+                            vr+=static_cast<double>(srcR[i])*w;
+                        }
+                    }else {
+                        // Mono source: L and R convolutions are IDENTICAL.
+                        // Share the exact double-precision result, not the
+                        // coefficients/taps/accumulation order. Zero DSP loss.
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto w=static_cast<double>(coeff[i]);
+                            vl+=static_cast<double>(srcL[i])*w;
+                        }
+                        vr=vl;
                     }
                 }else {
-                    for(std::size_t i=0;i<taps;++i) {
-                        const auto index=first+static_cast<std::int64_t>(i);
-                        if(index<0||static_cast<std::size_t>(index)>=voice.sample.frames)
-                            continue; // identical zero-padding at sample boundaries
-                        const auto w=static_cast<double>(coeff[i]);
-                        const auto at=static_cast<std::size_t>(index);
-                        vl+=static_cast<double>(voice.sample.left[at])*w;
-                        vr+=static_cast<double>(voice.sample.right?
-                                                 voice.sample.right[at]:
-                                                 voice.sample.left[at])*w;
+                    if(voice.sample.right) {
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto index=first+static_cast<std::int64_t>(i);
+                            if(index<static_cast<std::int64_t>(voice.edit.start)||
+                               static_cast<std::uint64_t>(index)>=voice.edit.end)
+                                continue;
+                            const auto w=static_cast<double>(coeff[i]);
+                            const auto at=static_cast<std::size_t>(index);
+                            vl+=static_cast<double>(voice.sample.left[at])*w;
+                            vr+=static_cast<double>(voice.sample.right[at])*w;
+                        }
+                    }else {
+                        for(std::size_t i=0;i<taps;++i) {
+                            const auto index=first+static_cast<std::int64_t>(i);
+                            if(index<static_cast<std::int64_t>(voice.edit.start)||
+                               static_cast<std::uint64_t>(index)>=voice.edit.end)
+                                continue;
+                            const auto w=static_cast<double>(coeff[i]);
+                            vl+=static_cast<double>(voice.sample.left[
+                                static_cast<std::size_t>(index)])*w;
+                        }
+                        vr=vl; // Same zero-padding and arithmetic as mono L.
                     }
+                }
+                // A cache hit skips only the sinc convolution, not envelope
+                // or sample ageing. Keep the original tap accumulation order.
+                cached.left=voice.sample.left;
+                cached.right=voice.sample.right;
+                cached.kernel=voice.kernel;
+                cached.position=x;
+                cached.trimStart=voice.edit.start;
+                cached.trimEnd=voice.edit.end;
+                cached.leftValue=vl;
+                cached.rightValue=vr;
+                cached.valid=true;
                 }
                 }
                 double envelope=1.0;
@@ -251,8 +326,10 @@ public:
                              static_cast<double>(voice.releaseTotal);
                     --voice.releaseLeft;
                 }
-                const auto a=static_cast<float>(vl*voice.gainL*envelope);
-                const auto b=static_cast<float>(vr*voice.gainR*envelope);
+                const auto editGain=static_cast<double>(voice.edit.amplitude(
+                    static_cast<std::uint32_t>(base)));
+                const auto a=static_cast<float>(vl*voice.gainL*envelope*editGain);
+                const auto b=static_cast<float>(vr*voice.gainR*envelope*editGain);
                 if(stemLeft&&stemRight&&voice.outputBus>0&&
                    stemLeft[voice.outputBus]&&stemRight[voice.outputBus]) {
                    stemLeft[voice.outputBus][f]+=a;
@@ -262,7 +339,7 @@ public:
                 }
                 voice.position+=voice.kernel->ratio();
                 if((voice.releaseTotal>0&&voice.releaseLeft==0)||
-                   voice.position>=static_cast<double>(voice.sample.frames))
+                   voice.position>=static_cast<double>(voice.edit.end))
                     voice.active=false;
             }
             if(left) {
@@ -276,6 +353,7 @@ public:
 private:
     struct Voice {
         SampleView sample{};
+        SampleEdit edit{};
         const SincKernel* kernel{nullptr};
         double position{0.0};
         double gainL{0.0},gainR{0.0};
@@ -307,8 +385,11 @@ private:
             const double pan=static_cast<double>(row.pan);
             const double velocity=static_cast<double>(event.velocity)/127.0;
             v.sample=row.sample;
+            v.edit=row.edit.end==0
+                ?SampleEdit::reset(static_cast<std::uint32_t>(row.sample.frames))
+                :row.edit;
             v.kernel=row.kernel;
-            v.position=0;
+            v.position=static_cast<double>(v.edit.start);
             // Center pan=0: unity WAV sample amplitude on each channel.
             // This is a transparent stereo BALANCE law, not a +dB booster:
             // left falls smoothly to 0 when panned right, and vice versa.
