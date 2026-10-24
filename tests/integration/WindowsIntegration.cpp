@@ -108,6 +108,10 @@ namespace drumator {
 // including Undo/clipboard/paths, rather than mirroring the commit algorithm.
 struct IntegrationAccess {
  static bool sampleEditorOpen(const DrumatorView& view){return view.sampleEditorOpen_;}
+ static std::array<double,3> rotaryImageStatus(const DrumatorView& view){
+   const auto* bmp=view.knobBitmap_;
+   return {bmp&&bmp->isLoaded()?1.:0.,bmp?bmp->getWidth():-1.,bmp?bmp->getHeight():-1.};
+ }
  static SampleEdit sampleEditorDraft(const DrumatorView& view){return view.sampleEditorEdit_;}
  static void setSampleEditorDraft(DrumatorView& view,const SampleEdit& edit){view.sampleEditorEdit_=edit;}
  static void setStatusText(DrumatorView& view,const std::string& status){view.status_=status;}
