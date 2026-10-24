@@ -51,6 +51,13 @@ const VSTGUI::CColor on{224,137,66,255};
 const VSTGUI::CColor off{67,81,96,255};
 const VSTGUI::CColor letters{228,236,243,255};
 const VSTGUI::CColor accent{104,175,203,255};
+// Blue instrument modules are drawn natively so they follow row expansion and zoom.
+const VSTGUI::CColor rowBlueA{19,70,122,255};
+const VSTGUI::CColor rowBlueB{16,62,110,255};
+const VSTGUI::CColor rowBlueSelected{27,91,148,255};
+const VSTGUI::CColor rowBlueBorder{43,114,175,255};
+const VSTGUI::CColor stepWellBlue{11,39,74,255};
+const VSTGUI::CColor velocityWellBlue{10,43,79,255};
 
 // Exact 125A vector logo from the authoritative brand master, rendered
 // natively through VSTGUI (SVG paths contain only M, L, Z commands).
@@ -612,10 +619,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double y=rowTopOnPage(i);
    const bool chosen=row==velocityRow_;
    const auto rowH=UiCompactLayout::baseRow+(velocityExpanded_[row]?UiCompactLayout::velocityRow:0.);
-   c->setFillColor(chosen?VSTGUI::CColor{42,69,88,255}:(i%2?background:panel));
+   c->setFillColor(chosen?rowBlueSelected:(i%2?rowBlueB:rowBlueA));
    c->drawRect({9,y,1270,y+rowH-2.},VSTGUI::kDrawFilled);
-   c->setFrameColor(chosen?accent:border);
+   c->setFrameColor(chosen?accent:rowBlueBorder);
    c->drawRect({9,y,1270,y+rowH-2.},VSTGUI::kDrawStroked);
+   // Recessed dark-blue sequencer strip; paint before interactive steps.
+   c->setFillColor(stepWellBlue);
+   c->drawRect({kGridX-3.,y+39,kGridRight+4.,y+82},VSTGUI::kDrawFilled);
    char name[16]{};
    std::snprintf(name,sizeof(name),"%02u",static_cast<unsigned>(row+1));
    drawControl(c,{16,y+5,74,y+35},name,chosen);
@@ -708,7 +718,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawString("VELO",{1233,y+12,1266,y+35});
    drawControl(c,{1233,y+45,1266,y+79},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
    if(velocityExpanded_[row]){
-     c->setFillColor(background);
+     c->setFillColor(velocityWellBlue);
      c->drawRect({16,y+94,1266,y+123},VSTGUI::kDrawFilled);
      c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
      c->drawString("VELOCITY",{78,y+94,170,y+122},VSTGUI::kLeftText);
