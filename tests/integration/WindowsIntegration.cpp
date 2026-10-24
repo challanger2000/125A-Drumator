@@ -645,10 +645,10 @@ void testVisualRender(){
    click(*v,1150.,20.);
    captureVstgui(*v,"v2-zoom-menu",1.0);
    click(*v,15.,390.);
-   click(*v,1248,108.+60.);
+   click(*v,1248,108.+88.);
    check(IntegrationAccess::velocityExpanded(*v,0),"V2 row 1 expansion failed");
    const auto row2=IntegrationAccess::rowTop(*v,1);
-   click(*v,1248,row2+60.);
+   click(*v,1248,row2+88.);
    check(IntegrationAccess::velocityExpanded(*v,0)&&
          IntegrationAccess::velocityExpanded(*v,1),"V2 expansion changed another row");
    captureVstgui(*v,"v2-two-velocity-rows",1.0);
@@ -671,6 +671,17 @@ void testVisualRender(){
    check(IntegrationAccess::firstRow(*v)==8&&IntegrationAccess::selectedRow(*v)==8,
          "V2 third page selection/paging failed");
    captureVstgui(*v,"v2-16-rows-page-3",1.0);
+   // Scrollbar must reach the last four actual instruments by thumb drag.
+   click(*v,1271.,UiCompactLayout::scrollTop+1.);
+   check(IntegrationAccess::firstRow(*v)==0,"scrollbar top");
+   const double rail=IntegrationAccess::rowTop(*v,4)-8.-UiCompactLayout::scrollTop;
+   VSTGUI::CPoint thumb(1271.,UiCompactLayout::scrollTop+rail/8.);
+   v->onMouseDown(thumb,VSTGUI::CButtonState(VSTGUI::kLButton));
+   thumb.y=UiCompactLayout::scrollTop+rail-2.;
+   v->onMouseMoved(thumb,VSTGUI::CButtonState(VSTGUI::kLButton));
+   v->onMouseUp(thumb,{});
+   check(IntegrationAccess::firstRow(*v)==12,"scrollbar last page");
+   captureVstgui(*v,"v2-16-rows-scrolled",1.0);
  }
  {
    Fixture f;f.kit(namedKit('X',4));f.open();
@@ -694,23 +705,23 @@ void testPrecisionPanel(){
    v->onMouseUp(at,{});
  };
  const double top=UiCompactLayout::header;
- drag(133.,top+68.,-25.);
+ drag(133.,top+UiCompactLayout::rowKnobY,-25.);
  check(f.c->rowGain(0)==117,"UX rotary gain 25px must increase 17%");
- click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ click(*v,133.,top+UiCompactLayout::rowKnobY,VSTGUI::kLButton|VSTGUI::kControl);
  check(f.c->rowGain(0)==100,"V2 rotary Ctrl default not 100");
  {
-   VSTGUI::CPoint pt(133.,top+68.);
+   VSTGUI::CPoint pt(133.,top+UiCompactLayout::rowKnobY);
    v->onMouseDown(pt,VSTGUI::CButtonState(VSTGUI::kLButton|VSTGUI::kShift));
    pt.y-=15.;
    v->onMouseMoved(pt,VSTGUI::CButtonState(VSTGUI::kLButton));
    v->onMouseUp(pt,{});
    check(f.c->rowGain(0)==103,"UX fine knob sensitivity not latched");
-   click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+   click(*v,133.,top+UiCompactLayout::rowKnobY,VSTGUI::kLButton|VSTGUI::kControl);
    check(f.c->rowGain(0)==100,"UX fine knob Ctrl reset failed");
  }
  // P11: actual VSTGUI PAN +100 must be reachable AND reversible;
  // regress the original owner report where a fully right-panned knob stuck.
- drag(254.,top+68.,-150.);
+ drag(254.,top+UiCompactLayout::rowKnobY,-150.);
  check(f.c->rowPan(0)==100,"P11 PAN +100 rotary endpoint unreachable");
  {
    ResizableMemoryIBStream saved;KitState state;
@@ -719,9 +730,9 @@ void testPrecisionPanel(){
              static_cast<std::size_t>(saved.getCursor()),state)&&state.pan[0]==200,
          "P11 +100 panorama not persisted by actual processor");
  }
- drag(254.,top+68.,30.);
+ drag(254.,top+UiCompactLayout::rowKnobY,30.);
  check(f.c->rowPan(0)==80,"P11 PAN jammed at +100 on reverse drag");
- drag(254.,top+68.,300.);
+ drag(254.,top+UiCompactLayout::rowKnobY,300.);
  check(f.c->rowPan(0)==-100,"P11 PAN -100 endpoint unreachable");
  {
    ResizableMemoryIBStream saved;KitState state;
@@ -730,22 +741,22 @@ void testPrecisionPanel(){
              static_cast<std::size_t>(saved.getCursor()),state)&&state.pan[0]==0,
          "P11 -100 panorama not persisted by actual processor");
  }
- click(*v,254.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ click(*v,254.,top+UiCompactLayout::rowKnobY,VSTGUI::kLButton|VSTGUI::kControl);
  check(f.c->rowPan(0)==0,"P11 PAN Ctrl reset to center failed");
  // Volume must also leave its maximum, and default must stay at 100%.
- drag(133.,top+68.,-150.);
+ drag(133.,top+UiCompactLayout::rowKnobY,-150.);
  check(f.c->rowGain(0)==200,"P11 VOL 200% endpoint unreachable");
- drag(133.,top+68.,30.);
+ drag(133.,top+UiCompactLayout::rowKnobY,30.);
  check(f.c->rowGain(0)==180,"P11 VOL stuck at 200% after reversing");
- click(*v,133.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ click(*v,133.,top+UiCompactLayout::rowKnobY,VSTGUI::kLButton|VSTGUI::kControl);
  check(f.c->rowGain(0)==100,"P11 VOL Ctrl reset not 100%");
- drag(375.,top+68.,-60.);
+ drag(375.,top+UiCompactLayout::rowKnobY,-60.);
  check(f.c->rowPitch(0)==24,"V2 pitch rotary maximum failed");
- drag(375.,top+68.,30.);
+ drag(375.,top+UiCompactLayout::rowKnobY,30.);
  check(f.c->rowPitch(0)==12,"P11 PITCH stuck at +24 semitones");
- click(*v,375.,top+68.,VSTGUI::kLButton|VSTGUI::kControl);
+ click(*v,375.,top+UiCompactLayout::rowKnobY,VSTGUI::kLButton|VSTGUI::kControl);
  check(f.c->rowPitch(0)==0,"P11 PITCH Ctrl reset failed");
- drag(496.,top+68.,-250.);
+ drag(496.,top+UiCompactLayout::rowKnobY,-250.);
  check(f.c->rowRandomVelocity(0)==0,"V2 button unexpectedly enabled legacy realtime random");
  // Existing projects with stored nonzero RT retain their usable old control.
  {
@@ -754,7 +765,7 @@ void testPrecisionPanel(){
   oldKit.randomVelocity[0]=30;
   legacy.kit(oldKit);legacy.open();
   auto* oldView=IntegrationAccess::view(*legacy.c,0);
-  VSTGUI::CPoint first(496.,top+68.);
+  VSTGUI::CPoint first(496.,top+UiCompactLayout::rowKnobY);
   oldView->onMouseDown(first,VSTGUI::CButtonState(VSTGUI::kLButton));
   VSTGUI::CPoint last(496.,top-182.);
   oldView->onMouseMoved(last,VSTGUI::CButtonState(VSTGUI::kLButton));
@@ -765,16 +776,16 @@ void testPrecisionPanel(){
  click(*v,597.,top+20.);
  click(*v,560.,top+36.+13.);
  check(f.c->rowOutput(0)==8,"V2 direct output selection OUT 9 failed");
- click(*v,590.,top+69.); // choke is beside the row's random-velocity knob
+ click(*v,590.,top+89.); // choke is beside the row's random-velocity knob
  click(*v,554.,top+36.+4.*27.+12.);
  check(f.c->rowChoke(0)==4,"V2 Choke 4 direct selection failed");
  click(*v,45.,top+UiCompactLayout::baseRow+12.);
  check(IntegrationAccess::selectedRow(*v)==1,
        "V2 instrument header selection failed");
- drag(133.,top+UiCompactLayout::baseRow+68.,-25.);
+ drag(133.,top+UiCompactLayout::baseRow+UiCompactLayout::rowKnobY,-25.);
  check(f.c->rowGain(0)==100&&f.c->rowGain(1)==117,
        "V2 rotary changed wrong instrument");
- click(*v,133.,top+UiCompactLayout::baseRow+68.);
+ click(*v,133.,top+UiCompactLayout::baseRow+UiCompactLayout::rowKnobY);
  check(IntegrationAccess::activeKnob(*v)==0,"V2 knob capture not active");
  check(f.recall(Fixture::encode(namedKit('Y')))==kResultOk,"V2 recall failed");
  VSTGUI::CPoint stale(133.,0.);
@@ -797,7 +808,7 @@ void testVelocityLaneExistingStepsOnly(){
  const auto col=[](std::size_t step)->double {
    return UiCompactLayout::stepX+static_cast<double>(step)*UiCompactLayout::stepWidth+8.;
  };
- click(*v,1248.,top+60.);
+ click(*v,1248.,top+88.);
  check(IntegrationAccess::velocityExpanded(*v,0),
        "Velocity blank-gate fixture lane did not expand");
  click(*v,col(1),barY);
@@ -1225,9 +1236,9 @@ void testPatternLengthControls(){
  check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
  const double blockedX=UiCompactLayout::stepX+20.*UiCompactLayout::stepWidth+8.;
  const auto oldHidden=f.c->velocity(0,0,20);
- click(*v,blockedX,UiCompactLayout::header+60.);
+ click(*v,blockedX,UiCompactLayout::header+88.);
  check(f.c->velocity(0,0,20)==oldHidden,"UX clicked inactive step 21 in 1T");
- click(*v,1248.,UiCompactLayout::header+60.);
+ click(*v,1248.,UiCompactLayout::header+88.);
  click(*v,blockedX,UiCompactLayout::header+UiCompactLayout::baseRow+12.);
  check(f.c->velocity(0,0,20)==oldHidden,"UX edited inactive velocity in 1T");
  click(*v,322.,20.);
@@ -1806,11 +1817,11 @@ void testPeerVelocityCancelPreservesCommittedStep(){
  f.open();f.open();
  auto* first=IntegrationAccess::view(*f.c,0);
  auto* peer=IntegrationAccess::view(*f.c,1);
- click(*first,1248.,168.);
- click(*first,630.,214.);
+ click(*first,1248.,108.+88.);
+ click(*first,630.,108.+UiCompactLayout::baseRow+12.);
  check(std::get<0>(IntegrationAccess::viewSnapshot(*first)),
        "V1A03 first view gesture absent");
- click(*peer,630.,108.+94.+60.);
+ click(*peer,630.,108.+UiCompactLayout::baseRow+88.);
  check(f.c->velocity(0,1,0)==100,
        "V1A03 peer step was not committed");
  // The peer edit commits the first gesture, so its last velocity

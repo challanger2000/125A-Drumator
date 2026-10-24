@@ -96,6 +96,9 @@ private:
  std::size_t detailDragRow_{kRows};
  bool changeDetailValue(std::size_t row,int slot,int requested);
  bool compactViewport_{false};
+ bool draggingScroll_{false};
+ double scrollGrab_{0.};
+ bool moveScroll(double y,double grab);
  std::size_t compactPageRows_{4};
  std::size_t displayedRows() const noexcept;
  double rowTopOnPage(std::size_t pageIndex) const noexcept;

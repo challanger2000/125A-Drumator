@@ -6,16 +6,17 @@
 #include <cstdint>
 namespace drumator {
 struct UiCompactLayout final {
- static constexpr double width=1280.,header=108.,baseRow=94.,velocityRow=30.,footer=54.;
+ static constexpr double width=1280.,header=108.,baseRow=130.,velocityRow=30.,footer=54.;
  static constexpr std::size_t perPage=4;
  static constexpr double stepX=622.,stepWidth=19.;
- static constexpr double knobRadius=25.;
+ static constexpr double knobRadius=25.,rowKnobY=88.;
+ static constexpr double scrollLeft=1263.,scrollRight=1279.,scrollTop=header+7.;
  struct Slot {double left,right;};
  static constexpr Slot barOne{280.,364.},barTwo{372.,456.},edit{208.,272.};
  static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
-   velocityToggle{1233.,1266.},rowAdd{16.,110.},rowRemove{116.,210.};
+   velocityToggle{1233.,1259.},rowAdd{16.,110.},rowRemove{116.,210.};
  static constexpr std::array<double,4> rowKnobCenters{{133.,254.,375.,496.}};
  static constexpr std::array<double,3> globalKnobCenters{{78.,176.,1180.}};
  static constexpr std::array<double,4> userZooms{{1.,1.2,1.3,1.5}};

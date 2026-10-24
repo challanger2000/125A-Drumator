@@ -101,36 +101,36 @@ void drawBrandLogo(VSTGUI::CDrawContext* c) {
 
 // Centralized VSTGUI button renderer: consistent visible frame, fill,
 // contrast and selected/disabled states, with fixed hit regions.
-void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
+void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
                  const char* title,bool selected=false,bool enabled=true) {
- // Compact blue-metal button, matching the row wells and illuminated steps.
- // The rectangle itself remains unchanged, so mouse hit testing is unaffected.
- const VSTGUI::CColor deep{8,28,51,255};
- const VSTGUI::CColor top= !enabled?VSTGUI::CColor{32,47,60,255}:
-   selected?VSTGUI::CColor{37,132,183,255}:VSTGUI::CColor{45,90,130,255};
- const VSTGUI::CColor lower= !enabled?VSTGUI::CColor{27,39,49,255}:
-   selected?VSTGUI::CColor{19,87,144,255}:VSTGUI::CColor{21,54,88,255};
- ctx->setFillColor(deep);
- ctx->drawRect(rect,VSTGUI::kDrawFilled);
- if(rect.getWidth()>4.&&rect.getHeight()>4.) {
-   const double mid=(rect.top+rect.bottom)*.5;
-   ctx->setFillColor(top);
-   ctx->drawRect({rect.left+2.,rect.top+2.,rect.right-2.,mid},VSTGUI::kDrawFilled);
-   ctx->setFillColor(lower);
-   ctx->drawRect({rect.left+2.,mid,rect.right-2.,rect.bottom-2.},VSTGUI::kDrawFilled);
-   ctx->setFillColor(selected?VSTGUI::CColor{111,213,242,255}:
-       VSTGUI::CColor{90,143,179,255});
-   ctx->drawRect({rect.left+2.,rect.top+2.,rect.right-2.,rect.top+3.},
-                 VSTGUI::kDrawFilled);
+ // Recessed bezel + raised keycap with one consistent upper-left light source.
+ c->setFillColor(VSTGUI::CColor{4,19,37,255});
+ c->drawRect(r,VSTGUI::kDrawFilled);
+ if(r.getWidth()>6.&&r.getHeight()>8.) {
+   const double press=selected?2.:1.;
+   const VSTGUI::CRect face{r.left+2.,r.top+press,r.right-2.,
+                            r.bottom-(selected?2.:4.)};
+   c->setFillColor(VSTGUI::CColor{3,13,26,255});
+   c->drawRect({r.left+2.,r.bottom-4.,r.right-1.,r.bottom-1.},VSTGUI::kDrawFilled);
+   const double mid=face.top+face.getHeight()*.48;
+   c->setFillColor(!enabled?VSTGUI::CColor{38,49,60,255}:
+         selected?VSTGUI::CColor{18,83,128,255}:VSTGUI::CColor{70,123,163,255});
+   c->drawRect({face.left,face.top,face.right,mid},VSTGUI::kDrawFilled);
+   c->setFillColor(!enabled?VSTGUI::CColor{24,35,48,255}:
+         selected?VSTGUI::CColor{29,113,163,255}:VSTGUI::CColor{22,52,87,255});
+   c->drawRect({face.left,mid,face.right,face.bottom},VSTGUI::kDrawFilled);
+   c->setFillColor(selected?VSTGUI::CColor{8,35,59,255}:
+                             VSTGUI::CColor{151,193,216,255});
+   c->drawRect({face.left,face.top,face.right,face.top+1.},VSTGUI::kDrawFilled);
+   c->setFrameColor(!enabled?VSTGUI::CColor{44,59,76,255}:
+        selected?VSTGUI::CColor{113,207,242,255}:VSTGUI::CColor{77,135,175,255});
+   c->drawRect(face,VSTGUI::kDrawStroked);
  }
- ctx->setFrameColor(!enabled?VSTGUI::CColor{52,69,83,255}:
-                     selected?VSTGUI::CColor{130,223,244,255}:
-                              VSTGUI::CColor{60,108,147,255});
- ctx->drawRect(rect,VSTGUI::kDrawStroked);
- ctx->setFont(VSTGUI::kNormalFont,12);
- ctx->setFontColor(!enabled?VSTGUI::CColor{109,129,143,255}:
-                   selected?VSTGUI::CColor{248,252,255,255}:letters);
- ctx->drawString(title,rect);
+ c->setFrameColor(VSTGUI::CColor{4,22,40,255});
+ c->drawRect(r,VSTGUI::kDrawStroked);
+ c->setFont(VSTGUI::kNormalFont,12);
+ c->setFontColor(!enabled?VSTGUI::CColor{113,131,147,255}:letters);
+ c->drawString(title,{r.left,r.top+(selected?1.:0.),r.right,r.bottom+(selected?1.:0.)});
 }
 
 void drawPanelScrew(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* bitmap,double x,double y,double angle) {
@@ -395,6 +395,22 @@ double DrumatorView::gridBottom() const noexcept {return rowTopOnPage(displayedR
 void DrumatorView::closeTransientMenus() noexcept {
  popup_=0;popupRow_=kRows;fillMenuRow_=-1;
 }
+bool DrumatorView::moveScroll(double y,double grab) {
+ const auto total=controller_.visibleRows(),shown=displayedRows();
+ if(shown==0||total<=shown)return false;
+ const double top=UiCompactLayout::scrollTop;
+ const double length=std::max(1.,gridBottom()-8.-top);
+ const double thumb=std::clamp(length*static_cast<double>(shown)/
+                      static_cast<double>(total),28.,length);
+ const double travel=std::max(1.,length-thumb);
+ const auto next=static_cast<std::size_t>(std::lround(
+     std::clamp((y-grab-top)/travel,0.,1.)*static_cast<double>(total-shown)));
+ if(next==firstRow_)return true;
+ const auto previous=firstRow_;firstRow_=next;
+ if(!adjustEditorHeight()){firstRow_=previous;(void)adjustEditorHeight();return false;}
+ if(velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())velocityRow_=firstRow_;
+ closeTransientMenus();invalid();return true;
+}
 bool DrumatorView::toggleRowVelocity(std::size_t row) {
  if(row>=controller_.visibleRows())return false;
  if(laneDragActive_){controller_.endVelocityStroke(false,this);laneDragActive_=false;}
@@ -431,6 +447,7 @@ DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
+ draggingScroll_=false;
  if(sampleEditorOpen_){controller_.stopSampleEditPreview();sampleEditorOpen_=false;
    sampleEditorRow_=kRows;sampleEditorDrag_=0;}
  if(laneDragActive_){controller_.endVelocityStroke(false,this);laneDragActive_=false;}
@@ -593,7 +610,7 @@ bool DrumatorView::attached(VSTGUI::CView* parent) {
 }
 bool DrumatorView::adjustEditorHeight() {
  const auto total=controller_.visibleRows();
- if(firstRow_>=total)firstRow_=total>0?((total-1)/UiCompactLayout::perPage)*UiCompactLayout::perPage:0;
+ if(firstRow_>=total)firstRow_=total>0?total-1:0;
  const auto page=std::min(UiCompactLayout::perPage,total-firstRow_);
  // The Song board needs only its own 370px surface.
  const auto height=songEditorOpen_?370.:
@@ -611,8 +628,8 @@ bool DrumatorView::adjustEditorHeight() {
    status_="HOST WINDOW TOO SMALL: PAGE ROWS WITH ARROWS";
    invalid();return false;
  }
- compactPageRows_=UiCompactLayout::perPage;
- compactViewport_=total>UiCompactLayout::perPage;
+ compactPageRows_=page;
+ compactViewport_=total>page;
  if(velocityRow_<firstRow_||velocityRow_>=firstRow_+displayedRows())
    velocityRow_=firstRow_;
  if(auto* parent=getParentView())parent->setViewSize({0,0,1280,height});
@@ -677,15 +694,19 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const bool chosen=row==velocityRow_;
    const auto rowH=UiCompactLayout::baseRow+(velocityExpanded_[row]?UiCompactLayout::velocityRow:0.);
    c->setFillColor(chosen?rowBlueSelected:(i%2?rowBlueB:rowBlueA));
-   c->drawRect({9,y,1270,y+rowH-2.},VSTGUI::kDrawFilled);
+   c->drawRect({9,y+2.,1261,y+rowH-4.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{7,27,52,255});
+   c->drawRect({9,y+rowH-6.,1261,y+rowH-3.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{67,138,191,255});
+   c->drawRect({10,y+2.,1260,y+4.},VSTGUI::kDrawFilled);
    c->setFrameColor(chosen?accent:rowBlueBorder);
-   c->drawRect({9,y,1270,y+rowH-2.},VSTGUI::kDrawStroked);
+   c->drawRect({9,y+2.,1261,y+rowH-4.},VSTGUI::kDrawStroked);
    // Recessed dark-blue sequencer strip; paint before interactive steps.
    c->setFillColor(stepWellBlue);
-   c->drawRect({kGridX-3.,y+39,kGridRight+4.,y+82},VSTGUI::kDrawFilled);
+   c->drawRect({kGridX-3.,y+64,kGridRight+4.,y+109},VSTGUI::kDrawFilled);
    char name[16]{};
    std::snprintf(name,sizeof(name),"%02u",static_cast<unsigned>(row+1));
-   drawControl(c,{16,y+5,74,y+35},name,chosen);
+   drawControl(c,{16,y+9,74,y+40},name,chosen);
    // Sample name remains editable on Shift-click; click opens WAV/FLAC picker.
    const auto& raw=controller_.label(row);
    std::string fitted=raw;
@@ -704,26 +725,26 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(c->getStringWidth(fitted.c_str())>space)fitted="...";
    }
    c->setFillColor(background);
-   c->drawRect({UiCompactLayout::sample.left,y+5,UiCompactLayout::sample.right,y+35},VSTGUI::kDrawFilled);
-   c->setFrameColor(border);c->drawRect({UiCompactLayout::sample.left,y+5,UiCompactLayout::sample.right,y+35},VSTGUI::kDrawStroked);
+   c->drawRect({UiCompactLayout::sample.left,y+9,UiCompactLayout::sample.right,y+40},VSTGUI::kDrawFilled);
+   c->setFrameColor(border);c->drawRect({UiCompactLayout::sample.left,y+9,UiCompactLayout::sample.right,y+40},VSTGUI::kDrawStroked);
    c->setFontColor(letters);
-   c->drawString(fitted.c_str(),{UiCompactLayout::sample.left+5,y+5,UiCompactLayout::sample.right-2,y+35},VSTGUI::kLeftText);
-   drawControl(c,{275,y+5,301,y+35},"...");
-    drawControl(c,{UiCompactLayout::edit.left,y+5,UiCompactLayout::edit.right,y+35},"EDIT",false,controller_.hasSample(row));
-   drawControl(c,{303,y+5,329,y+35},"<");
-   drawControl(c,{332,y+5,358,y+35},">");
-   drawControl(c,{362,y+5,398,y+35},"PLAY");
-   drawControl(c,{403,y+5,452,y+35},"FILL");
-   drawControl(c,{457,y+5,491,y+35},"M",controller_.isRowMuted(row));
-   drawControl(c,{496,y+5,530,y+35},"S",controller_.isRowSolo(row));
+   c->drawString(fitted.c_str(),{UiCompactLayout::sample.left+5,y+9,UiCompactLayout::sample.right-2,y+40},VSTGUI::kLeftText);
+   drawControl(c,{275,y+9,301,y+40},"...");
+    drawControl(c,{UiCompactLayout::edit.left,y+9,UiCompactLayout::edit.right,y+40},"EDIT",false,controller_.hasSample(row));
+   drawControl(c,{303,y+9,329,y+40},"<");
+   drawControl(c,{332,y+9,358,y+40},">");
+   drawControl(c,{362,y+9,398,y+40},"PLAY");
+   drawControl(c,{403,y+9,452,y+40},"FILL");
+   drawControl(c,{457,y+9,491,y+40},"M",controller_.isRowMuted(row));
+   drawControl(c,{496,y+9,530,y+40},"S",controller_.isRowSolo(row));
    const auto out=controller_.rowOutput(row);
    if(out==0)std::snprintf(name,sizeof(name),"MAIN v");
    else std::snprintf(name,sizeof(name),"OUT %u v",out+1);
-   drawControl(c,{535,y+5,615,y+35},name,popup_==3&&popupRow_==row);
+   drawControl(c,{535,y+9,615,y+40},name,popup_==3&&popupRow_==row);
    std::snprintf(name,sizeof(name),"CH%u v",controller_.rowChoke(row));
    c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
-   c->drawString("CHOKE",{570,y+37,615,y+52});
-   drawControl(c,{570,y+54,615,y+86},name,popup_==4&&popupRow_==row);
+   c->drawString("CHOKE",{570,y+52,615,y+73});
+   drawControl(c,{570,y+73,615,y+105},name,popup_==4&&popupRow_==row);
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
@@ -737,7 +758,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        if(v==0)std::snprintf(desc,sizeof(desc),"C");
        else std::snprintf(desc,sizeof(desc),"%c%d",v<0?'L':'R',std::abs(v));
      }else std::snprintf(desc,sizeof(desc),"%+d st",v);
-     drawRotary(c,knobBitmap_,centers[k],y+68,
+     drawRotary(c,knobBitmap_,centers[k],y+88,
                 static_cast<double>(v-lo)/static_cast<double>(hi-lo),
                 labels[k],desc,chosen&&activeKnob_==k);
    }
@@ -746,10 +767,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      char legacy[32]{};
      std::snprintf(legacy,sizeof(legacy),"LEGACY RT %u%%",
                    static_cast<unsigned>(controller_.rowRandomVelocity(row)));
-     drawRotary(c,knobBitmap_,centers[3],y+68,controller_.rowRandomVelocity(row)/100.,
+     drawRotary(c,knobBitmap_,centers[3],y+88,controller_.rowRandomVelocity(row)/100.,
                 "RANDOM RT",legacy,chosen&&activeKnob_==3);
    }else{
-     drawControl(c,{448,y+52,544,y+84},"RANDOM VEL");
+     drawControl(c,{448,y+73,544,y+105},"RANDOM VEL");
    }
    const auto steps=controller_.patternLength(controller_.currentPattern());
    for(std::size_t step=0;step<32;++step) {
@@ -763,12 +784,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        c->setFont(VSTGUI::kNormalFont,12);
        c->setFontColor(inactive?VSTGUI::CColor{146,165,180,255}:
                                 VSTGUI::CColor{226,242,253,255});
-       c->drawString(index,{sx+3.,y+10.,sx+32.,y+30.},VSTGUI::kLeftText);
+       c->drawString(index,{sx+3.,y+36.,sx+32.,y+57.},VSTGUI::kLeftText);
      }
      // FL-style tactile step: dark recessed body, orange layered face and gloss.
      // Keep all geometry inside the unchanged 19-pixel step hit region.
      const bool lit=velocity>0&&!inactive;
-     const VSTGUI::CRect outer{sx+1.,y+44.,sx+18.,y+78.};
+     const VSTGUI::CRect outer{sx+1.,y+69.,sx+18.,y+103.};
      c->setFillColor(VSTGUI::CColor{5,17,33,255});
      c->drawRect(outer,VSTGUI::kDrawFilled);
      c->setFrameColor(step%4==0?VSTGUI::CColor{91,139,183,255}:
@@ -777,34 +798,34 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      c->setFillColor(inactive?VSTGUI::CColor{30,40,51,255}:
                      lit?VSTGUI::CColor{234,93,12,255}:
                          VSTGUI::CColor{41,53,69,255});
-     c->drawRect({sx+3.,y+47.,sx+16.,y+75.},VSTGUI::kDrawFilled);
+     c->drawRect({sx+3.,y+72.,sx+16.,y+100.},VSTGUI::kDrawFilled);
      c->setFillColor(inactive?VSTGUI::CColor{53,61,72,255}:
                      lit?VSTGUI::CColor{255,156,39,255}:
                          VSTGUI::CColor{79,94,111,255});
-     c->drawRect({sx+4.,y+48.,sx+15.,y+56.},VSTGUI::kDrawFilled);
+     c->drawRect({sx+4.,y+73.,sx+15.,y+81.},VSTGUI::kDrawFilled);
      c->setFillColor(inactive?VSTGUI::CColor{49,54,61,255}:
                      lit?VSTGUI::CColor{255,201,92,255}:
                          VSTGUI::CColor{103,114,127,255});
-     c->drawRect({sx+4.,y+48.,sx+15.,y+50.},VSTGUI::kDrawFilled);
+     c->drawRect({sx+4.,y+73.,sx+15.,y+75.},VSTGUI::kDrawFilled);
      if(lit) {
        c->setFillColor(VSTGUI::CColor{255,226,151,255});
-       c->drawRect({sx+6.,y+68.,sx+13.,y+72.},VSTGUI::kDrawFilled);
+       c->drawRect({sx+6.,y+88.,sx+13.,y+97.},VSTGUI::kDrawFilled);
      }
    }
    c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
-   c->drawString("VELO",{1233,y+12,1266,y+35});
-   drawControl(c,{1233,y+45,1266,y+79},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
+   c->drawString("VELO",{1233,y+41,1259,y+40});
+   drawControl(c,{1233,y+70,1259,y+105},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
    if(velocityExpanded_[row]){
      c->setFillColor(velocityWellBlue);
-     c->drawRect({16,y+94,1266,y+123},VSTGUI::kDrawFilled);
+     c->drawRect({16,y+130,1266,y+159},VSTGUI::kDrawFilled);
      c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
-     c->drawString("VELOCITY",{78,y+94,170,y+122},VSTGUI::kLeftText);
+     c->drawString("VELOCITY",{78,y+130,170,y+158},VSTGUI::kLeftText);
      if(row==velocityRow_) {
        char current[48]{};
        std::snprintf(current,sizeof(current),"STEP %u : %u / 127",
          static_cast<unsigned>(velocityStep_+1),
          static_cast<unsigned>(controller_.velocity(controller_.currentPattern(),row,velocityStep_)));
-       c->drawString(current,{195,y+94,390,y+122},VSTGUI::kLeftText);
+       c->drawString(current,{195,y+130,390,y+158},VSTGUI::kLeftText);
      }
      for(std::size_t step=0;step<32;++step){
        const double sx=kGridX+step*kCellWidth;
@@ -812,21 +833,38 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        // Recessed velocity lane and luminous cyan bar; retain old input geometry.
        const bool disabled=step>=steps;
        c->setFillColor(VSTGUI::CColor{5,24,46,255});
-       c->drawRect({sx+2.,y+97.,sx+17.,y+120.},VSTGUI::kDrawFilled);
+       c->drawRect({sx+2.,y+133.,sx+17.,y+156.},VSTGUI::kDrawFilled);
        c->setFillColor(disabled?VSTGUI::CColor{29,45,61,255}:
                                   VSTGUI::CColor{34,75,106,255});
-       c->drawRect({sx+3.,y+98.,sx+16.,y+119.},VSTGUI::kDrawFilled);
+       c->drawRect({sx+3.,y+134.,sx+16.,y+155.},VSTGUI::kDrawFilled);
        if(vel>0&&!disabled) {
-         const double top=y+119.-21.*static_cast<double>(vel)/127.;
+         const double top=y+155.-21.*static_cast<double>(vel)/127.;
          c->setFillColor(VSTGUI::CColor{29,151,196,255});
-         c->drawRect({sx+3.,top,sx+16.,y+119.},VSTGUI::kDrawFilled);
+         c->drawRect({sx+3.,top,sx+16.,y+155.},VSTGUI::kDrawFilled);
          c->setFillColor(VSTGUI::CColor{109,228,244,255});
-         c->drawRect({sx+5.,top,sx+8.,y+119.},VSTGUI::kDrawFilled);
+         c->drawRect({sx+5.,top,sx+8.,y+155.},VSTGUI::kDrawFilled);
          c->setFillColor(VSTGUI::CColor{163,246,250,255});
          c->drawRect({sx+3.,top,sx+16.,top+1.},VSTGUI::kDrawFilled);
        }
      }
    }
+ }
+ // Draw the native-instrument rail only when rows are hidden.
+ if(!songEditorOpen_&&controller_.visibleRows()>displayedRows()){
+   const double top=UiCompactLayout::scrollTop;
+   const double length=std::max(1.,bottom-8.-top);
+   const double thumb=std::clamp(length*static_cast<double>(displayedRows())/
+                       static_cast<double>(controller_.visibleRows()),28.,length);
+   const double thumbTop=top+(length-thumb)*static_cast<double>(firstRow_)/
+                       static_cast<double>(controller_.visibleRows()-displayedRows());
+   c->setFillColor(VSTGUI::CColor{5,23,42,255});
+   c->drawRect({UiCompactLayout::scrollLeft,top,UiCompactLayout::scrollRight,top+length},VSTGUI::kDrawFilled);
+   c->setFrameColor(VSTGUI::CColor{64,114,154,255});
+   c->drawRect({UiCompactLayout::scrollLeft,top,UiCompactLayout::scrollRight,top+length},VSTGUI::kDrawStroked);
+   c->setFillColor(VSTGUI::CColor{33,90,129,255});
+   c->drawRect({UiCompactLayout::scrollLeft+2.,thumbTop+1.,UiCompactLayout::scrollRight-2.,thumbTop+thumb-1.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{147,207,230,255});
+   c->drawRect({UiCompactLayout::scrollLeft+3.,thumbTop+2.,UiCompactLayout::scrollLeft+5.,thumbTop+thumb-2.},VSTGUI::kDrawFilled);
  }
  // Only row management and one status line remain at the bottom.
  drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"ADD ROW");
@@ -1546,6 +1584,19 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
 
  const double bottom=gridBottom();
+ if(!songEditorOpen_&&controller_.visibleRows()>displayedRows()&&
+    x>=UiCompactLayout::scrollLeft&&x<UiCompactLayout::scrollRight&&
+    y>=UiCompactLayout::scrollTop&&y<bottom-8.) {
+   const double top=UiCompactLayout::scrollTop;
+   const double length=std::max(1.,bottom-8.-top);
+   const double thumb=std::clamp(length*static_cast<double>(displayedRows())/
+                      static_cast<double>(controller_.visibleRows()),28.,length);
+   const double thumbTop=top+(length-thumb)*static_cast<double>(firstRow_)/
+                     static_cast<double>(controller_.visibleRows()-displayedRows());
+   scrollGrab_=(y>=thumbTop&&y<=thumbTop+thumb)?y-thumbTop:thumb*.5;
+   draggingScroll_=true;(void)moveScroll(y,scrollGrab_);
+   return VSTGUI::kMouseEventHandled;
+ }
  if(y>=bottom+5&&y<bottom+34){
    if(UiCompactLayout::hit(x,UiCompactLayout::rowAdd)){
      if(controller_.visibleRows()>=kRows)status_="MAXIMUM 16 INSTRUMENTS";
@@ -1625,57 +1676,57 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::velocityToggle)&&
-      y>=top+45&&y<top+79){
+      y>=top+70&&y<top+105){
      velocityRow_=row;
      (void)toggleRowVelocity(row);invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::edit)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::edit)&&y>=top+9&&y<top+40){
       if(controller_.hasSample(row))(void)openSampleEditor(row);
       invalid();return done;
     }
     if(UiCompactLayout::hit(x,UiCompactLayout::sampleMenu)&&
-      y>=top+5&&y<top+35){
+      y>=top+9&&y<top+40){
      popup_=5;popupRow_=row;invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::sample)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::sample)&&y>=top+9&&y<top+40){
      if(buttons&VSTGUI::kShift)editName(row);
      else if(buttons&VSTGUI::kAlt){
        if(!controller_.clearSample(row))status_="SAMPLE NOT REMOVED";
      }else load(row);
      invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::previous)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::previous)&&y>=top+9&&y<top+40){
      if(controller_.stepSample(row,-1)!=Controller::LoadStatus::Accepted)
        status_="NO PREVIOUS SAMPLE";
      invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::next)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::next)&&y>=top+9&&y<top+40){
      if(controller_.stepSample(row,1)!=Controller::LoadStatus::Accepted)
        status_="NO NEXT SAMPLE";
      invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::preview)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::preview)&&y>=top+9&&y<top+40){
      if(!controller_.previewSample(row))status_="SAMPLE PREVIEW FAILED";
      invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::fill)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::fill)&&y>=top+9&&y<top+40){
      fillMenuRow_=static_cast<int>(row);invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::mute)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::mute)&&y>=top+9&&y<top+40){
      if(!controller_.toggleRowGate(row,false))status_="MUTE NOT APPLIED";
      invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::solo)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::solo)&&y>=top+9&&y<top+40){
      if(!controller_.toggleRowGate(row,true))status_="SOLO NOT APPLIED";
      invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::choke)&&y>=top+54&&y<top+86){
+   if(UiCompactLayout::hit(x,UiCompactLayout::choke)&&y>=top+73&&y<top+105){
      popup_=4;popupRow_=row;invalid();return done;
    }
-   if(UiCompactLayout::hit(x,UiCompactLayout::output)&&y>=top+5&&y<top+35){
+   if(UiCompactLayout::hit(x,UiCompactLayout::output)&&y>=top+9&&y<top+40){
      popup_=3;popupRow_=row;invalid();return done;
    }
-   if(y>=top+45&&y<top+79){
+   if(y>=top+70&&y<top+105){
      const auto step=UiCompactLayout::stepAt(x);
      if(step>=0){
        if(static_cast<std::size_t>(step)>=controller_.patternLength(controller_.currentPattern())) {
@@ -1691,7 +1742,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      }
    }
    if(controller_.rowRandomVelocity(row)==0&&x>=448&&x<544&&
-      y>=top+52&&y<top+84){
+      y>=top+73&&y<top+105){
      if(!controller_.randomizeRowVelocity(row))
        status_="RANDOM VELOCITY: NO NOTES OR EDIT REJECTED";
      invalid();return done;
@@ -1700,8 +1751,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
      if(i==3&&controller_.rowRandomVelocity(row)==0)continue;
      const auto center=UiCompactLayout::rowKnobCenters[static_cast<std::size_t>(i)];
      if(x>=center-UiCompactLayout::knobRadius&&x<center+UiCompactLayout::knobRadius&&
-        y>=top+68.-UiCompactLayout::knobRadius&&
-        y<top+68.+UiCompactLayout::knobRadius){
+        y>=top+88.-UiCompactLayout::knobRadius&&
+        y<top+88.+UiCompactLayout::knobRadius){
        const int previous=i==0?static_cast<int>(controller_.rowGain(row)):
           i==1?controller_.rowPan(row):
           i==2?controller_.rowPitch(row):
@@ -1723,6 +1774,11 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
     VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
+ if(draggingScroll_){
+   if(buttons&VSTGUI::kLButton)(void)moveScroll(pos.y,scrollGrab_);
+   else draggingScroll_=false;
+   return VSTGUI::kMouseEventHandled;
+ }
  if(sampleEditorOpen_){
    if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_==6)setSampleEditorGain(pos.x);
    else if((buttons&VSTGUI::kLButton)&&sampleEditorDrag_==3)scrollEditorWave(pos.x);
@@ -1773,6 +1829,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseMoved(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
     VSTGUI::CPoint&,const VSTGUI::CButtonState&) {
+ if(draggingScroll_){draggingScroll_=false;return VSTGUI::kMouseEventHandled;}
  if(sampleEditorOpen_){sampleEditorDrag_=0;sampleEditorPressed_=-1;
    invalid();return VSTGUI::kMouseEventHandled;}
  if(activeKnob_>=0){
@@ -1789,6 +1846,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseUp(
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseCancel(){
  sampleEditorDrag_=0;sampleEditorPressed_=-1;
+ draggingScroll_=false;
  activeKnob_=-1;knobRow_=kRows;
  detailDragControl_=-1;detailDragRow_=kRows;
  const bool fresh=laneDragActive_&&
