@@ -437,6 +437,131 @@ void testA13PureSequencerCyclePcm(){
  }
 }
 
+
+std::vector<std::uint8_t> a14LongConstant(float left,float right){
+ auto wav=constantStereo(left,right);
+ const auto original=wav;
+ wav.insert(wav.end(),original.begin()+44,original.end());
+ for(unsigned i=0;i<4;++i){
+   wav[4+i]=static_cast<std::uint8_t>((wav.size()-8)>>(i*8));
+   wav[40+i]=static_cast<std::uint8_t>((wav.size()-44)>>(i*8));
+ }
+ return wav;
+}
+void testA14PatternAndSongAcrossCycleSeam(){
+ constexpr auto playing=ProcessContext::kPlaying|
+     ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ constexpr auto cycle=ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ for(unsigned mode=0;mode<3;++mode){
+   // Pattern B switches 64 frames before / precisely at the seam;
+   // Song mode selects B independently of the host pattern parameter.
+   Fixture f;KitState kit;kit.grid.fill(0);kit.visible=2;
+   kit.names[0]="pattern-a.wav";kit.wav[0]=a14LongConstant(.125f,-.25f);
+   kit.names[1]="pattern-b.wav";kit.wav[1]=a14LongConstant(.375f,-.125f);
+   kit.output[1]=0;
+   kit.grid[0]=127;
+   kit.grid[(kRows+1)*kSteps]=127;
+   if(mode==2){
+     kit.songEnabled=1;
+     check(kit.chain.setCount(1)&&kit.chain.configure(0,1,16),
+           "A14 song fixture invalid");
+   }
+   f.kit(kit);prepareAudio(*f.p);AuditAudioBlock audio;
+   audio.clock.state=playing|cycle;audio.clock.tempo=120.;
+   audio.clock.cycleStartMusic=4.;
+   audio.clock.cycleEndMusic=4.+1152./24000.;
+   EventList patternEvents;
+   if(mode!=2){
+     Event change{};change.type=Event::kNoteOnEvent;
+     change.sampleOffset=mode==0?64:128;
+     change.noteOn.pitch=25;change.noteOn.velocity=1.f;
+     change.noteOn.noteId=-1;
+     check(patternEvents.addEvent(change)==kResultOk,
+           "A14 real MIDI A-H pattern change setup");
+   }
+   for(unsigned b=0;b<5;++b){
+     audio.clock.projectTimeMusic=4.+static_cast<double>(b)*256./24000.;
+     audio.data.inputEvents=b==4&&mode!=2?&patternEvents:nullptr;
+     check(f.p->process(audio.data)==kResultOk,
+           "A14 real pattern/song seam processing");
+     for(unsigned i=0;i<256;++i){
+       const bool afterSeam=b==4&&i>=128;
+       const float expectedLeft=mode==2?
+           (afterSeam?.75f:.375f):(afterSeam?.5f:.125f);
+       const float expectedRight=mode==2?
+           (afterSeam?-.25f:-.125f):(afterSeam?-.375f:-.25f);
+       check(audio.left[i]==expectedLeft&&audio.right[i]==expectedRight,
+             "A14 pattern/Song seam selected wrong program or onset");
+     }
+   }
+   check(IntegrationAccess::activeAudioVoices(*f.p)==2,
+         "A14 pattern or song seam missed overlapping sample voice");
+ }
+}
+void testA15CycleRandomVelocityReproducible(){
+ // Same musical Step 0 on the first and second loop should have the
+ // SAME velocity even if a 6000-frame cycle wraps at sample 112 in
+ // callback 24. Without wrapped PPQ, randomVelocity hashes Step 17
+ // instead of repeated Step 16 (the test's deliberately distinct values).
+ Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+ kit.names[0]="random-velocity.wav";kit.wav[0]=constantStereo(.125f,-.25f);
+ kit.grid[0]=64;kit.randomVelocity[0]=100;
+ f.kit(kit);prepareAudio(*f.p);AuditAudioBlock audio;
+ audio.clock.tempo=120.;
+ audio.clock.state=ProcessContext::kPlaying|
+     ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid|
+     ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ audio.clock.cycleStartMusic=4.;audio.clock.cycleEndMusic=4.25;
+ std::array<float,1024> firstL{},firstR{},repeatL{},repeatR{};
+ for(unsigned b=0;b<28;++b){
+   const unsigned start=b*256;
+   audio.clock.projectTimeMusic=4.+static_cast<double>(start%6000)/24000.;
+   check(f.p->process(audio.data)==kResultOk,"A15 render wrapped velocity");
+   for(unsigned i=0;i<256;++i){
+     const unsigned at=start+i;
+     if(at<1024){firstL[at]=audio.left[i];firstR[at]=audio.right[i];}
+     if(at>=6000&&at<7024){
+       repeatL[at-6000]=audio.left[i];
+       repeatR[at-6000]=audio.right[i];
+     }
+   }
+ }
+ check(firstL[40]>0.f&&firstR[40]<0.f,
+       "A15 positive random-velocity audio reference silent");
+ for(unsigned i=0;i<1024;++i)
+   check(firstL[i]==repeatL[i]&&firstR[i]==repeatR[i],
+         "A15 Cycle step velocity depended on callback partition instead of PPQ");
+}
+void testA16MultiCyclePerCallback(){
+ // Four musical loops inside a 256-frame callback and four more in
+ // the following callback. Old voices must not be retired on callback 2.
+ for(unsigned mode=0;mode<2;++mode){
+   Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
+   kit.names[0]="multi-cycle.wav";kit.wav[0]=a14LongConstant(.125f,-.25f);
+   kit.grid[0]=127;f.kit(kit);prepareAudio(*f.p);AuditAudioBlock audio;
+   audio.clock.tempo=120.;
+   audio.clock.state=ProcessContext::kPlaying|
+       ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid|
+       ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+   audio.clock.cycleStartMusic=4.;
+   audio.clock.cycleEndMusic=mode==0?4.+64./24000.:
+       std::numeric_limits<double>::quiet_NaN();
+   for(unsigned b=0;b<2;++b){
+     audio.clock.projectTimeMusic=4.;
+     check(f.p->process(audio.data)==kResultOk,"A16 short cycle block");
+     for(unsigned i=0;i<256;++i){
+       const unsigned voices=mode==0?b*4+i/64+1:1;
+       const float expectedLeft=static_cast<float>(voices)*.125f;
+       const float expectedRight=-static_cast<float>(voices)*.25f;
+       check(audio.left[i]==expectedLeft&&audio.right[i]==expectedRight,
+             "A16 short multi-wrap voice reset, missed/doubled Step or false Cycle");
+     }
+   }
+   check(IntegrationAccess::activeAudioVoices(*f.p)==(mode==0?8u:1u),
+         "A16 multi-wrap post-host live voice count mismatch");
+ }
+}
+
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

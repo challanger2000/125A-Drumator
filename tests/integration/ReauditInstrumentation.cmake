@@ -17,6 +17,15 @@ function(reaudit_instrument name variable)
       "const bool fireAudition=auditionStart_.exchange(false,std::memory_order_acq_rel);\n drumator::qa::probe(drumator::qa::auditAfterAuditionStartTaken);")
     qa_replace(_code "if(finish<=cursor)return;"
       "if(finish<=cursor)return;\n      ++drumator::qa::auditSongScheduleCalls;")
+    # Exercise the actual generated QA Processor with the repaired Cycle
+    # branch deliberately disabled; shipped plugin sources remain pristine.
+    qa_replace(_code "const bool splitCycle=cycleFlags&&std::isfinite(cycleStart)&&"
+      "const bool splitCycle=(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::skipCycleSplit)&&cycleFlags&&std::isfinite(cycleStart)&&")
+    qa_replace(_code "velocityCycleValid=splitCycle;"
+      "velocityCycleValid=splitCycle&&drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::skipCycleVelocityMap;")
+    qa_replace(_code "cyclePhaseError<=expectedTolerance;"
+      "(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::skipCycleModulo?std::abs(initialPpq-(suppliedContext->cycleStartMusic+cycleOvershoot)):cyclePhaseError)<=expectedTolerance;")
+
     qa_replace(_code "std::int32_t cursor=0;"
       "std::int32_t cursor=0;\n   drumator::qa::probe(drumator::qa::auditAfterLengthRead);")
     qa_replace(_code "lengths[activePattern]=audioPatternLengthCache_[activePattern];"

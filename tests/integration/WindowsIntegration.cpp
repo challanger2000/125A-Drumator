@@ -1976,6 +1976,12 @@ int main(int argc,char** argv){
  run("A11 verified Cycle tail vs Locate",testA11CycleWrapPreservesSampleTails);
  run("A12 nonaligned Cycle wrap and negative controls",testA12CycleWrapMidBlockAndNegativeControls);
  run("A13 internal Step at mid-block Cycle",testA13PureSequencerCyclePcm);
+ run("A14 pattern and Song at intra-block Cycle seam",testA14PatternAndSongAcrossCycleSeam);
+ run("A15 Cycle random velocity block-invariance",testA15CycleRandomVelocityReproducible);
+ run("A16 multiple Cycles in one host callback",testA16MultiCyclePerCallback);
+ run("RM19 old unsplit Cycle scheduler is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleSplit,"unsplit host Cycle lost Step",testA13PureSequencerCyclePcm);});
+ run("RM20 old linear Velocity PPQ is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleVelocityMap,"randomized loop velocity changed with block partition",testA15CycleRandomVelocityReproducible);});
+ run("RM21 old single-wrap voice reset is killed",[]{expectMutationKilled(qa::AuditMutation::skipCycleModulo,"multiple Cycle wraps retire valid tails",testA16MultiCyclePerCallback);});
  run("RM18 missing-context old-cutoff regression is killed",[]{expectMutationKilled(qa::AuditMutation::suppressMissingContextCarry,"missing clock truncates hits",testA10MissingContextAudioContinuity);});
  run("RM17 direct-scan mutation is detected",[]{expectMutationKilled(qa::AuditMutation::bypassWaveRangeIndex,"linear scan instead of indexed bins",testA09WaveformExtremaAgainstNativeReference);});
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);

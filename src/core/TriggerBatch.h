@@ -51,13 +51,25 @@ public:
     // Absolute PPQ position plus pattern/row/step yield identical velocity
     // regardless of the number of host audio callbacks.
     void varyVelocity(const std::array<std::uint8_t,kRows>& amount,
-                      double startPpq,double bpm,double sampleRate) noexcept {
+                      double startPpq,double bpm,double sampleRate,
+                      double cycleStartPpq=0.0,double cycleEndPpq=0.0,
+                      bool validCycle=false) noexcept {
         for(std::size_t i=0;i<size_;++i) {
             auto& hit=events_[i];
             const auto depth=amount[hit.row];
             if(depth==0)continue;
-            const double musicalStep=(startPpq+
-                static_cast<double>(hit.sampleOffset)*bpm/(60.0*sampleRate))*4.0;
+            double musicalPpq=startPpq+
+                static_cast<double>(hit.sampleOffset)*bpm/(60.0*sampleRate);
+            // If a callback crosses a host Cycle seam, linear block PPQ is
+            // no longer the hit's musical PPQ. Use the same wrapped position
+            // that the scheduler used; independent block splitting must not
+            // alter deterministic step velocity.
+            if(validCycle&&musicalPpq>=cycleEndPpq){
+                const double length=cycleEndPpq-cycleStartPpq;
+                musicalPpq=cycleStartPpq+
+                    std::fmod(musicalPpq-cycleEndPpq,length);
+            }
+            const double musicalStep=musicalPpq*4.0;
             const auto stepIndex=std::isfinite(musicalStep)&&
                 musicalStep>-1.0e12&&musicalStep<1.0e12?
                 static_cast<std::int64_t>(std::floor(musicalStep+1.e-7)):0;

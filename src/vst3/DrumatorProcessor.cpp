@@ -977,6 +977,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  };
  // Process program changes at their actual sample offset. Schedule each
  // constant-pattern interval separately; no allocation in the audio callback.
+ double velocityCycleStart=0.0,velocityCycleEnd=0.0;
+ bool velocityCycleValid=false;
  if(playing&&validHostClock) {
    const auto initialPpq=context->projectTimeMusic;
    // A new transport run or a locate/loop jump starts at pattern step 1.
@@ -998,6 +1000,17 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    const double cycleOvershoot=suppliedContext&&
        std::isfinite(suppliedContext->cycleEndMusic)?
        expectedNextPpq_-suppliedContext->cycleEndMusic:0.0;
+   const double priorCycleLength=suppliedContext?
+       suppliedContext->cycleEndMusic-suppliedContext->cycleStartMusic:0.0;
+   const double wrappedOvershoot=std::isfinite(priorCycleLength)&&
+       priorCycleLength>0.0&&std::isfinite(cycleOvershoot)?
+       std::fmod(std::max(0.0,cycleOvershoot),priorCycleLength):0.0;
+   const double actualCycleOffset=suppliedContext?
+       initialPpq-suppliedContext->cycleStartMusic:0.0;
+   const double cycleOffsetError=std::abs(actualCycleOffset-wrappedOvershoot);
+   const double cyclePhaseError=std::isfinite(priorCycleLength)&&priorCycleLength>0.0?
+       std::min(cycleOffsetError,std::abs(cycleOffsetError-priorCycleLength)):
+       cycleOffsetError;
    const double maximumPriorBlockPpq=lastClockTempo_>0.0?
        static_cast<double>(processSetup.maxSamplesPerBlock)*lastClockTempo_/
        (60.0*rateForClock):0.0;
@@ -1017,8 +1030,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        initialPpq>=suppliedContext->cycleStartMusic-expectedTolerance&&
        initialPpq<suppliedContext->cycleEndMusic+expectedTolerance&&
        expectedNextPpq_>initialPpq&&
-       std::abs(initialPpq-
-           (suppliedContext->cycleStartMusic+cycleOvershoot))<=expectedTolerance;
+       cyclePhaseError<=expectedTolerance;
    if(transportJump&&!confirmedCycleWrap)voices_.reset();
    if(!haveExpectedPpq_||transportJump) {
       // Cycle origin is the musical loop start, not the host's post-seam overshoot.
@@ -1071,6 +1083,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        std::isfinite(originStep)&&
        originStep>=static_cast<double>(std::numeric_limits<std::int64_t>::min()/2)&&
        originStep<=static_cast<double>(std::numeric_limits<std::int64_t>::max()/2);
+   velocityCycleStart=cycleStart;
+   velocityCycleEnd=cycleEnd;
+   velocityCycleValid=splitCycle;
    std::int32_t cursor=0;
    auto scheduleRange=[&](Steinberg::int32 finish) {
      if(finish<=cursor)return; // retained for unique QA instrumentation anchor
@@ -1237,7 +1252,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      std::isfinite(context->tempo)&&context->tempo>0.0;
  triggers_.varyVelocity(variation,validTiming?context->projectTimeMusic:0.0,
                         validTiming?context->tempo:120.0,
-                        processSetup.sampleRate);
+                        processSetup.sampleRate,velocityCycleStart,
+                        velocityCycleEnd,velocityCycleValid);
  triggers_.sort();
  std::array<float*,kRows> stemsL{},stemsR{};
  for(Steinberg::int32 bus=1;bus<data.numOutputs&&
