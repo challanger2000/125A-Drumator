@@ -248,7 +248,8 @@ if(DRUMATOR_BUILD_VST3)
   target_link_libraries(Drumator PRIVATE sdk drumator_core vstgui_support)
   target_include_directories(Drumator PRIVATE "${_drflac_dir}")
   smtg_target_add_plugin_resources(Drumator
-      RESOURCES resource/Drumator.uidesc)
+      RESOURCES resource/Drumator.uidesc
+                resource/abstraktes_blaues_metall_mit_sanftem_glanz.png)
   # Steinberg official Win32 bundle resource setup, even though CI assembles
   # the final bundle manually to avoid administrator symlink privileges.
   # The official helper macro is evaluated in this parent project scope.
