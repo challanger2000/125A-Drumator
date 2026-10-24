@@ -4,6 +4,7 @@
 #include "core/SequencerCore.h"
 #include "core/SampleEdit.h"
 #include "core/WavPcm16Decoder.h"
+#include "core/WaveformExtremaIndex.h"
 #include "core/PatternOperations.h"
 #include "core/PatternUndo.h"
 #include "core/KitEditGeneration.h"
@@ -162,6 +163,7 @@ private:
  // when several View windows/16 sample rows exist. Processor revision is
  // always checked before reusing it after edit, import or project recall.
  DecodedWav editorWaveCache_{};
+ WaveformExtremaIndex editorWaveIndexLeft_{},editorWaveIndexRight_{};
  std::size_t editorWaveRow_{kRows};
  std::uint32_t editorWaveRevision_{0};
  std::array<std::uint64_t,kRows> originIdentity_{};

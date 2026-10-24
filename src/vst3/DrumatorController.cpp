@@ -74,6 +74,8 @@ void Controller::unregisterView(DrumatorView* view) {
  views_.erase(std::remove(views_.begin(),views_.end(),view),views_.end());
  if(views_.empty()){
    editorWaveCache_=DecodedWav{};
+   editorWaveIndexLeft_.clear();
+   editorWaveIndexRight_.clear();
    editorWaveRow_=kRows;
  }
 }
@@ -872,6 +874,7 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
    const auto rev=static_cast<std::uint32_t>(version);
    const bool hit=editorWaveRow_==row&&editorWaveRevision_==rev;
    DecodedWav fresh;
+   WaveformExtremaIndex stagedLeft,stagedRight;
    const DecodedWav* wave=&editorWaveCache_;
    if(!hit) {
      const void* bytes=nullptr;Steinberg::uint32 length=0;
@@ -879,6 +882,11 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
         !bytes||WavPcm16Decoder::decode(static_cast<const std::uint8_t*>(bytes),
                                         length,fresh)!=WavError::Ok||
         fresh.left.size()>UINT32_MAX)
+       return false;
+     // Full source scan is done once per accepted PCM revision, never in audio.
+     if(!stagedLeft.build(fresh.left.data(),fresh.left.size())||
+        (fresh.channels==2&&
+         !stagedRight.build(fresh.right.data(),fresh.right.size())))
        return false;
      wave=&fresh;
    }
@@ -895,16 +903,18 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
    if(!next.valid(count))return false;
    if(last==0)last=count;
    if(first>=last||last>count)return false;
-   // Identical extrema and bin arithmetic to the pre-cache renderer.
+   const auto& indexedLeft=hit?editorWaveIndexLeft_:stagedLeft;
+   const auto& indexedRight=hit?editorWaveIndexRight_:stagedRight;
+   // Preserve the original half-open bin boundaries and min/max tie order.
    for(std::size_t i=0;i<envelope.size();++i) {
      const auto binFirst=static_cast<std::size_t>(first)+
                          (static_cast<std::size_t>(last-first)*i)/envelope.size();
      const auto binLast=static_cast<std::size_t>(first)+
                         (static_cast<std::size_t>(last-first)*(i+1))/envelope.size();
-     auto bounds=waveformRange(wave->left.data(),wave->left.size(),
+     auto bounds=indexedLeft.range(wave->left.data(),wave->left.size(),
                         binFirst,std::max(binFirst+std::size_t{1},binLast));
      if(wave->channels==2) {
-       const auto other=waveformRange(wave->right.data(),wave->right.size(),
+       const auto other=indexedRight.range(wave->right.data(),wave->right.size(),
                           binFirst,std::max(binFirst+std::size_t{1},binLast));
        if(rightEnvelope)(*rightEnvelope)[i]=other;
        else {bounds.minimum=std::min(bounds.minimum,other.minimum);
@@ -913,6 +923,8 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
      envelope[i]=bounds;
    }
    if(!hit) {
+     editorWaveIndexLeft_=std::move(stagedLeft);
+     editorWaveIndexRight_=std::move(stagedRight);
      editorWaveCache_=std::move(fresh);
      editorWaveRow_=row;
      editorWaveRevision_=rev;
