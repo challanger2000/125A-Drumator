@@ -53,12 +53,13 @@ const VSTGUI::CColor off{67,81,96,255};
 const VSTGUI::CColor letters{228,236,243,255};
 const VSTGUI::CColor accent{104,175,203,255};
 // Blue instrument modules are drawn natively so they follow row expansion and zoom.
-const VSTGUI::CColor rowBlueA{19,70,122,255};
-const VSTGUI::CColor rowBlueB{16,62,110,255};
-const VSTGUI::CColor rowBlueSelected{27,91,148,255};
-const VSTGUI::CColor rowBlueBorder{43,114,175,255};
-const VSTGUI::CColor stepWellBlue{11,39,74,255};
-const VSTGUI::CColor velocityWellBlue{10,43,79,255};
+// Desaturated blue steel and graphite. Amber remains a step-only status.
+const VSTGUI::CColor rowBlueA{19,40,58,255};
+const VSTGUI::CColor rowBlueB{17,36,54,255};
+const VSTGUI::CColor rowBlueSelected{24,51,71,255};
+const VSTGUI::CColor rowBlueBorder{53,91,121,255};
+const VSTGUI::CColor stepWellBlue{6,17,30,255};
+const VSTGUI::CColor velocityWellBlue{9,28,43,255};
 
 // Exact 125A vector logo from the authoritative brand master, rendered
 // natively through VSTGUI (SVG paths contain only M, L, Z commands).
@@ -101,35 +102,53 @@ void drawBrandLogo(VSTGUI::CDrawContext* c) {
 
 // Centralized VSTGUI button renderer: consistent visible frame, fill,
 // contrast and selected/disabled states, with fixed hit regions.
+// Hardware recessed field shared by header, rows and sample displays.
+// Visual-only drawing: does not change any interactive hit region.
+void drawInset(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
+               const VSTGUI::CColor& interior) {
+ c->setFillColor(VSTGUI::CColor{4,13,24,255});
+ c->drawRect({r.left-1.,r.top-1.,r.right+1.,r.bottom+1.},VSTGUI::kDrawFilled);
+ c->setFillColor(interior);c->drawRect(r,VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{2,9,18,255});
+ c->drawRect({r.left,r.top,r.right,r.top+2.},VSTGUI::kDrawFilled);
+ c->drawRect({r.left,r.top,r.left+2.,r.bottom},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{49,84,110,255});
+ c->drawRect({r.left+1.,r.bottom-1.,r.right,r.bottom},VSTGUI::kDrawFilled);
+ c->drawRect({r.right-1.,r.top+2.,r.right,r.bottom},VSTGUI::kDrawFilled);
+}
 void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
                  const char* title,bool selected=false,bool enabled=true) {
- // Recessed bezel + raised keycap with one consistent upper-left light source.
- c->setFillColor(VSTGUI::CColor{4,19,37,255});
+ // Contact shadow and raised keycap, inset by a further pixel when selected.
+ c->setFillColor(VSTGUI::CColor{2,13,23,255});
  c->drawRect(r,VSTGUI::kDrawFilled);
  if(r.getWidth()>6.&&r.getHeight()>8.) {
    const double press=selected?2.:1.;
    const VSTGUI::CRect face{r.left+2.,r.top+press,r.right-2.,
                             r.bottom-(selected?2.:4.)};
-   c->setFillColor(VSTGUI::CColor{3,13,26,255});
+   c->setFillColor(VSTGUI::CColor{1,9,18,255});
    c->drawRect({r.left+2.,r.bottom-4.,r.right-1.,r.bottom-1.},VSTGUI::kDrawFilled);
-   const double mid=face.top+face.getHeight()*.48;
-   c->setFillColor(!enabled?VSTGUI::CColor{38,49,60,255}:
-         selected?VSTGUI::CColor{18,83,128,255}:VSTGUI::CColor{70,123,163,255});
-   c->drawRect({face.left,face.top,face.right,mid},VSTGUI::kDrawFilled);
-   c->setFillColor(!enabled?VSTGUI::CColor{24,35,48,255}:
-         selected?VSTGUI::CColor{29,113,163,255}:VSTGUI::CColor{22,52,87,255});
-   c->drawRect({face.left,mid,face.right,face.bottom},VSTGUI::kDrawFilled);
-   c->setFillColor(selected?VSTGUI::CColor{8,35,59,255}:
-                             VSTGUI::CColor{151,193,216,255});
-   c->drawRect({face.left,face.top,face.right,face.top+1.},VSTGUI::kDrawFilled);
-   c->setFrameColor(!enabled?VSTGUI::CColor{44,59,76,255}:
-        selected?VSTGUI::CColor{113,207,242,255}:VSTGUI::CColor{77,135,175,255});
+   const double split=face.top+face.getHeight()*.53;
+   c->setFillColor(!enabled?VSTGUI::CColor{37,46,54,255}:
+           selected?VSTGUI::CColor{29,79,111,255}:VSTGUI::CColor{64,96,119,255});
+   c->drawRect({face.left,face.top,face.right,split},VSTGUI::kDrawFilled);
+   c->setFillColor(!enabled?VSTGUI::CColor{23,33,44,255}:
+           selected?VSTGUI::CColor{22,65,96,255}:VSTGUI::CColor{25,45,64,255});
+   c->drawRect({face.left,split,face.right,face.bottom},VSTGUI::kDrawFilled);
+   c->setFillColor(selected?VSTGUI::CColor{13,41,62,255}:
+                             VSTGUI::CColor{136,167,187,255});
+   c->drawRect({face.left+1.,face.top,face.right-1.,face.top+1.},VSTGUI::kDrawFilled);
+   c->setFillColor(selected?VSTGUI::CColor{73,152,195,255}:
+                             VSTGUI::CColor{13,27,39,255});
+   c->drawRect({face.left+1.,face.bottom-2.,face.right-1.,face.bottom},VSTGUI::kDrawFilled);
+   c->setFrameColor(!enabled?VSTGUI::CColor{46,58,66,255}:
+        selected?VSTGUI::CColor{87,170,211,255}:VSTGUI::CColor{70,105,133,255});
    c->drawRect(face,VSTGUI::kDrawStroked);
  }
- c->setFrameColor(VSTGUI::CColor{4,22,40,255});
+ c->setFrameColor(VSTGUI::CColor{5,23,38,255});
  c->drawRect(r,VSTGUI::kDrawStroked);
  c->setFont(VSTGUI::kNormalFont,12);
- c->setFontColor(!enabled?VSTGUI::CColor{113,131,147,255}:letters);
+ c->setFontColor(!enabled?VSTGUI::CColor{113,131,147,255}:
+                 selected?VSTGUI::CColor{245,252,255,255}:letters);
  c->drawString(title,{r.left,r.top+(selected?1.:0.),r.right,r.bottom+(selected?1.:0.)});
 }
 
@@ -149,6 +168,13 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  fraction=std::clamp(fraction,0.,1.);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
  c->drawString(title,{cx-46.,cy-37.,cx+46.,cy-24.});
+ // Recessed mount behind the existing proven JKnobMan filmstrip.
+ c->setFillColor(VSTGUI::CColor{4,15,26,255});
+ c->drawEllipse({cx-30.,cy-30.,cx+30.,cy+30.},VSTGUI::kDrawFilled);
+ c->setFrameColor(VSTGUI::CColor{90,136,165,255});
+ c->drawEllipse({cx-29.,cy-29.,cx+29.,cy+29.},VSTGUI::kDrawStroked);
+ c->setFrameColor(VSTGUI::CColor{11,29,43,255});
+ c->drawEllipse({cx-27.,cy-27.,cx+27.,cy+27.},VSTGUI::kDrawStroked);
  // A bitmap object can exist even when its PNG resource was not loaded,
  // notably in native offscreen QA outside the installed VST3 bundle.
  // Treat that as unavailable and paint an actual usable fallback control.
@@ -655,6 +681,17 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // The source is 1672x941, larger than the 1280x850 maximum editor area.
  if(backgroundBitmap_ && backgroundBitmap_->getWidth()>0 && backgroundBitmap_->getHeight()>0)
    backgroundBitmap_->draw(c,{0,0,1280,fullHeight});
+ // Dark control deck with precise machined nameplate seam.
+ c->setFillColor(VSTGUI::CColor{11,27,42,255});
+ c->drawRect({0,42,1280,108},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{4,15,27,255});
+ c->drawRect({0,40,1280,43},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{76,126,162,255});
+ c->drawRect({4,40,1276,41},VSTGUI::kDrawFilled);
+ drawInset(c,{17,46,228,103},VSTGUI::CColor{12,31,46,255});
+ drawInset(c,{323,46,774,99},VSTGUI::CColor{10,27,43,255});
+ drawInset(c,{779,46,1106,99},VSTGUI::CColor{10,27,43,255});
+ drawInset(c,{1124,46,1253,103},VSTGUI::CColor{12,31,46,255});
  c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
  c->drawString("125A DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
  drawBrandLogo(c);
@@ -693,17 +730,24 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double y=rowTopOnPage(i);
    const bool chosen=row==velocityRow_;
    const auto rowH=UiCompactLayout::baseRow+(velocityExpanded_[row]?UiCompactLayout::velocityRow:0.);
+   // Individual graphite instrument trays with subtle selectable blue edge.
+   c->setFillColor(VSTGUI::CColor{3,13,23,255});
+   c->drawRect({8,y+2.,1261,y+rowH-2.},VSTGUI::kDrawFilled);
    c->setFillColor(chosen?rowBlueSelected:(i%2?rowBlueB:rowBlueA));
-   c->drawRect({9,y+2.,1261,y+rowH-4.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{7,27,52,255});
-   c->drawRect({9,y+rowH-6.,1261,y+rowH-3.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{67,138,191,255});
-   c->drawRect({10,y+2.,1260,y+4.},VSTGUI::kDrawFilled);
+   c->drawRect({10,y+4.,1260,y+rowH-5.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{76,116,144,255});
+   c->drawRect({10,y+4.,1259,y+5.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{4,17,30,255});
+   c->drawRect({10,y+rowH-8.,1260,y+rowH-5.},VSTGUI::kDrawFilled);
    c->setFrameColor(chosen?accent:rowBlueBorder);
-   c->drawRect({9,y+2.,1261,y+rowH-4.},VSTGUI::kDrawStroked);
-   // Recessed dark-blue sequencer strip; paint before interactive steps.
-   c->setFillColor(stepWellBlue);
-   c->drawRect({kGridX-3.,y+64,kGridRight+4.,y+109},VSTGUI::kDrawFilled);
+   c->drawRect({9,y+3.,1261,y+rowH-4.},VSTGUI::kDrawStroked);
+   c->setFillColor(chosen?VSTGUI::CColor{83,178,209,255}:
+                            VSTGUI::CColor{37,88,124,255});
+   c->drawRect({12,y+10.,15,y+rowH-11.},VSTGUI::kDrawFilled);
+   // Readable row functions versus visually separated step sequencer.
+   drawInset(c,{18,y+46.,615,y+115.},VSTGUI::CColor{16,34,49,255});
+   drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
+   drawInset(c,{kGridX-3.,y+64.,kGridRight+4.,y+110.},stepWellBlue);
    char name[16]{};
    std::snprintf(name,sizeof(name),"%02u",static_cast<unsigned>(row+1));
    drawControl(c,{16,y+9,74,y+40},name,chosen);
@@ -724,9 +768,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }
      if(c->getStringWidth(fitted.c_str())>space)fitted="...";
    }
-   c->setFillColor(background);
-   c->drawRect({UiCompactLayout::sample.left,y+9,UiCompactLayout::sample.right,y+40},VSTGUI::kDrawFilled);
-   c->setFrameColor(border);c->drawRect({UiCompactLayout::sample.left,y+9,UiCompactLayout::sample.right,y+40},VSTGUI::kDrawStroked);
+   // Dark recessed file-name display, no imaginary audio waveforms.
+   drawInset(c,{UiCompactLayout::sample.left,y+9,UiCompactLayout::sample.right,y+40},
+             VSTGUI::CColor{3,16,26,255});
    c->setFontColor(letters);
    c->drawString(fitted.c_str(),{UiCompactLayout::sample.left+5,y+9,UiCompactLayout::sample.right-2,y+40},VSTGUI::kLeftText);
    drawControl(c,{275,y+9,301,y+40},"...");
@@ -813,7 +857,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }
    }
    c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
-   c->drawString("VELO",{1233,y+41,1259,y+40});
+   c->drawString("VEL",{1233,y+44,1259,y+62});
    drawControl(c,{1233,y+70,1259,y+105},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
    if(velocityExpanded_[row]){
      c->setFillColor(velocityWellBlue);
@@ -866,7 +910,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(VSTGUI::CColor{147,207,230,255});
    c->drawRect({UiCompactLayout::scrollLeft+3.,thumbTop+2.,UiCompactLayout::scrollLeft+5.,thumbTop+thumb-2.},VSTGUI::kDrawFilled);
  }
- // Only row management and one status line remain at the bottom.
+ // Fixed machined fascia and recessed status window.
+ c->setFillColor(VSTGUI::CColor{10,28,42,255});
+ c->drawRect({0,bottom,1280,bottom+UiCompactLayout::footer},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{77,120,147,255});
+ c->drawRect({9,bottom+1.,1271,bottom+2.},VSTGUI::kDrawFilled);
+ drawInset(c,{217,bottom+5.,1022,bottom+35.},VSTGUI::CColor{9,27,41,255});
  drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"ADD ROW");
  drawControl(c,{UiCompactLayout::rowRemove.left,bottom+5,UiCompactLayout::rowRemove.right,bottom+34},"REMOVE ROW",false,controller_.canHideLast());
  char range[64]{};
@@ -993,13 +1042,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  if(sampleEditorOpen_) {
    // Modal overlay, fully inside the existing 1280-wide view at 100% zoom.
    // Match the Drumator blue-metal shell; keep editor geometry and hit zones.
-   c->setFillColor(VSTGUI::CColor{8,28,51,255});
+   c->setFillColor(VSTGUI::CColor{10,27,42,255});
    c->drawRect({230,100,1050,605},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{27,85,136,255});
+   c->setFillColor(VSTGUI::CColor{24,52,72,255});
    c->drawRect({234,104,1046,151},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{93,166,211,255});
+   c->setFillColor(VSTGUI::CColor{95,147,177,255});
    c->drawRect({234,104,1046,106},VSTGUI::kDrawFilled);
-   c->setFrameColor(VSTGUI::CColor{105,180,224,255});
+   c->setFrameColor(VSTGUI::CColor{86,139,173,255});
    c->drawRect({230,100,1050,605},VSTGUI::kDrawStroked);
    c->setFont(VSTGUI::kNormalFont,18);c->setFontColor(letters);
    c->drawString("SAMPLE EDITOR",{260,114,1000,148});
