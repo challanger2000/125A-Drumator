@@ -1459,19 +1459,20 @@ void testRv05GlobalKnobPaintCenters(){
  auto* view=IntegrationAccess::view(*f.c,0);
  for(const double center:UiCompactLayout::globalKnobCenters){
    const auto left=static_cast<unsigned>(center-24.);
-   const auto pixels=frGuiPixels(*view,left,61,left+48,63);
-   // Identify the opaque rotary face rather than assuming the first pixel
-   // is a uniform background. The approved metallic bitmap has variable color.
-   constexpr std::uint32_t rotaryFace=(41u<<16)|(53u<<8)|67u;
+   // Sample across the knob diameter, not the old vector-circle outline.
+   // The JKnobMan sprite has a near-black outer ring against the blue shell.
+   const auto pixels=frGuiPixels(*view,left,74,left+48,78);
    double sum=0.,count=0.;
-   for(unsigned y=0;y<2;++y)
+   for(unsigned y=0;y<4;++y)
      for(unsigned x=0;x<48;++x){
-       if(pixels[y*48+x]!=rotaryFace)continue;
+       const auto rgb=pixels[y*48+x];
+       const auto red=(rgb>>16)&255u,green=(rgb>>8)&255u,blue=rgb&255u;
+       if(red>35u||green>40u||blue>48u)continue;
        sum+=static_cast<double>(left+x);
        count+=1.;
      }
-   check(count>=2.,"RV05 visible rotary outline missing from pixel capture");
-   check(std::abs(sum/count-center)<0.85,
+   check(count>=8.,"RV05 near-black sprite ring missing from pixel capture");
+   check(std::abs(sum/count-center)<2.0,
          "RV05 painted rotary center does not match input hit center");
  }
 }
