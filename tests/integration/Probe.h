@@ -9,6 +9,7 @@ enum class AuditMutation { none, suppressZeroStop, staleDuration, skipPeerCommit
  rejectPreviewStop, rejectPreviewStopOnce, patternQueryOOM, patternReplyOOM,
  oldFadeRenderer, oldKnobDrawCenters };
 extern std::atomic<AuditMutation> auditMutation;
+extern std::atomic<unsigned> auditSongScheduleCalls;
 extern std::atomic<const void*> auditImportTarget;
 extern std::atomic<unsigned> auditImportCalls,auditDelayCalls;
 enum Point { none, patternMidWrite, patternReadStarted, restoreSnapshot,

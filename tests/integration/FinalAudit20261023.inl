@@ -221,6 +221,51 @@ void testRv01OutputlessPreviewRetirement(){
        f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
        "RV01 fresh preview failed after outputless interval");
 }
+void testA05DenseSongAutomationDoesNotReschedule(){
+ auto initial=[]{
+   KitState kit;kit.grid.fill(0);kit.visible=1;
+   kit.names[0]="song.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+   kit.grid[0]=127;kit.songEnabled=1;
+   check(kit.chain.setCount(1)&&kit.chain.configure(0,0,32),
+         "A05 valid Song chain");
+   return kit;
+ };
+ Fixture reference,automated;const auto kit=initial();
+ reference.kit(kit);automated.kit(kit);
+ prepareAudio(*reference.p);prepareAudio(*automated.p);
+ AuditAudioBlock plain,dense;
+ for(auto* block:{&plain,&dense}){
+   block->clock.state=ProcessContext::kPlaying|
+       ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+   block->clock.projectTimeMusic=0.;
+   block->clock.tempo=120.;
+ }
+ ParameterChanges changes;
+ Steinberg::int32 queueIndex=0,pointIndex=0;
+ auto* queue=changes.addParameterData(kPatternParam,queueIndex);
+ check(queue!=nullptr,"A05 host automation parameter missing");
+ for(Steinberg::int32 i=0;i<256;++i)
+   check(queue->addPoint(i,static_cast<double>(i%kPatterns)/7.,pointIndex)==kResultOk,
+         "A05 dense automation points rejected");
+ dense.data.inputParameterChanges=&changes;
+ qa::auditSongScheduleCalls.store(0);
+ check(reference.p->process(plain.data)==kResultOk,
+       "A05 control Song render rejected");
+ const auto baselineCalls=qa::auditSongScheduleCalls.exchange(0);
+ check(automated.p->process(dense.data)==kResultOk,
+       "A05 dense Song render rejected");
+ const auto denseCalls=qa::auditSongScheduleCalls.exchange(0);
+ check(baselineCalls==1&&denseCalls==1,
+       "A05 dense Song A-H automation triggered unnecessary per-point DSP schedules");
+ for(std::size_t frame=0;frame<plain.left.size();++frame)
+   check(plain.left[frame]==dense.left[frame]&&
+         plain.right[frame]==dense.right[frame],
+         "A05 song PCM differs with unrelated host A-H automation");
+ check(plain.left[80]==.25f&&plain.right[80]==-.5f,
+       "A05 Song reference not actually audible");
+ check(auditReturnedKit(*automated.p).selected==7,
+       "A05 host selected program did not persist after sample-accurate points");
+}
 void testA04PreviewRateLifecycle(){
  // Real processor/controller, including pending and previously audible
  // previews. Check both paths across two legal host-rate transitions.

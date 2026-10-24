@@ -1057,15 +1057,22 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      if(scheduled.status!=ScheduleStatus::Ok)triggers_.clear();
      cursor=finish;
    };
+   // SongChain determines the audio independently of host-selected A-H.
+   // Dense host automation still changes the selected parameter at its
+   // exact sample offset, but must not re-snapshot all 8 Song programs.
+   if(audioSongEnabled_)scheduleRange(data.numSamples);
    for(Steinberg::int32 offset=0;offset<data.numSamples;++offset) {
      const auto point=patternTimeline_.get(static_cast<std::size_t>(offset));
      if(!point.source)continue;
-     scheduleRange(offset);
+     if(!audioSongEnabled_)scheduleRange(offset);
      activePattern=point.pattern;
-      if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
-      else if(point.source==PatternEventTimeline::kMidi){selected_.midiSubmit(point.pattern);reportMidi(offset,point.pattern);}
+     if(point.source==PatternEventTimeline::kHost)selected_.hostSubmit(point.pattern);
+     else if(point.source==PatternEventTimeline::kMidi) {
+       selected_.midiSubmit(point.pattern);
+       reportMidi(offset,point.pattern);
+     }
    }
-   scheduleRange(data.numSamples);
+   if(!audioSongEnabled_)scheduleRange(data.numSamples);
 
  }else {
    auto active=selected_.load(std::memory_order_relaxed);
