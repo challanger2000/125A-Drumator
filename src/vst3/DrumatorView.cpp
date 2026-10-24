@@ -164,17 +164,24 @@ void drawPanelScrew(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* bitmap,double x,dou
  bitmap->draw(c,{0.,0.,32.,32.});
 }
 void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double cy,double fraction,
-                const char* title,const char* value,bool selected=false) {
+                const char* title,const char* value,bool selected=false,
+                bool rowModule=false) {
  fraction=std::clamp(fraction,0.,1.);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
- c->drawString(title,{cx-46.,cy-37.,cx+46.,cy-24.});
- // Recessed mount behind the existing proven JKnobMan filmstrip.
- c->setFillColor(VSTGUI::CColor{4,15,26,255});
- c->drawEllipse({cx-30.,cy-30.,cx+30.,cy+30.},VSTGUI::kDrawFilled);
- c->setFrameColor(VSTGUI::CColor{90,136,165,255});
- c->drawEllipse({cx-29.,cy-29.,cx+29.,cy+29.},VSTGUI::kDrawStroked);
- c->setFrameColor(VSTGUI::CColor{11,29,43,255});
- c->drawEllipse({cx-27.,cy-27.,cx+27.,cy+27.},VSTGUI::kDrawStroked);
+ // Global controls share their historic layout; a bezel here would collide
+ // with their title/nameplate. Row labels are deliberately placed higher.
+ const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:-37.;
+ const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:-24.;
+ c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom});
+ if(rowModule) {
+   const double r=UiCompactLayout::rowKnobMountRadius;
+   c->setFillColor(VSTGUI::CColor{4,15,26,255});
+   c->drawEllipse({cx-r,cy-r,cx+r,cy+r},VSTGUI::kDrawFilled);
+   c->setFrameColor(VSTGUI::CColor{90,136,165,255});
+   c->drawEllipse({cx-r+1.,cy-r+1.,cx+r-1.,cy+r-1.},VSTGUI::kDrawStroked);
+   c->setFrameColor(VSTGUI::CColor{11,29,43,255});
+   c->drawEllipse({cx-r+3.,cy-r+3.,cx+r-3.,cy+r-3.},VSTGUI::kDrawStroked);
+ }
  // A bitmap object can exist even when its PNG resource was not loaded,
  // notably in native offscreen QA outside the installed VST3 bundle.
  // Treat that as unavailable and paint an actual usable fallback control.
@@ -745,7 +752,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                             VSTGUI::CColor{37,88,124,255});
    c->drawRect({12,y+10.,15,y+rowH-11.},VSTGUI::kDrawFilled);
    // Readable row functions versus visually separated step sequencer.
-   drawInset(c,{18,y+46.,615,y+115.},VSTGUI::CColor{16,34,49,255});
+   drawInset(c,{18,y+46.,615,y+120.},VSTGUI::CColor{16,34,49,255});
    drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
    drawInset(c,{kGridX-3.,y+64.,kGridRight+4.,y+110.},stepWellBlue);
    char name[16]{};
@@ -804,7 +811,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }else std::snprintf(desc,sizeof(desc),"%+d st",v);
      drawRotary(c,knobBitmap_,centers[k],y+88,
                 static_cast<double>(v-lo)/static_cast<double>(hi-lo),
-                labels[k],desc,chosen&&activeKnob_==k);
+                labels[k],desc,chosen&&activeKnob_==k,true);
    }
    // Nonzero legacy realtime modulation remains visible and controllable.
    if(controller_.rowRandomVelocity(row)>0){
@@ -812,7 +819,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      std::snprintf(legacy,sizeof(legacy),"LEGACY RT %u%%",
                    static_cast<unsigned>(controller_.rowRandomVelocity(row)));
      drawRotary(c,knobBitmap_,centers[3],y+88,controller_.rowRandomVelocity(row)/100.,
-                "RANDOM RT",legacy,chosen&&activeKnob_==3);
+                "RANDOM RT",legacy,chosen&&activeKnob_==3,true);
    }else{
      drawControl(c,{448,y+73,544,y+105},"RANDOM VEL");
    }

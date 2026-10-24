@@ -32,6 +32,11 @@ int main(){
  EXPECT(UiCompactLayout::maxValue(0)==200);
  EXPECT(UiCompactLayout::maxValue(2)==24);
  EXPECT(UiCompactLayout::defaultValue(0)==100);
+ // Regression: added physical knob bezels must never obscure labels, overlap
+ // the top-row buttons or cut into the bottom edge of their recessed bay.
+ EXPECT(UiCompactLayout::rowKnobY+UiCompactLayout::rowKnobLabelTop>=42.);
+ EXPECT(UiCompactLayout::rowKnobLabelBottom<=-UiCompactLayout::rowKnobMountRadius-3.);
+ EXPECT(UiCompactLayout::rowKnobY+UiCompactLayout::rowKnobMountRadius<=118.);
  EXPECT(UiCompactLayout::hit(275.,UiCompactLayout::sampleMenu));
  EXPECT(!UiCompactLayout::hit(274.9,UiCompactLayout::sampleMenu));
  EXPECT(!UiCompactLayout::hit(301.,UiCompactLayout::sampleMenu));

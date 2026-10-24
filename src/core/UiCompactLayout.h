@@ -10,6 +10,11 @@ struct UiCompactLayout final {
  static constexpr std::size_t perPage=4;
  static constexpr double stepX=622.,stepWidth=19.;
  static constexpr double knobRadius=25.,rowKnobY=88.;
+ // Render geometry contract: labels clear the mounted 30px ring by 3px.
+ static constexpr double rowKnobMountRadius=30.,rowKnobLabelTop=-46.,
+                         rowKnobLabelBottom=-33.;
+ static_assert(rowKnobLabelBottom <= -rowKnobMountRadius-3.);
+ static_assert(rowKnobY+rowKnobMountRadius < 120.);
  static constexpr double scrollLeft=1263.,scrollRight=1279.,scrollTop=header+7.;
  struct Slot {double left,right;};
  static constexpr Slot barOne{280.,364.},barTwo{372.,456.},edit{208.,272.};
