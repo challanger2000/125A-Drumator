@@ -221,6 +221,61 @@ void testRv01OutputlessPreviewRetirement(){
        f.p->process(audio.data)==kResultOk&&audio.left[80]==.25f,
        "RV01 fresh preview failed after outputless interval");
 }
+void testA10MissingContextAudioContinuity(){
+ // True VST3 integration: compare all 256 PCM samples over a missing
+ // ProcessContext block against the same uninterrupted real host clock.
+ constexpr auto playing=ProcessContext::kPlaying|
+      ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ for(const bool newHit:{false,true})for(const bool partial:{false,true}){
+   Fixture reference,interrupted;
+   KitState kit;kit.grid.fill(0);kit.visible=1;
+   kit.names[0]="host-gap.wav";
+   kit.wav[0]=constantStereo(.25f,-.5f);
+   kit.grid[newHit?1:0]=127;
+   reference.kit(kit);interrupted.kit(kit);
+   prepareAudio(*reference.p);prepareAudio(*interrupted.p);
+   AuditAudioBlock standard,missing;
+   const double initialPpq=newHit?.25-256.0/24000.0:0.0;
+   for(auto* b:{&standard,&missing}){
+     b->clock.state=playing;
+     b->clock.tempo=120.;
+     b->clock.projectTimeMusic=initialPpq;
+   }
+   check(reference.p->process(standard.data)==kResultOk&&
+         interrupted.p->process(missing.data)==kResultOk,
+         "A10 initial host clock rejected");
+   for(std::size_t i=0;i<256;++i)
+     check(standard.left[i]==missing.left[i]&&
+           standard.right[i]==missing.right[i],
+           "A10 pre-gap PCM mismatch");
+   for(int block=1;block<=3;++block){
+     standard.clock.state=playing;missing.clock.state=playing;
+     const double ppq=initialPpq+block*256.0/24000.0;
+     standard.clock.projectTimeMusic=ppq;
+     missing.clock.projectTimeMusic=ppq;
+     missing.data.processContext=&missing.clock;
+     if(block==1) {
+       if(partial)missing.clock.state=ProcessContext::kPlaying;
+       else missing.data.processContext=nullptr;
+     }
+     check(reference.p->process(standard.data)==kResultOk&&
+           interrupted.p->process(missing.data)==kResultOk,
+           "A10 live host clock lost during context gap");
+     for(std::size_t i=0;i<256;++i)
+       check(standard.left[i]==missing.left[i]&&
+             standard.right[i]==missing.right[i],
+             "A10 optional context omission cut, shifted or duplicated PCM");
+     if(block==1)
+       check(standard.left[80]==.25f&&standard.right[80]==-.5f,
+             "A10 silent positive control for missing clock");
+   }
+   // Genuine host STOP must still silence outstanding sequencer voices.
+   missing.clock.state=0;missing.data.processContext=&missing.clock;
+   check(interrupted.p->process(missing.data)==kResultOk&&
+         missing.left[80]==0.f&&missing.right[80]==0.f,
+         "A10 explicit STOP ignored after fallback");
+ }
+}
 void testA09WaveformExtremaAgainstNativeReference(){
  constexpr std::size_t count=131089u;
  auto wav=constantStereo(0.f,0.f);

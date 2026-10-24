@@ -647,6 +647,7 @@ Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::Process
  wasPlaying_=false;
  haveExpectedPpq_=false;
  expectedNextPpq_=0.0;
+ lastClockTempo_=0.0;
  phaseOriginStep_=0;
  // A rate change invalidates any prior per-voice interpolation kernel.
  // Preserve retired asset ownership; mute existing rows until reloaded.
@@ -881,19 +882,38 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  // An inactive MAIN bus may legally omit audio buffers while aux buses run.
  const bool mainReady=left&&right;
  if(!mainReady&&((left!=nullptr)!=(right!=nullptr)))return Steinberg::kResultFalse;
- const auto* context=data.processContext;
- const bool playing=context&&
-     ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0);
- // Never propagate a malformed host clock into expectedNextPpq_: otherwise
- // NaN comparison is always false and the next real locate cannot reset phase.
- const bool validHostClock=context&&
-     (context->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                      Steinberg::Vst::ProcessContext::kTempoValid))==
-                     (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
-                      Steinberg::Vst::ProcessContext::kTempoValid)&&
-     std::isfinite(context->projectTimeMusic)&&
-     std::isfinite(context->tempo)&&context->tempo>0.0;
- if(wasPlaying_&&!playing)voices_.reset(); // stop old sequencer tails once
+ // The VST3 ProcessContext and its tempo/PPQ fields are optional. Missing
+ // timing is not a transport STOP; retain and extrapolate only a previously
+ // confirmed playing clock to avoid a missing drum hit or cut sample tail.
+ const auto* suppliedContext=data.processContext;
+ const bool explicitStop=suppliedContext&&
+     (suppliedContext->state&Steinberg::Vst::ProcessContext::kPlaying)==0;
+ const auto hasClock=[](const Steinberg::Vst::ProcessContext* c) noexcept {
+   return c&&
+     (c->state&(Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                Steinberg::Vst::ProcessContext::kTempoValid))==
+               (Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                Steinberg::Vst::ProcessContext::kTempoValid)&&
+     std::isfinite(c->projectTimeMusic)&&
+     std::isfinite(c->tempo)&&c->tempo>0.0;
+ };
+ Steinberg::Vst::ProcessContext inferred{};
+ const auto* context=suppliedContext;
+ if(!explicitStop&&!hasClock(suppliedContext)&&wasPlaying_&&
+    haveExpectedPpq_&&std::isfinite(expectedNextPpq_)&&
+    std::isfinite(lastClockTempo_)&&lastClockTempo_>0.0) {
+   inferred.state=Steinberg::Vst::ProcessContext::kPlaying|
+                  Steinberg::Vst::ProcessContext::kProjectTimeMusicValid|
+                  Steinberg::Vst::ProcessContext::kTempoValid;
+   inferred.projectTimeMusic=expectedNextPpq_;
+   inferred.tempo=lastClockTempo_;
+   context=&inferred;
+ }
+ const bool playing=explicitStop?false:context?
+     ((context->state&Steinberg::Vst::ProcessContext::kPlaying)!=0):
+     wasPlaying_;
+ const bool validHostClock=playing&&hasClock(context);
+ if(wasPlaying_&&!playing)voices_.reset(); // only explicit host STOP
  if(!playing||!validHostClock)haveExpectedPpq_=false;
  wasPlaying_=playing;
  // The first full block after a kit commit starts with no old-kit voices.
@@ -979,6 +999,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    expectedNextPpq_=initialPpq+static_cast<double>(data.numSamples)*
        context->tempo/(60.0*rateForClock);
    haveExpectedPpq_=true;
+   lastClockTempo_=context->tempo;
    const auto tempo=context->tempo;
    const auto rate=processSetup.sampleRate;
    const auto swing=swingPercent_.load(std::memory_order_relaxed)/100.0;

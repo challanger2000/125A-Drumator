@@ -1972,6 +1972,8 @@ int main(int argc,char** argv){
  run("A08 native WAV editor revision cache and invalidation",testA08WaveEditorRevisionCache);
  run("RM16 waveform cache disabled is detected",[]{expectMutationKilled(qa::AuditMutation::disableWaveCache,"full WAV on every viewport query",testA08WaveEditorRevisionCache);});
  run("A09 native variable stereo waveform exact reference",testA09WaveformExtremaAgainstNativeReference);
+ run("A10 context gap audio and step continuity",testA10MissingContextAudioContinuity);
+ run("RM18 missing-context old-cutoff regression is killed",[]{expectMutationKilled(qa::AuditMutation::suppressMissingContextCarry,"missing clock truncates hits",testA10MissingContextAudioContinuity);});
  run("RM17 direct-scan mutation is detected",[]{expectMutationKilled(qa::AuditMutation::bypassWaveRangeIndex,"linear scan instead of indexed bins",testA09WaveformExtremaAgainstNativeReference);});
  run("RV02 allocation-free STOP and rejected-delivery retry",testRv02AllocationFreeStopAndRetry);
  run("RV02 transient STOP rejection during native editor close",testRv02NativeEditorCloseTransientReject);
