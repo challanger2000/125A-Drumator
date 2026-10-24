@@ -135,11 +135,13 @@ void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
 
 void drawPanelScrew(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* bitmap,double x,double y,double angle) {
  if(!bitmap||bitmap->getWidth()!=32.||bitmap->getHeight()!=32.)return;
- // Draw all 32 source pixels at 18px. fillRectWithBitmap crops/tiles here.
+ // Win32 bitmap renderer cannot reliably draw a rotated PNG. Use a
+ // scale/translate-only transform (as for the tested knob filmstrip).
+ (void)angle;
  constexpr double factor=18./32.;
  VSTGUI::CDrawContext::Transform transform(*c,
    VSTGUI::CGraphicsTransform().scale(factor,factor)
-     .translate(-16.,-16.).rotate(angle).translate(x,y));
+     .translate(x-9.,y-9.));
  bitmap->draw(c,{0.,0.,32.,32.});
 }
 void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double cy,double fraction,
