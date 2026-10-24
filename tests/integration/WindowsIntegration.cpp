@@ -1903,6 +1903,7 @@ int main(int argc,char** argv){
  run("RE08 independent complete PCM timeline",testReauditPcmTimeline);
  run("RE09 64 voices live swap locate Stop",testReauditLoadedSwap);
  run("RE10 actual Processor deadline matrix",testReauditDeadlineMatrix);
+ run("A26 combined 16 active buses, 64 voices, 12 imports, Cycle Stop and PCM",testA26CombinedLiveMultibusCycleImport);
  run("RE11 cold Song overlap cannot divide by zero",[&]{testReauditSongColdChild(argv[1]);});
  run("RM01 zero Stop repair mutation",[]{expectMutationKilled(qa::AuditMutation::suppressZeroStop,"zero Stop",testZeroFrameStopRetiresVoice);});
  run("RM02 paired duration repair mutation",[]{expectMutationKilled(qa::AuditMutation::staleDuration,"paired duration",testReauditPatternLength);});

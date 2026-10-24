@@ -604,6 +604,133 @@ void testReauditDeadlineMatrix(){
 }
 // Run in a child process: the unmodified cold Song path may raise native
 // EXCEPTION_INT_DIVIDE_BY_ZERO. Do not replace or guard the product modulo.
+
+void testA26CombinedLiveMultibusCycleImport(){
+ using Clock=std::chrono::steady_clock;
+ constexpr unsigned frames=256,totalBlocks=500;
+ constexpr auto hostFlags=ProcessContext::kPlaying|
+    ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid|
+    ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ FinalAuditFiles files;Fixture live,control;
+ KitState kit;kit.grid.fill(0);kit.visible=16;kit.pitch.fill(0);
+ for(std::size_t row=0;row<kRows;++row){
+   const auto amp=static_cast<float>(row+1)/128.f;
+   kit.names[row]="row"+std::to_string(row)+".wav";
+   kit.wav[row]=reauditLongStereo(amp,-amp*.5f,48000);
+   kit.output[row]=static_cast<std::uint8_t>(row);
+ }
+ live.kit(kit);control.kit(kit);
+ for(auto* p:{live.p,control.p}){
+   std::array<SpeakerArrangement,kRows> outs{};
+   outs.fill(SpeakerArr::kStereo);
+   check(p->setBusArrangements(nullptr,0,outs.data(),kRows)==kResultOk,
+         "A26 setup 16 stereo arrangements");
+   ProcessSetup setup{};setup.sampleRate=48000;setup.maxSamplesPerBlock=frames;
+   setup.symbolicSampleSize=kSample32;setup.processMode=kRealtime;
+   check(p->setupProcessing(setup)==kResultOk&&p->setActive(true)==kResultOk&&
+         p->setProcessing(true)==kResultOk,"A26 real VST3 Processor activation");
+   for(int32 bus=1;bus<static_cast<int32>(kRows);++bus)
+     check(p->activateBus(MediaTypes::kAudio,BusDirections::kOutput,bus,true)==kResultOk,
+           "A26 genuinely activate each stereo bus");
+ }
+ const auto importA=files.write("live-a.wav",reauditLongStereo(-.125f,.25f,48000));
+ const auto importB=files.write("live-b.wav",reauditLongStereo(.375f,-.125f,48000));
+ std::atomic<unsigned> rendered{0},badPcm{0},errors{0},positive{0},misses{0};
+ std::atomic<bool> importsComplete{false},duringImports{false};
+ std::array<double,totalBlocks> elapsed{};
+ std::jthread audio([&](std::stop_token stop){
+   std::array<std::array<std::array<float,frames>,2>,kRows> actual{},reference{};
+   std::array<std::array<float*,2>,kRows> ap{},rp{};
+   std::array<AudioBusBuffers,kRows> ab{},rb{};
+   for(std::size_t bus=0;bus<kRows;++bus){
+     ap[bus]={actual[bus][0].data(),actual[bus][1].data()};
+     rp[bus]={reference[bus][0].data(),reference[bus][1].data()};
+     ab[bus].numChannels=rb[bus].numChannels=2;
+     ab[bus].channelBuffers32=ap[bus].data();
+     rb[bus].channelBuffers32=rp[bus].data();
+   }
+   ProcessContext host{};host.state=hostFlags;host.tempo=120.;
+   host.cycleStartMusic=4.;host.cycleEndMusic=4.+1024./24000.;
+   ProcessData liveData{},referenceData{};
+   for(auto* d:{&liveData,&referenceData}){
+     d->symbolicSampleSize=kSample32;d->numSamples=frames;
+     d->numOutputs=static_cast<int32>(kRows);
+     d->processContext=&host;
+   }
+   liveData.outputs=ab.data();referenceData.outputs=rb.data();
+   EventList notes(64);reaudit64Notes(notes,16);
+   auto deadline=Clock::now();
+   for(unsigned block=0;block<totalBlocks&&!stop.stop_requested();++block){
+     // Host-time is continuous modulo active 1024-frame Cycle. An explicit
+     // zero-frame STOP at block 300 invalidates the old sample tails.
+     if(block==300){
+       while(!importsComplete.load()&&!stop.stop_requested())
+         std::this_thread::yield();
+       if(stop.stop_requested())break;
+       host.state=0;liveData.numSamples=referenceData.numSamples=0;
+       if(live.p->process(liveData)!=kResultOk||
+          control.p->process(referenceData)!=kResultOk)++errors;
+       liveData.numSamples=referenceData.numSamples=frames;
+       host.state=hostFlags;
+     }
+     host.projectTimeMusic=4.+static_cast<double>((block%4u)*frames)/24000.;
+     liveData.inputEvents=referenceData.inputEvents=
+        block==0||block==301?&notes:nullptr;
+     const auto begin=Clock::now();
+     const auto result=live.p->process(liveData);
+     const auto end=Clock::now();
+     elapsed[block]=std::chrono::duration<double,std::milli>(end-begin).count();
+     if(elapsed[block]>frames/48000.*1000.)++misses;
+     if(result!=kResultOk||control.p->process(referenceData)!=kResultOk)
+       ++errors;
+     if(block==0||block==301){
+       if(IntegrationAccess::activeAudioVoices(*live.p)!=64)++errors;
+     }
+     for(std::size_t bus=1;bus<kRows;++bus)
+       for(unsigned channel=0;channel<2;++channel)
+         for(unsigned sample=0;sample<frames;++sample){
+           if(actual[bus][channel][sample]!=reference[bus][channel][sample])
+             ++badPcm;
+           if(block==0&&sample==32&&
+              actual[bus][channel][sample]!=0.f)++positive;
+         }
+     if(block<300)
+       for(unsigned channel=0;channel<2;++channel)
+         for(unsigned sample=0;sample<frames;++sample)
+           if(actual[0][channel][sample]!=reference[0][channel][sample])
+             ++badPcm;
+     ++rendered;
+     deadline+=std::chrono::duration_cast<Clock::duration>(
+       std::chrono::duration<double>(frames/48000.));
+     std::this_thread::sleep_until(deadline);
+   }
+ });
+ while(rendered.load()<4&&errors.load()==0)std::this_thread::yield();
+ for(unsigned i=0;i<12;++i){
+   duringImports=true;
+   if(live.c->loadWav(0,(i&1)?importA:importB)!=
+      Controller::LoadStatus::Accepted)++errors;
+   duringImports=false;
+ }
+ importsComplete=true;
+ audio.join();
+ auto ordered=elapsed;std::sort(ordered.begin(),ordered.end());
+ qa::workflowNotice(
+   "A26 16 ACTIVE stereo buses, 16 distinct PCM assets, 64 voices,"
+   " 12 concurrent real controller swaps, host Cycle, zero-frame Stop/Play,"
+   " paced 48k/256 blocks="+std::to_string(rendered.load())+
+   " exact PCM mismatches="+std::to_string(badPcm.load())+
+   " deadline misses="+std::to_string(misses.load())+
+   " p95-ms="+std::to_string(ordered[474])+
+   " p99-ms="+std::to_string(ordered[494])+
+   " max-ms="+std::to_string(ordered.back()));
+ check(rendered.load()==totalBlocks&&errors.load()==0&&
+       badPcm.load()==0&&positive.load()>=30,
+       "A26 combined 16-bus/Sample-swap/Loop/Stop PCM or voice failure");
+ check(misses.load()==0,
+       "A26 combined 16-bus/Sample-swap/Loop/Stop missed paced callback deadlines");
+}
+
 void testReauditSongCold(bool warm){
  Fixture f;KitState kit;kit.grid.fill(0);kit.visible=1;
  kit.names[0]="cold.wav";kit.wav[0]=constantStereo(.5f,-.25f);
