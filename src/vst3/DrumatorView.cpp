@@ -20,6 +20,7 @@
 #include "core/RowMixControl.h"
 #include "core/Utf8Path.h"
 #include "vstgui/lib/cdrawcontext.h"
+#include "vstgui/lib/cgraphicstransform.h"
 #include "vstgui/lib/cbitmap.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfileselector.h"
@@ -132,6 +133,12 @@ void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
  ctx->drawString(title,rect);
 }
 
+void drawPanelScrew(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* bitmap,double x,double y,double angle) {
+ if(!bitmap||bitmap->getWidth()!=32.||bitmap->getHeight()!=32.)return;
+ VSTGUI::CDrawContext::Transform rotation(*c,
+   VSTGUI::CGraphicsTransform().translate(x,y).rotate(angle).translate(-x,-y));
+ c->fillRectWithBitmap(bitmap,{0.,0.,32.,32.},{x-8.,y-8.,x+8.,y+8.},1.f);
+}
 void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double cy,double fraction,
                 const char* title,const char* value,bool selected=false) {
  fraction=std::clamp(fraction,0.,1.);
@@ -407,6 +414,7 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
 DrumatorView::~DrumatorView() {
  if(backgroundBitmap_){backgroundBitmap_->forget();backgroundBitmap_=nullptr;}
  if(knobBitmap_){knobBitmap_->forget();knobBitmap_=nullptr;}
+ if(screwBitmap_){screwBitmap_->forget();screwBitmap_=nullptr;}
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
  controller_.unregisterView(this);
 }
@@ -607,6 +615,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  controller_.registerView(this);
  backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("abstraktes_blaues_metall_mit_sanftem_glanz.png"));
  knobBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Knob.png"));
+ screwBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Screw.png"));
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  const auto bottom=gridBottom();
@@ -1067,6 +1076,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    if(!status_.empty())
      c->drawString(status_.c_str(),{265,556,1020,585});
  }
+ // Decorative corners only; no hit regions or interactive widgets are added.
+ drawPanelScrew(c,screwBitmap_,12.,43.,-15.);
+ drawPanelScrew(c,screwBitmap_,1268.,43.,25.);
+ drawPanelScrew(c,screwBitmap_,12.,fullHeight-12.,40.);
+ drawPanelScrew(c,screwBitmap_,1268.,fullHeight-12.,-30.);
  setDirty(false);
 }
 bool DrumatorView::loadPath(std::size_t row,const std::string& path) {
