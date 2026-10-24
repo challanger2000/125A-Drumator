@@ -43,6 +43,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <new>
 #include <stdexcept>
 #include <string>
