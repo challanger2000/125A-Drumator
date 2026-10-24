@@ -1459,19 +1459,24 @@ void testRv05GlobalKnobPaintCenters(){
  auto* view=IntegrationAccess::view(*f.c,0);
  for(const double center:UiCompactLayout::globalKnobCenters){
    const auto left=static_cast<unsigned>(center-24.);
-   // Sample across the knob diameter, not the old vector-circle outline.
-   // The JKnobMan sprite has a near-black outer ring against the blue shell.
+   // Offscreen QA is not guaranteed to have VST3 bundle resources loaded.
+   // Verify the actual painted position in both modes: bitmap and fallback.
+   // Preserve the historical-offset negative mutation (RM15).
    const auto pixels=frGuiPixels(*view,left,74,left+48,78);
-   double sum=0.,count=0.;
+   constexpr std::uint32_t fallbackFace=(41u<<16)|(53u<<8)|67u;
+   double darkSum=0.,darkCount=0.,fallbackSum=0.,fallbackCount=0.;
    for(unsigned y=0;y<4;++y)
      for(unsigned x=0;x<48;++x){
        const auto rgb=pixels[y*48+x];
        const auto red=(rgb>>16)&255u,green=(rgb>>8)&255u,blue=rgb&255u;
-       if(red>35u||green>40u||blue>48u)continue;
-       sum+=static_cast<double>(left+x);
-       count+=1.;
+       const auto xAbsolute=static_cast<double>(left+x);
+       if(red<=35u&&green<=40u&&blue<=48u){darkSum+=xAbsolute;++darkCount;}
+       if(rgb==fallbackFace){fallbackSum+=xAbsolute;++fallbackCount;}
      }
-   check(count>=8.,"RV05 near-black sprite ring missing from pixel capture");
+   const bool spriteVisible=darkCount>=8.;
+   const double count=spriteVisible?darkCount:fallbackCount;
+   const double sum=spriteVisible?darkSum:fallbackSum;
+   check(count>=8.,"RV05 no painted rotary surface found in offscreen capture");
    check(std::abs(sum/count-center)<2.0,
          "RV05 painted rotary center does not match input hit center");
  }
