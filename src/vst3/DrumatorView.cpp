@@ -132,19 +132,33 @@ void drawControl(VSTGUI::CDrawContext* ctx,const VSTGUI::CRect& rect,
  ctx->drawString(title,rect);
 }
 
-void drawRotary(VSTGUI::CDrawContext* c,double cx,double cy,double fraction,
+void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double cy,double fraction,
                 const char* title,const char* value,bool selected=false) {
  fraction=std::clamp(fraction,0.,1.);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
  c->drawString(title,{cx-46.,cy-34.,cx+46.,cy-18.});
- c->setFillColor(selected?VSTGUI::CColor{58,89,109,255}:panel);
- c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawFilled);
- c->setFrameColor(selected?letters:border);
- c->setLineWidth(selected?2.:1.3);
- c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawStroked);
- const auto angle=(-135.+270.*fraction)*3.14159265358979323846/180.;
- c->setFrameColor(on);c->setLineWidth(2.5);
- c->drawLine({cx,cy},{cx+std::sin(angle)*13.,cy-std::cos(angle)*13.});
+ if(sprite&&sprite->getWidth()==125.&&sprite->getHeight()==12625.) {
+   constexpr double frameSize=125.;
+   constexpr double frameCount=101.;
+   const auto frame=static_cast<int>(std::lround(fraction*(frameCount-1.)));
+   c->fillRectWithBitmap(sprite,
+     {0.,frame*frameSize,frameSize,(frame+1)*frameSize},
+     {cx-17.,cy-17.,cx+17.,cy+17.},1.f);
+   if(selected) {
+     c->setFrameColor(accent);
+     c->setLineWidth(1.);
+     c->drawEllipse({cx-18.,cy-18.,cx+18.,cy+18.},VSTGUI::kDrawStroked);
+   }
+ }else{
+   // Visible fallback if a host did not load the sprite resource.
+   c->setFillColor(panel);
+   c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawFilled);
+   c->setFrameColor(letters);
+   c->drawEllipse({cx-17.,cy-17.,cx+17.,cy+17.},VSTGUI::kDrawStroked);
+   const auto angle=(-135.+270.*fraction)*3.14159265358979323846/180.;
+   c->setFrameColor(on);c->setLineWidth(2.5);
+   c->drawLine({cx,cy},{cx+std::sin(angle)*13.,cy-std::cos(angle)*13.});
+ }
  c->setLineWidth(1.);c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
  c->drawString(value,{cx+21.,cy-11.,cx+72.,cy+14.},VSTGUI::kLeftText);
 }
@@ -392,6 +406,7 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
 }
 DrumatorView::~DrumatorView() {
  if(backgroundBitmap_){backgroundBitmap_->forget();backgroundBitmap_=nullptr;}
+ if(knobBitmap_){knobBitmap_->forget();knobBitmap_=nullptr;}
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
  controller_.unregisterView(this);
 }
@@ -591,6 +606,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  // The view itself owns the drop-target interface, as in Phraseator.
  controller_.registerView(this);
  backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("abstraktes_blaues_metall_mit_sanftem_glanz.png"));
+ knobBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Knob.png"));
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  const auto bottom=gridBottom();
@@ -628,11 +644,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{1120,7,1250,35},zoomLabel,popup_==1);
  char text[36]{};
  std::snprintf(text,sizeof(text),"%u%%",controller_.swingPercent());
- drawRotary(c,UiCompactLayout::globalKnobCenters[0],76,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
+ drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[0],76,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
  std::snprintf(text,sizeof(text),"%u%%",controller_.humanizePercent());
- drawRotary(c,UiCompactLayout::globalKnobCenters[1],76,controller_.humanizePercent()/100.,"HUMANIZE",text,activeKnob_==5);
+ drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[1],76,controller_.humanizePercent()/100.,"HUMANIZE",text,activeKnob_==5);
  std::snprintf(text,sizeof(text),"%u%%",controller_.masterVolume());
- drawRotary(c,UiCompactLayout::globalKnobCenters[2],76,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
+ drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[2],76,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
  // Four full-fledged rows per page: the selection has its own independent hit box.
  for(std::size_t i=0;i<displayedRows();++i) {
    const auto row=firstRow_+i;
@@ -700,7 +716,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        if(v==0)std::snprintf(desc,sizeof(desc),"C");
        else std::snprintf(desc,sizeof(desc),"%c%d",v<0?'L':'R',std::abs(v));
      }else std::snprintf(desc,sizeof(desc),"%+d st",v);
-     drawRotary(c,centers[k],y+68,
+     drawRotary(c,knobBitmap_,centers[k],y+68,
                 static_cast<double>(v-lo)/static_cast<double>(hi-lo),
                 labels[k],desc,chosen&&activeKnob_==k);
    }
@@ -709,7 +725,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      char legacy[32]{};
      std::snprintf(legacy,sizeof(legacy),"LEGACY RT %u%%",
                    static_cast<unsigned>(controller_.rowRandomVelocity(row)));
-     drawRotary(c,centers[3],y+68,controller_.rowRandomVelocity(row)/100.,
+     drawRotary(c,knobBitmap_,centers[3],y+68,controller_.rowRandomVelocity(row)/100.,
                 "RANDOM RT",legacy,chosen&&activeKnob_==3);
    }else{
      drawControl(c,{448,y+52,544,y+84},"RANDOM VEL");
