@@ -928,7 +928,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  // The view itself owns the drop-target interface, as in Phraseator.
  controller_.registerView(this);
  backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Faceplate.png"));
- productLogoBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("Metallisches DRUMATOR-Logo mit Untertitel.png"));
+ productLogoBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("Metallisches DRUMATOR-Logo.png"));
  knobBitmap_=new VSTGUI::CMultiFrameBitmap(VSTGUI::CResourceDescription("125A_Drumator_Knob.png"),{{125.,125.},101,1});
  screwBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Screw.png"));
 }
