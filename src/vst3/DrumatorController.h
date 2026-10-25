@@ -50,6 +50,7 @@ public:
                            std::uint32_t* revision=nullptr,
                            std::array<WaveformRange,256>* rightEnvelope=nullptr,
                            bool* stereo=nullptr);
+ std::uint32_t editorWaveSampleRate() const noexcept {return editorWaveCache_.sampleRate;}
  bool commitSampleEdit(std::size_t row,const SampleEdit& edit,
                        std::uint32_t revision=UINT32_MAX);
  bool toggleRowGate(std::size_t row,bool solo);
