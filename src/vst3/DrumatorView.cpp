@@ -1124,7 +1124,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
     drawControl(c,{UiCompactLayout::edit.left,y+9,UiCompactLayout::edit.right,y+40},"EDIT",false,controller_.hasSample(row));
    drawControl(c,{303,y+9,329,y+40},"<");
    drawControl(c,{332,y+9,358,y+40},">");
-   drawControl(c,{362,y+9,398,y+40},"PLAY");
+   drawControl(c,{362,y+9,398,y+40},"PLAY",false,true,10);
    // FILL is a momentary menu/action, not a persistent per-row active
    // state; retain its existing neutral appearance.
    drawControl(c,{403,y+9,452,y+40},"FILL");
@@ -1134,11 +1134,17 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    if(out==0)std::snprintf(name,sizeof(name),"MAIN v");
    else std::snprintf(name,sizeof(name),"OUT %u v",out+1);
    drawControl(c,{535,y+9,615,y+40},name,popup_==3&&popupRow_==row,true,11);
-   std::snprintf(name,sizeof(name),"CH%u v",controller_.rowChoke(row));
+   std::snprintf(name,sizeof(name),"CH%u",controller_.rowChoke(row));
    c->setFont(VSTGUI::kNormalFont,11);
    c->setFontColor(VSTGUI::CColor{164,214,235,255});
    c->drawString("CHOKE",{570,y+52,615,y+73},VSTGUI::kCenterText);
-   drawControl(c,{570,y+73,615,y+105},name,popup_==4&&popupRow_==row,true,10);
+   drawControl(c,{570,y+73,615,y+105},"",popup_==4&&popupRow_==row);
+   // Keep the existing CHOKE cap/hit zone. Separate label and arrow to
+   // reserve an explicit right-hand glyph pocket at 100% editor zoom.
+   c->setFont(VSTGUI::kNormalFont,10);
+   c->setFontColor(letters);
+   c->drawString(name,{573.,y+75.,601.,y+102.},VSTGUI::kCenterText);
+   c->drawString("v",{602.,y+75.,612.,y+102.},VSTGUI::kCenterText);
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
