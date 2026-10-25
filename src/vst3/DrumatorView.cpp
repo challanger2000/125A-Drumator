@@ -301,19 +301,17 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  // with their title/nameplate. Row labels are deliberately placed higher.
  const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:-37.;
  const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:-24.;
- if(rowModule) {
-   c->setFillColor(VSTGUI::CColor{10,26,39,255});
-   c->drawRect({cx-38.,cy-49.,cx+38.,cy-34.},VSTGUI::kDrawFilled);
- }
+ // Labels are engraved directly on the graphite deck; a separate
+ // rectangular title plaque created a second, visually noisy control rail.
  c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom});
  if(rowModule) {
    const double r=UiCompactLayout::rowKnobMountRadius;
    c->setFillColor(VSTGUI::CColor{4,15,26,255});
    c->drawEllipse({cx-r,cy-r,cx+r,cy+r},VSTGUI::kDrawFilled);
-   c->setFrameColor(VSTGUI::CColor{90,136,165,255});
+   // A single restrained steel retaining ring frames the approved
+   // 101-frame knob sprite without redundant concentric outlines.
+   c->setFrameColor(VSTGUI::CColor{74,113,139,255});
    c->drawEllipse({cx-r+1.,cy-r+1.,cx+r-1.,cy+r-1.},VSTGUI::kDrawStroked);
-   c->setFrameColor(VSTGUI::CColor{11,29,43,255});
-   c->drawEllipse({cx-r+3.,cy-r+3.,cx+r-3.,cy+r-3.},VSTGUI::kDrawStroked);
    // Restrained functional blue scale ticks on the free left half of the
    // metal bezel. Right side stays clear for the existing numeric value.
    // Their brightness follows the real normalized knob value, not decoration.
@@ -359,8 +357,13 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
    c->setFrameColor(on);c->setLineWidth(2.5);
    c->drawLine({cx,cy},{cx+std::sin(angle)*20.,cy-std::cos(angle)*20.});
  }
- c->setLineWidth(1.);c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
- c->drawString(value,{cx+29.,cy-12.,cx+72.,cy+13.},VSTGUI::kLeftText);
+ c->setLineWidth(1.);
+ c->setFont(VSTGUI::kNormalFont,rowModule?11:12);c->setFontColor(letters);
+ // Row readouts begin beyond the 30px mount and end before the next
+ // row action; globals retain their original, independently tested bounds.
+ c->drawString(value,rowModule?
+     VSTGUI::CRect{cx+34.,cy-12.,cx+70.,cy+13.}:
+     VSTGUI::CRect{cx+29.,cy-12.,cx+72.,cy+13.},VSTGUI::kLeftText);
 }
 } // anonymous namespace: shared rotary painter and palette
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
@@ -920,7 +923,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // The top controls and rotaries occupy adjacent zones. No decorative
    // shelf stripe: it previously crowded the VOL/PAN/PITCH legends.
    // Readable row functions versus visually separated step sequencer.
-   drawInset(c,{18,y+46.,615,y+120.},VSTGUI::CColor{16,34,49,255});
+   // Quiet, continuous control deck: the knob mounts already provide
+   // physical separation; no second inset frame around all rotaries.
+   c->setFillColor(VSTGUI::CColor{16,34,49,255});
+   c->drawRect({18.,y+46.,615.,y+120.},VSTGUI::kDrawFilled);
    drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
    // Dark dividing seam and a single silver-blue return: two separate
    // recessed modules, not a painted line running through the controls.
