@@ -212,6 +212,14 @@ void drawHardwareStep(VSTGUI::CDrawContext* c,double sx,double y,
                     VSTGUI::CColor{13,28,38,255});
  c->drawRect({sx+4.,b-2.,sx+14.,b},VSTGUI::kDrawFilled);
  if(lit){
+  // Dedicated amber pilot lamp in the key bank's upper recess.
+  // It reflects the actual step state; there are no decorative fake LEDs.
+  c->setFillColor(VSTGUI::CColor{78,31,11,255});
+  c->drawRect({sx+5.,y+65.,sx+14.,y+69.},VSTGUI::kDrawFilled);
+  c->setFillColor(VSTGUI::CColor{255,140,37,255});
+  c->drawRect({sx+6.,y+66.,sx+13.,y+68.},VSTGUI::kDrawFilled);
+  c->setFillColor(VSTGUI::CColor{255,229,147,255});
+  c->drawRect({sx+8.,y+66.,sx+11.,y+67.},VSTGUI::kDrawFilled);
   c->setFillColor(VSTGUI::CColor{255,219,147,255});
   c->drawRect({sx+7.,y+93.,sx+12.,y+97.},VSTGUI::kDrawFilled);
   c->setFillColor(VSTGUI::CColor{255,248,222,255});
@@ -878,6 +886,27 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(VSTGUI::CColor{69,99,116,255});
    c->drawRect({618.,y+31.,619.,y+113.},VSTGUI::kDrawFilled);
    drawInset(c,{kGridX-3.,y+64.,kGridRight+4.,y+110.},stepWellBlue);
+   // Eight separate four-step key banks. Alternate the dark graphite
+   // inserts and machine a slim upper lip; all geometry stays strictly
+   // behind the existing key sockets and outside their 19px hit regions.
+   for(int bank=0;bank<8;++bank) {
+     const double bx=kGridX+bank*4*kCellWidth;
+     const double right=bx+4*kCellWidth;
+     c->setFillColor(bank%2?VSTGUI::CColor{9,23,36,255}:
+                             VSTGUI::CColor{13,29,43,255});
+     c->drawRect({bx+1.,y+68.,right-1.,y+106.},VSTGUI::kDrawFilled);
+     c->setFillColor(bank%2?VSTGUI::CColor{39,67,85,255}:
+                             VSTGUI::CColor{49,82,101,255});
+     c->drawRect({bx+2.,y+68.,right-2.,y+69.},VSTGUI::kDrawFilled);
+     c->setFillColor(VSTGUI::CColor{2,11,20,255});
+     c->drawRect({right-1.,y+70.,right,y+106.},VSTGUI::kDrawFilled);
+   }
+   // The 16/17 division is a measure seam, not an interactive separator.
+   const double barSeam=kGridX+16*kCellWidth;
+   c->setFillColor(VSTGUI::CColor{89,129,151,255});
+   c->drawRect({barSeam,y+64.,barSeam+1.,y+69.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{4,12,22,255});
+   c->drawRect({barSeam,y+104.,barSeam+1.,y+109.},VSTGUI::kDrawFilled);
    // Eight physically indexed four-step groups. Markers live above/below
    // the key sockets and never consume a step's existing 19px hit target.
    for(int group=4;group<32;group+=4) {
