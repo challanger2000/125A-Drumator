@@ -7,9 +7,9 @@ namespace drumator {
 // Shows 16 meaningful song entries at a time instead of 64 tiny buttons.
 struct UiSongLayout final {
  static constexpr std::size_t columns=8, perPage=16, pages=SongChain::kCapacity/perPage;
- static constexpr double left=16., top=145., columnPitch=154., rowPitch=52.;
+ static constexpr double left=16., top=207., columnPitch=154., rowPitch=52.;
  static constexpr double cellWidth=150.,cellHeight=45.;
- static constexpr double navTop=104.,navBottom=134.;
+ static constexpr double navTop=166.,navBottom=196.;
  static constexpr double previousLeft=988.,previousRight=1102.;
  static constexpr double nextLeft=1110.,nextRight=1244.;
  static constexpr std::size_t first(std::size_t page) noexcept {return page*perPage;}

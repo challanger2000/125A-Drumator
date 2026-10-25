@@ -6,8 +6,12 @@
 #include <cstdint>
 namespace drumator {
 struct UiCompactLayout final {
- static constexpr double width=1280.,header=108.,baseRow=130.,velocityRow=30.,footer=54.;
+ static constexpr double width=1280.,header=160.,baseRow=130.,velocityRow=30.,footer=54.;
  static constexpr std::size_t perPage=4;
+ static constexpr double headerButtonTop=101.,headerButtonBottom=133.,
+      groupTitleTop=49.,groupTitleBottom=65.,globalKnobY=119.,
+      songEditorHeight=432.,patternStart=457.,patternPitch=49.,
+      patternButtonWidth=44.;
  static constexpr double stepX=622.,stepWidth=19.;
  static constexpr double knobRadius=25.,rowKnobY=88.;
  // Render geometry contract: labels clear the mounted 30px ring by 3px.
@@ -17,13 +21,19 @@ struct UiCompactLayout final {
  static_assert(rowKnobY+rowKnobMountRadius < 120.);
  static constexpr double scrollLeft=1263.,scrollRight=1279.,scrollTop=header+7.;
  struct Slot {double left,right;};
- static constexpr Slot barOne{280.,364.},barTwo{372.,456.},edit{208.,272.};
+ static constexpr Slot barOne{273.,352.},barTwo{362.,441.},edit{208.,272.};
+ static constexpr Slot patternTools{857.,963.},songToggle{971.,1036.},
+                       songEdit{1043.,1111.};
  static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
    velocityToggle{1233.,1259.},rowAdd{16.,110.},rowRemove{116.,210.};
  static constexpr std::array<double,4> rowKnobCenters{{133.,254.,375.,496.}};
- static constexpr std::array<double,3> globalKnobCenters{{78.,176.,1180.}};
+ static constexpr std::array<double,3> globalKnobCenters{{79.,177.,1180.}};
+ static_assert(barTwo.right<patternStart);
+ static_assert(patternStart+7.*patternPitch+patternButtonWidth<patternTools.left);
+ static_assert(patternTools.right<songToggle.left&&songToggle.right<songEdit.left);
+ static_assert(songEdit.right<globalKnobCenters[2]-50.);
  static constexpr std::array<double,4> userZooms{{1.,1.2,1.3,1.5}};
  static constexpr bool hit(double x,Slot slot) noexcept {return x>=slot.left&&x<slot.right;}
  // At the supported 300px minimum, tall modal menus must extend over the

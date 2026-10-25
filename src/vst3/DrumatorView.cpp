@@ -44,7 +44,9 @@ namespace drumator {
 namespace {
 constexpr double kGridX=UiCompactLayout::stepX,kGridY=UiCompactLayout::header;
 constexpr double kCellWidth=UiCompactLayout::stepWidth,kGridRight=kGridX+32*kCellWidth;
-constexpr double kPatternX=330.,kPatternWidth=55.,kPatternY=52.;
+constexpr double kPatternX=UiCompactLayout::patternStart,
+                 kPatternWidth=UiCompactLayout::patternPitch,
+                 kPatternY=UiCompactLayout::headerButtonTop;
 const VSTGUI::CColor background{26,35,45,255};
 const VSTGUI::CColor panel{41,53,67,255};
 const VSTGUI::CColor border{73,94,114,255};
@@ -68,8 +70,8 @@ VSTGUI::CRect editorRect(const UiWaveEditorLayout::Rect& r){
  return {r.left,r.top,r.right,r.bottom};
 }
 void drawBrandLogo(VSTGUI::CDrawContext* c) {
- constexpr double scale=32./887.;
- constexpr double x0=16.,y0=2.;
+ constexpr double scale=40./887.;
+ constexpr double x0=16.,y0=3.;
  for(const auto& shape: kBrandLogoPaths){
    auto* path=c->createGraphicsPath();
    if(!path)continue;
@@ -190,21 +192,14 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
  }
  c->setFrameColor(VSTGUI::CColor{5,23,38,255});
  c->drawRect(r,VSTGUI::kDrawStroked);
- // Cold-blue pilot lights show actual selected/engaged control state.
- // Their small upper-right sockets avoid the centered legends on M/S keys.
- if(selected&&enabled&&r.getWidth()>=30.&&r.getHeight()>=24.) {
-   const double px=r.right-8.,py=r.top+5.;
-   c->setFillColor(VSTGUI::CColor{2,18,31,255});
-   c->drawRect({px-1.,py-1.,px+5.,py+5.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{40,112,158,255});
-   c->drawRect({px,py,px+4.,py+4.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{136,224,251,255});
-   c->drawRect({px+1.,py+1.,px+3.,py+3.},VSTGUI::kDrawFilled);
- }
+ // Selected keycaps are blue already; remove tiny square pilot artifacts.
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(!enabled?VSTGUI::CColor{143,156,169,255}:
                  selected?VSTGUI::CColor{245,252,255,255}:letters);
- c->drawString(title,{r.left,r.top+(selected?1.:0.),r.right,r.bottom+(selected?1.:0.)});
+ // Center text against the raised keycap, not its dark lower contact skirt.
+ const double press=selected?1.:0.;
+ c->drawString(title,{r.left+3.,r.top+2.+press,
+                      r.right-3.,r.bottom-4.+press},VSTGUI::kCenterText);
 }
 
 
@@ -299,8 +294,9 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  // 100% while keeping their original 13px label bounds and knob geometry.
  // Global controls share their historic layout; a bezel here would collide
  // with their title/nameplate. Row labels are deliberately placed higher.
- const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:-37.;
- const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:-24.;
+ const bool isMaster=!rowModule&&std::string_view(title)=="MASTER";
+ const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:(isMaster?-70.:-47.);
+ const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:(isMaster?-54.:-34.);
  // Legends remain on the faceplate, rather than getting their own
  // decorative plaque. Global controls use the upper free fascia strip.
  if(rowModule) {
@@ -356,7 +352,7 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
    }
    c->setLineWidth(1.);
  }
- c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom});
+ c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom},VSTGUI::kCenterText);
  // A bitmap object can exist even when its PNG resource was not loaded,
  // notably in native offscreen QA outside the installed VST3 bundle.
  // Treat that as unavailable and paint an actual usable fallback control.
@@ -826,9 +822,10 @@ bool DrumatorView::adjustEditorHeight() {
  const auto total=controller_.visibleRows();
  if(firstRow_>=total)firstRow_=total>0?total-1:0;
  const auto page=std::min(UiCompactLayout::perPage,total-firstRow_);
- // The Song board needs only its own 370px surface.
- const auto height=songEditorOpen_?370.:
-     std::max(370.,UiCompactLayout::editorHeight(firstRow_,page,velocityExpanded_));
+ // Resized Song board leaves room below the new header for its controls.
+ const auto height=songEditorOpen_?UiCompactLayout::songEditorHeight:
+     std::max(UiCompactLayout::songEditorHeight,
+              UiCompactLayout::editorHeight(firstRow_,page,velocityExpanded_));
  const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  if(!editor_.requestResize({1280.*scale,height*scale})){
    compactViewport_=true;
@@ -870,39 +867,45 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  if(backgroundBitmap_&&backgroundBitmap_->getWidth()>=1280.&&
     backgroundBitmap_->getHeight()>=fullHeight)
    backgroundBitmap_->draw(c,{0.,0.,1280.,fullHeight});
- // Open steel fascia: leave the approved faceplate visible between the
- // instrument-like recessed control groups instead of painting a full opaque
- // rectangular deck and two decorative nameplate frames above it.
+ // The enlarged steel head is an open surface, without stacked insets.
  c->setFillColor(VSTGUI::CColor{4,15,27,255});
- c->drawRect({0.,40.,1280.,43.},VSTGUI::kDrawFilled);
- c->setFillColor(VSTGUI::CColor{67,107,135,255});
- c->drawRect({4.,40.,1276.,41.},VSTGUI::kDrawFilled);
- drawInset(c,{17,39,260,103},VSTGUI::CColor{12,31,46,255});
- drawInset(c,{323,46,774,99},VSTGUI::CColor{10,27,43,255});
- drawInset(c,{779,46,1106,99},VSTGUI::CColor{10,27,43,255});
- drawInset(c,{1124,39,1253,103},VSTGUI::CColor{12,31,46,255});
- c->setFont(VSTGUI::kNormalFont,23);c->setFontColor(letters);
- c->drawString("DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
+ c->drawRect({0.,UiCompactLayout::header-2.,1280.,UiCompactLayout::header},VSTGUI::kDrawFilled);
+ c->setFont(VSTGUI::kNormalFont,28);c->setFontColor(letters);
+ c->drawString("DRUMATOR",{430.,5.,850.,45.},VSTGUI::kCenterText);
  drawBrandLogo(c);
- c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
- c->drawString("GLOBAL",{94,13,170,33},VSTGUI::kLeftText);
- c->drawString("LENGTH",{180,13,276,33},VSTGUI::kLeftText);
+ c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
+ const auto groupTitle=[&](const char* name,double left,double right){
+   c->drawString(name,{left,UiCompactLayout::groupTitleTop,
+                       right,UiCompactLayout::groupTitleBottom},VSTGUI::kCenterText);
+ };
+ groupTitle("GLOBAL",22.,259.);
+ groupTitle("PATTERN LENGTH",272.,442.);
+ groupTitle("PATTERN",457.,845.);
+ groupTitle("TOOLS",857.,963.);
+ groupTitle("SONG MODE",971.,1111.);
+ // MASTER legend is painted on the same header baseline by drawRotary().
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
- drawControl(c,{UiCompactLayout::barOne.left,8,UiCompactLayout::barOne.right,34},"1 BAR",oneBar);
- drawControl(c,{UiCompactLayout::barTwo.left,8,UiCompactLayout::barTwo.right,34},"2 BARS",!oneBar);
- c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
- c->drawString("PATTERN",{340,84,458,97},VSTGUI::kLeftText);
- for(std::size_t pattern=0;pattern<8;++pattern) {
+ drawControl(c,{UiCompactLayout::barOne.left,UiCompactLayout::headerButtonTop,
+               UiCompactLayout::barOne.right,UiCompactLayout::headerButtonBottom},"1 BAR",oneBar);
+ drawControl(c,{UiCompactLayout::barTwo.left,UiCompactLayout::headerButtonTop,
+               UiCompactLayout::barTwo.right,UiCompactLayout::headerButtonBottom},"2 BARS",!oneBar);
+  for(std::size_t pattern=0;pattern<8;++pattern) {
    char label[12]{};
    std::snprintf(label,sizeof(label),"%c",static_cast<char>('A'+pattern));
    const auto x=kPatternX+pattern*kPatternWidth;
-   drawControl(c,{x,kPatternY,x+49,kPatternY+30},label,
+   drawControl(c,{x,kPatternY,x+UiCompactLayout::patternButtonWidth,UiCompactLayout::headerButtonBottom},label,
                pattern==controller_.currentPattern());
  }
- drawControl(c,{782,52,901,82},"PATTERN ...",popup_==2);
- drawControl(c,{910,52,991,82},controller_.songEnabled()?"SONG ON":"SONG OFF",
+ drawControl(c,{UiCompactLayout::patternTools.left,UiCompactLayout::headerButtonTop,
+               UiCompactLayout::patternTools.right,UiCompactLayout::headerButtonBottom},
+             "PATTERN MENU",popup_==2);
+ drawControl(c,{UiCompactLayout::songToggle.left,UiCompactLayout::headerButtonTop,
+               UiCompactLayout::songToggle.right,UiCompactLayout::headerButtonBottom},
+             controller_.songEnabled()?"SONG ON":"SONG OFF",
              controller_.songEnabled());
- drawControl(c,{998,52,1098,82},songEditorOpen_?"PATTERN":"SONG EDIT",songEditorOpen_);
+ drawControl(c,{UiCompactLayout::songEdit.left,UiCompactLayout::headerButtonTop,
+               UiCompactLayout::songEdit.right,UiCompactLayout::headerButtonBottom},
+             songEditorOpen_?"PATTERN":"SONG EDIT",songEditorOpen_);
  const auto zoom=editor_.getZoomFactor();
  char zoomLabel[32]{};
  std::snprintf(zoomLabel,sizeof(zoomLabel),"ZOOM %u%%   v",
@@ -910,11 +913,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{1120,7,1250,35},zoomLabel,popup_==1);
  char text[36]{};
  std::snprintf(text,sizeof(text),"%u%%",controller_.swingPercent());
- drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[0],76,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
+ drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[0],UiCompactLayout::globalKnobY,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
  std::snprintf(text,sizeof(text),"%u%%",controller_.humanizePercent());
- drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[1],76,controller_.humanizePercent()/100.,"HUMANIZE",text,activeKnob_==5);
+ drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[1],UiCompactLayout::globalKnobY,controller_.humanizePercent()/100.,"HUMANIZE",text,activeKnob_==5);
  std::snprintf(text,sizeof(text),"%u%%",controller_.masterVolume());
- drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[2],76,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
+ drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[2],UiCompactLayout::globalKnobY,controller_.masterVolume()/200.,"MASTER",text,activeKnob_==6);
  // Four full-fledged rows per page: the selection has its own independent hit box.
  for(std::size_t i=0;i<displayedRows();++i) {
    const auto row=firstRow_+i;
@@ -1138,7 +1141,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Dedicated, paged Song surface. Only valid entries and the next add-slot
    // are interactive; no 64-button wall or invisible selection hotspots.
    c->setFillColor(background);
-   c->drawRect({0,101,1280,getViewSize().getHeight()},VSTGUI::kDrawFilled);
+   c->drawRect({0,UiCompactLayout::header,1280,getViewSize().getHeight()},VSTGUI::kDrawFilled);
    const auto count=controller_.songCount();
    const auto first=UiSongLayout::first(songPage_);
    const bool selectionVisible=songSlot_>=first&&
@@ -1148,7 +1151,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        "SONG CHAIN   %02u-%02u / 64   |   SELECT SLOT, THEN PATTERN AND LENGTH",
        static_cast<unsigned>(first+1),static_cast<unsigned>(first+UiSongLayout::perPage));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   c->drawString(header,{16,105,975,133},VSTGUI::kLeftText);
+   c->drawString(header,{16,167,975,195},VSTGUI::kLeftText);
    drawControl(c,{UiSongLayout::previousLeft,UiSongLayout::navTop,
                   UiSongLayout::previousRight,UiSongLayout::navBottom},
                "< PREVIOUS",false,songPage_>0);
@@ -1176,26 +1179,26 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    if(selectionVisible)
      std::snprintf(selectionLabel,sizeof(selectionLabel),"POSITION %02u SELECTED",static_cast<unsigned>(songSlot_+1));
    else std::snprintf(selectionLabel,sizeof(selectionLabel),"ADD OR SELECT AN ENTRY FIRST");
-   c->drawString(selectionLabel,{16,246,490,272},VSTGUI::kLeftText);
+   c->drawString(selectionLabel,{16,308,490,334},VSTGUI::kLeftText);
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
-   c->drawString("PATTERN:",VSTGUI::CRect(16,277,120,301),VSTGUI::kLeftText);
+   c->drawString("PATTERN:",VSTGUI::CRect(16,339,120,363),VSTGUI::kLeftText);
    for(std::size_t idx=0;idx<8;++idx) {
      const auto chosen=selectionVisible&&controller_.songEntry(songSlot_).pattern==idx;
      const double bx=115+idx*56.0;
      char letter[2]{static_cast<char>('A'+idx),0};
-     drawControl(c,{bx,277,bx+50,303},letter,chosen,selectionVisible);
+     drawControl(c,{bx,339,bx+50,365},letter,chosen,selectionVisible);
    }
    c->setFontColor(accent);
-   c->drawString("LENGTH:",VSTGUI::CRect(594,277,681,303),VSTGUI::kLeftText);
+   c->drawString("LENGTH:",VSTGUI::CRect(594,339,681,365),VSTGUI::kLeftText);
    const char* lenNames[]={"1/2 BAR","1 BAR","2 BARS"};
    const std::uint8_t lenSteps[]={8,16,32};
    for(int idx=0;idx<3;++idx) {
      const auto chosen=selectionVisible&&controller_.songEntry(songSlot_).steps==lenSteps[idx];
      const double bx=678+idx*106.;
-     drawControl(c,{bx,277,bx+100,303},lenNames[idx],chosen,selectionVisible);
+     drawControl(c,{bx,339,bx+100,365},lenNames[idx],chosen,selectionVisible);
    }
-   drawControl(c,{1012,277,1110,303},"ADD ENTRY",false,count<64);
-   drawControl(c,{1118,277,1239,303},"REMOVE LAST",false,count>1);
+   drawControl(c,{1012,339,1110,365},"ADD ENTRY",false,count<64);
+   drawControl(c,{1118,339,1239,365},"REMOVE LAST",false,count>1);
  }
 
  // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
@@ -1224,10 +1227,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                 std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
    }
  }else if(popup_==2) {
-   drawPopupPlate(c,{778.,82.,972.,272.});
+   drawPopupPlate(c,{855.,135.,1048.,327.});
    const char* options[]={ "COPY","PASTE","CLEAR","UNDO","RANDOM VELOCITY","VELOCITY 100","DUPLICATE"};
    for(int i=0;i<7;++i)
-     drawMenuItem(c,{782,86.+i*26.,968,111.+i*26.},options[i],
+     drawMenuItem(c,{859,139.+i*26.,1044,164.+i*26.},options[i],
                  false,(i!=3||controller_.canUndoCurrentPattern())&&
                        (i!=6||controller_.canDuplicateCurrentPattern()));
  }else if(popup_==3&&popupRow_<controller_.visibleRows()) {
@@ -1676,9 +1679,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
         else {status_="HOST REJECTED ZOOM";ok=false;}
         acted=true;
       }
-   }else if(kind==2&&x>=782&&x<968&&y>=86&&y<268) {
-      const int idx=static_cast<int>((y-86)/26.);
-      if(idx>=0&&idx<7&&y<86.+idx*26.+25.){
+   }else if(kind==2&&x>=859&&x<1044&&y>=139&&y<321) {
+      const int idx=static_cast<int>((y-139)/26.);
+      if(idx>=0&&idx<7&&y<139.+idx*26.+25.){
         ok=idx==0?controller_.copyCurrentPattern():
             idx==1?controller_.pasteCurrentPattern():
             idx==2?controller_.clearCurrentPattern():
@@ -1740,7 +1743,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    invalid();return done;
  }
  // Explicit pattern-length choice, independent of the operation popup.
- if(y>=8&&y<34&&(UiCompactLayout::hit(x,UiCompactLayout::barOne)||
+ if(y>=UiCompactLayout::headerButtonTop&&y<UiCompactLayout::headerButtonBottom&&
+    (UiCompactLayout::hit(x,UiCompactLayout::barOne)||
                   UiCompactLayout::hit(x,UiCompactLayout::barTwo))){
    const bool wantOne=UiCompactLayout::hit(x,UiCompactLayout::barOne);
    const bool isOne=controller_.patternLength(controller_.currentPattern())==16;
@@ -1750,20 +1754,26 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  }
  // Global controls: Rotary, direct pattern buttons, Song and two menus.
  if(x>=1120&&x<1250&&y>=7&&y<35){popup_=1;invalid();return done;}
- if(x>=782&&x<901&&y>=52&&y<82){popup_=2;invalid();return done;}
- if(x>=910&&x<991&&y>=52&&y<82) {
+ if(UiCompactLayout::hit(x,UiCompactLayout::patternTools)&&
+    y>=UiCompactLayout::headerButtonTop&&y<UiCompactLayout::headerButtonBottom){
+   popup_=2;invalid();return done;
+ }
+ if(UiCompactLayout::hit(x,UiCompactLayout::songToggle)&&
+    y>=UiCompactLayout::headerButtonTop&&y<UiCompactLayout::headerButtonBottom) {
    if(!controller_.toggleSongMode())status_="SONG MODE NOT APPLIED";
    invalid();return done;
  }
- if(x>=998&&x<1098&&y>=52&&y<82) {
+ if(UiCompactLayout::hit(x,UiCompactLayout::songEdit)&&
+    y>=UiCompactLayout::headerButtonTop&&y<UiCompactLayout::headerButtonBottom) {
    songEditorOpen_=!songEditorOpen_;
    // Resize in both directions. If refused, preserve accessible row paging.
    (void)adjustEditorHeight();
    invalid();return done;
  }
- if(y>=kPatternY&&y<kPatternY+30&&x>=kPatternX&&x<kPatternX+8*kPatternWidth){
+ if(y>=kPatternY&&y<UiCompactLayout::headerButtonBottom&&
+    x>=kPatternX&&x<kPatternX+8*kPatternWidth){
    const auto idx=static_cast<std::size_t>((x-kPatternX)/kPatternWidth);
-   if(x>=kPatternX+idx*kPatternWidth+49.)return VSTGUI::kMouseEventNotHandled;
+   if(x>=kPatternX+idx*kPatternWidth+UiCompactLayout::patternButtonWidth)return VSTGUI::kMouseEventNotHandled;
    const bool ok=(buttons&VSTGUI::kShift)?
       controller_.togglePatternLength(idx):controller_.changePattern(idx);
    if(!ok)status_="PATTERN NOT APPLIED";
@@ -1772,7 +1782,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  for(int i=4;i<=6;++i){
    const auto center=UiCompactLayout::globalKnobCenters[static_cast<std::size_t>(i-4)];
    if(x>=center-UiCompactLayout::knobRadius&&x<center+UiCompactLayout::knobRadius&&
-       y>=76.-UiCompactLayout::knobRadius&&y<76.+UiCompactLayout::knobRadius) {
+       y>=UiCompactLayout::globalKnobY-UiCompactLayout::knobRadius&&
+       y<UiCompactLayout::globalKnobY+UiCompactLayout::knobRadius) {
       const int previous=i==4?static_cast<int>(controller_.swingPercent()):
                          i==5?static_cast<int>(controller_.humanizePercent()):
                               static_cast<int>(controller_.masterVolume());
@@ -1788,7 +1799,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       invalid();return VSTGUI::kMouseEventHandled;
    }
  }
- if(songEditorOpen_&&y>=101) {
+ if(songEditorOpen_&&y>=UiCompactLayout::header) {
    bool ok=true;
    const auto count=controller_.songCount();
    if(UiSongLayout::previousHit(x,y)){
@@ -1814,7 +1825,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          songPage_=UiSongLayout::pageOf(slot);
        }
      }
-   }else if(y>=277&&y<303) {
+   }else if(y>=339&&y<365) {
      const auto selectedSlot=std::min(songSlot_,count-1);
      const auto current=controller_.songEntry(selectedSlot);
      const bool selectionVisible=songSlot_>=UiSongLayout::first(songPage_)&&

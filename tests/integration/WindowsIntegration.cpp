@@ -691,35 +691,35 @@ void testVisualRender(){
    Fixture f;f.kit(namedKit('X',16));f.open();
    auto* v=IntegrationAccess::view(*f.c,0);
    captureVstgui(*v,"v2-16-rows-page-1",1.0);
-   click(*v,820.,65.);
+   click(*v,900.,114.);
    captureVstgui(*v,"v2-pattern-actions-menu",1.0);
    click(*v,15.,390.);
    click(*v,1150.,20.);
    captureVstgui(*v,"v2-zoom-menu",1.0);
    click(*v,15.,390.);
-   click(*v,1248,108.+88.);
+   click(*v,1248,UiCompactLayout::header+88.);
    check(IntegrationAccess::velocityExpanded(*v,0),"V2 row 1 expansion failed");
    const auto row2=IntegrationAccess::rowTop(*v,1);
    click(*v,1248,row2+88.);
    check(IntegrationAccess::velocityExpanded(*v,0)&&
          IntegrationAccess::velocityExpanded(*v,1),"V2 expansion changed another row");
    captureVstgui(*v,"v2-two-velocity-rows",1.0);
-   click(*v,289.,108.+19.); // explicit SAMPLE actions menu
+   click(*v,289.,UiCompactLayout::header+19.); // explicit SAMPLE actions menu
    captureVstgui(*v,"v2-sample-actions-menu",1.0);
    click(*v,15.,400.); // outside dismisses without triggering a step
-   click(*v,575.,108.+19.); // MAIN / OUT selector
+   click(*v,575.,UiCompactLayout::header+19.); // MAIN / OUT selector
    captureVstgui(*v,"v2-output-menu",1.0);
    click(*v,15.,400.);
    // The CHOKE label is at rowTop+52..73, but the clickable selector is
    // rowTop+73..105. The former +69 capture silently recorded a CLOSED
    // popup identical to v2-two-velocity-rows; reject that false visual PASS.
-   click(*v,592.,108.+88.); // center of actual CHOKE selector
+   click(*v,592.,UiCompactLayout::header+88.); // center of actual CHOKE selector
    check(IntegrationAccess::popup(*v)==4&&IntegrationAccess::popupRow(*v)==0,
          "V2 choke visual oracle: menu did not open from actual selector");
    captureVstgui(*v,"v2-choke-menu",1.0);
    click(*v,15.,400.);
    check(IntegrationAccess::popup(*v)==0,"V2 choke popup did not dismiss");
-   click(*v,425.,108.+19.); // row-local Fill menu
+   click(*v,425.,UiCompactLayout::header+19.); // row-local Fill menu
    captureVstgui(*v,"v2-fill-menu",1.0);
    click(*v,15.,400.);
    for(int i=0;i<2;++i){
@@ -744,7 +744,7 @@ void testVisualRender(){
  {
    Fixture f;f.kit(namedKit('X',4));f.open();
    auto* v=IntegrationAccess::view(*f.c,0);
-   click(*v,1026,65.);
+   click(*v,1077,114.);
    captureVstgui(*v,"v2-song-board",1.0);
  }
  evidence("V2 native VSTGUI vector controls and per-row Velocity windows captured");
@@ -1106,13 +1106,13 @@ void testVelocityResetPattern(){
        "VELO 100 Undo did not restore exact prior velocities");
  check(!f.c->canUndoCurrentPattern(),"VELO 100 left extra undo operations");
  // Exercise actual native popup hit zones, not just the Controller API.
- click(*IntegrationAccess::view(*f.c,0),840.,65.); // PATTERN menu
- click(*IntegrationAccess::view(*f.c,0),840.,229.); // VELO 100 (item six)
+ click(*IntegrationAccess::view(*f.c,0),900.,114.); // PATTERN menu
+ click(*IntegrationAccess::view(*f.c,0),900.,281.); // VELO 100 (item six)
  check(f.c->velocity(0,0,0)==100&&f.c->velocity(0,0,4)==100&&
        f.c->velocity(0,1,0)==100&&f.c->velocity(0,0,1)==0,
        "VELO 100 popup did not reset occupied notes only");
- click(*IntegrationAccess::view(*f.c,0),840.,65.);
- click(*IntegrationAccess::view(*f.c,0),840.,177.); // Undo (item four)
+ click(*IntegrationAccess::view(*f.c,0),900.,114.);
+ click(*IntegrationAccess::view(*f.c,0),900.,229.); // Undo (item four)
  check(f.c->velocity(0,0,0)==1&&f.c->velocity(0,0,4)==127&&
        f.c->velocity(0,1,0)==88&&f.c->velocity(0,0,1)==0,
        "VELO 100 popup Undo did not restore previous velocities");
@@ -1244,8 +1244,8 @@ void testPatternDuplicateMenu(){
    return data.grid;
  };
  const auto before=getGrid();
- click(*view,840.,65.); // PATTERN popup
- click(*view,840.,255.); // seventh and final action: DUPLIZIEREN
+ click(*view,900.,114.); // PATTERN popup
+ click(*view,900.,307.); // seventh and final action: DUPLIZIEREN
  const auto after=getGrid();
  for(std::size_t i=0;i<kRows*kSteps;++i){
    check(after[i]==before[i],"P18 duplicate changed source pattern");
@@ -1269,15 +1269,15 @@ void testPatternDuplicateMenu(){
  f.kit(full);
  check(!f.c->canDuplicateCurrentPattern(),"P18 full bank incorrectly duplicable");
  const auto fullBefore=getGrid();
- click(*view,840.,65.);
- click(*view,840.,255.);
+ click(*view,900.,114.);
+ click(*view,900.,307.);
  check(getGrid()==fullBefore,"P18 full-bank DUPLIZIEREN overwrote a pattern");
  // An empty source also must never be duplicated into another slot.
  KitState empty=kit;empty.grid.fill(0);
  f.kit(empty);
  check(!f.c->canDuplicateCurrentPattern(),"P18 empty pattern offered duplicate");
- click(*view,840.,65.);
- click(*view,840.,255.);
+ click(*view,900.,114.);
+ click(*view,900.,307.);
  check(getGrid()==empty.grid,"P18 empty source duplicated unexpectedly");
  evidence("P18 native DUPLIZIEREN menu, whole-grid copy, Undo, full bank and empty source PASS");
 }
@@ -1303,8 +1303,8 @@ void testPatternLengthControls(){
  check(f.c->patternLength(0)==16,"UX selected length not idempotent");
  click(*v,414.,20.);
  check(f.c->patternLength(0)==32,"UX visible 2 TAKTE control failed");
- click(*v,820.,65.);
- click(*v,820.,98.);
+ click(*v,900.,114.);
+ click(*v,900.,150.);
  check(f.c->patternLength(0)==32,"UX copy changed length via duplicate menu");
  const double bottom=UiCompactLayout::header+UiCompactLayout::baseRow*4.+UiCompactLayout::velocityRow;
  click(*v,76.,bottom+17.);
@@ -1417,45 +1417,45 @@ void testPagedSongEditor(){
  check(kit.chain.setCount(16),"UX song fixture capacity");
  f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
- click(*v,1026.,65.); // SONG EDIT opens
+ click(*v,1077.,114.); // SONG EDIT opens
  check(IntegrationAccess::songPage(*v)==0,"UX song page initial selection");
  // The page before slot 17 must be reachable even when only 16 are configured.
- click(*v,1170.,119.);
+ click(*v,1170.,181.);
  check(IntegrationAccess::songPage(*v)==1,"UX song next page unavailable at boundary");
  // This page has no existing position: its Pattern/Length controls must
  // neither highlight nor edit a position that is hidden on page one.
  const auto originalHidden=f.c->songEntry(0);
- click(*v,115.+2.*56.+25.,290.);
- click(*v,707.,290.);
+ click(*v,115.+2.*56.+25.,352.);
+ click(*v,707.,352.);
  check(f.c->songEntry(0).pattern==originalHidden.pattern&&
        f.c->songEntry(0).steps==originalHidden.steps,
        "UX empty Song page edited offscreen entry");
 
- click(*v,17.,160.); // first empty slot 17 is an add action
+ click(*v,17.,222.); // first empty slot 17 is an add action
  check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
        "UX song add slot 17 via its own cell failed");
  captureVstgui(*v,"ux-song-page-2",1.0);
- click(*v,115.+2.*56.+25.,290.); // select Pattern C for entry 17
+ click(*v,115.+2.*56.+25.,352.); // select Pattern C for entry 17
  check(f.c->songEntry(16).pattern==2,"UX song pattern selector missed selected entry");
- click(*v,707.,290.); // half bar
+ click(*v,707.,352.); // half bar
  check(f.c->songEntry(16).steps==8,"UX song length selector missed selected entry");
  const auto snapshot=IntegrationAccess::snapshot(*f.c);
- click(*v,167.,160.); // 4px gutter between song items, must be inert
+ click(*v,167.,222.); // 4px gutter between song items, must be inert
  check(IntegrationAccess::songSlot(*v)==16&&
        IntegrationAccess::snapshot(*f.c)==snapshot,"UX song gutter changed entry");
- click(*v,350.,160.); // slot 19 is not yet available: inactive
+ click(*v,350.,222.); // slot 19 is not yet available: inactive
  check(f.c->songCount()==17,"UX future Song item should not implicitly add");
- click(*v,1032.,119.);
+ click(*v,1032.,181.);
  check(IntegrationAccess::songPage(*v)==0,"UX song previous page failed");
  check(IntegrationAccess::songSlot(*v)==0,
        "UX previous page must select first visible existing entry");
 
- click(*v,1170.,160.); // slot 8 on page 1
+ click(*v,1170.,222.); // slot 8 on page 1
  check(IntegrationAccess::songSlot(*v)==7,"UX song cell selection hit unexpected slot");
- click(*v,1060.,290.); // add 18th slot (automatically selects its page)
+ click(*v,1060.,352.); // add 18th slot (automatically selects its page)
  check(f.c->songCount()==18&&IntegrationAccess::songPage(*v)==1&&
        IntegrationAccess::songSlot(*v)==17,"UX Song + EINTRAG did not auto-page");
- click(*v,1172.,290.); // delete last (must select 17)
+ click(*v,1172.,352.); // delete last (must select 17)
  check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
        "UX Song last-entry removal selection incorrect");
  check(f.c->songEntry(16).pattern==2&&f.c->songEntry(16).steps==8,
@@ -1471,19 +1471,19 @@ void testPagedSongEditor(){
 void testSongCompactViewport(){
  Fixture f;f.kit(namedKit('X',4));f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
- check(v->getViewSize().getHeight()==682.,"UX expected four spacious rows");
- click(*v,1026.,65.); // Song edit (compact)
- check(v->getViewSize().getHeight()==370.,"UX Song editor failed to become compact");
- captureVstgui(*v,"ux-song-compact-370",1.0);
- click(*v,1026.,65.); // return to Step grid
- check(v->getViewSize().getHeight()==682.,"UX Step editor height not restored");
+ check(v->getViewSize().getHeight()==734.,"UX expected four spacious rows");
+ click(*v,1077.,114.); // Song edit (compact)
+ check(v->getViewSize().getHeight()==432.,"UX Song editor failed to become compact");
+ captureVstgui(*v,"ux-song-compact-432",1.0);
+ click(*v,1077.,114.); // return to Step grid
+ check(v->getViewSize().getHeight()==734.,"UX Step editor height not restored");
  // Reject the enlargement after Song edit. Users must still be able to
  // reach every instrument, not skip rows in a truncated viewport.
- click(*v,1026.,65.);
- check(v->getViewSize().getHeight()==370.,"UX Song second open");
+ click(*v,1077.,114.);
+ check(v->getViewSize().getHeight()==432.,"UX Song second open");
  f.frames[0].accept=false;
- click(*v,1026.,65.); // host refuses resize back to 682
- check(v->getViewSize().getHeight()==370.&&v->visibleRowsForHit()==1,
+ click(*v,1077.,114.); // host refuses resize back to 682
+ check(v->getViewSize().getHeight()==432.&&v->visibleRowsForHit()==1,
        "UX refused host resize did not degrade to one reachable row");
  const auto bottom=UiCompactLayout::header+UiCompactLayout::baseRow;
  click(*v,1190.,bottom+17.); // next page: row 2 within refused 370px client
@@ -1494,7 +1494,7 @@ void testSongCompactViewport(){
  f.frames[0].accept=true;
  click(*v,1090.,bottom+17.); // back to rows 1..4, now resize accepted
  check(IntegrationAccess::firstRow(*v)==0&&
-       v->getViewSize().getHeight()==682.&&v->visibleRowsForHit()==4,
+       v->getViewSize().getHeight()==734.&&v->visibleRowsForHit()==4,
        "UX compact fallback cannot recover after host accepts again");
  evidence("UX 370px Song viewport, return to Steps and refused-resize row navigation PASS");
 }
@@ -1875,11 +1875,11 @@ void testPeerVelocityCancelPreservesCommittedStep(){
  f.open();f.open();
  auto* first=IntegrationAccess::view(*f.c,0);
  auto* peer=IntegrationAccess::view(*f.c,1);
- click(*first,1248.,108.+88.);
- click(*first,630.,108.+UiCompactLayout::baseRow+12.);
+ click(*first,1248.,UiCompactLayout::header+88.);
+ click(*first,630.,UiCompactLayout::header+UiCompactLayout::baseRow+12.);
  check(std::get<0>(IntegrationAccess::viewSnapshot(*first)),
        "V1A03 first view gesture absent");
- click(*peer,630.,108.+UiCompactLayout::baseRow+88.);
+ click(*peer,630.,UiCompactLayout::header+UiCompactLayout::baseRow+88.);
  check(f.c->velocity(0,1,0)==100,
        "V1A03 peer step was not committed");
  // The peer edit commits the first gesture, so its last velocity

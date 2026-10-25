@@ -7,16 +7,16 @@ using drumator::UiSongLayout;
 #define EXPECT(v) do{if(!(v)){std::cerr<<__LINE__<<" " #v "\n";return __LINE__;}}while(false)
 int main(){
  std::array<bool,16> expanded{};
- EXPECT(UiCompactLayout::editorHeight(0,4,expanded)==682.);
+ EXPECT(UiCompactLayout::editorHeight(0,4,expanded)==734.);
  expanded[0]=true;expanded[2]=true;
- EXPECT(UiCompactLayout::rowTop(0,1,expanded)==268.);
- EXPECT(UiCompactLayout::rowTop(0,2,expanded)==398.);
- EXPECT(UiCompactLayout::rowTop(0,3,expanded)==558.);
- EXPECT(UiCompactLayout::editorHeight(0,4,expanded)==742.);
- EXPECT(UiCompactLayout::rowAt(269.,0,4,expanded)==1);
- EXPECT(UiCompactLayout::rowAt(397.,0,4,expanded)==1);
- EXPECT(UiCompactLayout::rowAt(557.,0,4,expanded)==2);
- EXPECT(UiCompactLayout::rowAt(750.,0,4,expanded)==4);
+ EXPECT(UiCompactLayout::rowTop(0,1,expanded)==320.);
+ EXPECT(UiCompactLayout::rowTop(0,2,expanded)==450.);
+ EXPECT(UiCompactLayout::rowTop(0,3,expanded)==610.);
+ EXPECT(UiCompactLayout::editorHeight(0,4,expanded)==794.);
+ EXPECT(UiCompactLayout::rowAt(321.,0,4,expanded)==1);
+ EXPECT(UiCompactLayout::rowAt(449.,0,4,expanded)==1);
+ EXPECT(UiCompactLayout::rowAt(609.,0,4,expanded)==2);
+ EXPECT(UiCompactLayout::rowAt(802.,0,4,expanded)==4);
  EXPECT(UiCompactLayout::velocityHit(241.,108.));
  EXPECT(!UiCompactLayout::velocityHit(237.,108.));
  EXPECT(UiCompactLayout::stepAt(622.)==0);
@@ -25,7 +25,7 @@ int main(){
  EXPECT(UiCompactLayout::velocityAt(241.,108.)==127);
  EXPECT(UiCompactLayout::velocityAt(271.,108.)==1);
  expanded.fill(true);
- EXPECT(UiCompactLayout::editorHeight(12,4,expanded)==802.);
+ EXPECT(UiCompactLayout::editorHeight(12,4,expanded)==854.);
  EXPECT(UiCompactLayout::knobValue(100.,0.,100,0,200)==140);
  EXPECT(UiCompactLayout::knobValue(100.,1000.,100,0,200)==0);
  EXPECT(UiCompactLayout::knobValue(100.,-1000.,100,0,200)==200);
@@ -42,10 +42,10 @@ int main(){
  EXPECT(!UiCompactLayout::hit(301.,UiCompactLayout::sampleMenu));
  // Reusable component family geometry: paired choices and EDIT must
  // remain fixed-width, non-overlapping, and use the same hit logic as draw.
- EXPECT(UiCompactLayout::barOne.right-UiCompactLayout::barOne.left==84.);
- EXPECT(UiCompactLayout::barTwo.right-UiCompactLayout::barTwo.left==84.);
+ EXPECT(UiCompactLayout::barOne.right-UiCompactLayout::barOne.left==79.);
+ EXPECT(UiCompactLayout::barTwo.right-UiCompactLayout::barTwo.left==79.);
  EXPECT(UiCompactLayout::barOne.right<UiCompactLayout::barTwo.left);
- EXPECT(UiCompactLayout::barTwo.right<465.); // centered title begins x=465
+ EXPECT(UiCompactLayout::barTwo.right<UiCompactLayout::patternStart); // centered title begins x=465
  EXPECT(UiCompactLayout::edit.right-UiCompactLayout::edit.left==64.);
  EXPECT(UiCompactLayout::sample.right<UiCompactLayout::edit.left);
  EXPECT(UiCompactLayout::edit.right<UiCompactLayout::sampleMenu.left);
@@ -88,18 +88,18 @@ int main(){
  EXPECT(UiSongLayout::pageOf(0)==0);
  EXPECT(UiSongLayout::pageOf(16)==1);
  EXPECT(UiSongLayout::pageOf(63)==3);
- EXPECT(UiSongLayout::slotAt(16.,145.,0)==0);
- EXPECT(UiSongLayout::slotAt(17.,198.,0)==8);
- EXPECT(UiSongLayout::slotAt(1096.,202.,2)==47);
- EXPECT(UiSongLayout::slotAt(16.,145.,1)==16);
- EXPECT(UiSongLayout::slotAt(167.,160.,0)==drumator::SongChain::kCapacity);
- EXPECT(UiSongLayout::slotAt(15.,145.,0)==drumator::SongChain::kCapacity);
- EXPECT(UiSongLayout::slotAt(18.,191.,0)==drumator::SongChain::kCapacity);
- EXPECT(UiSongLayout::slotAt(18.,249.,0)==drumator::SongChain::kCapacity);
- EXPECT(UiSongLayout::slotAt(18.,160.,4)==drumator::SongChain::kCapacity);
- EXPECT(UiSongLayout::previousHit(1000.,119.));
- EXPECT(UiSongLayout::nextHit(1130.,119.));
- EXPECT(!UiSongLayout::nextHit(1105.,119.));
+ EXPECT(UiSongLayout::slotAt(16.,207.,0)==0);
+ EXPECT(UiSongLayout::slotAt(17.,260.,0)==8);
+ EXPECT(UiSongLayout::slotAt(1096.,264.,2)==47);
+ EXPECT(UiSongLayout::slotAt(16.,207.,1)==16);
+ EXPECT(UiSongLayout::slotAt(167.,222.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(15.,207.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(18.,253.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(18.,311.,0)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::slotAt(18.,222.,4)==drumator::SongChain::kCapacity);
+ EXPECT(UiSongLayout::previousHit(1000.,181.));
+ EXPECT(UiSongLayout::nextHit(1130.,181.));
+ EXPECT(!UiSongLayout::nextHit(1105.,181.));
  EXPECT(!UiSongLayout::canNext(0,15));
  EXPECT(UiSongLayout::canNext(0,16));
  EXPECT(!UiSongLayout::canNext(3,64));
@@ -126,7 +126,7 @@ int main(){
      }
  EXPECT(UiCompactLayout::popupTop(108.,300.,230.)==70.);
  EXPECT(UiCompactLayout::popupTop(108.,300.,210.)==90.);
- EXPECT(UiCompactLayout::popupTop(108.,538.,230.)==144.);
+ EXPECT(UiCompactLayout::popupTop(108.,538.,230.)==160.);
 
 
  return 0;
