@@ -845,6 +845,28 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawRect({0,40,1280,43},VSTGUI::kDrawFilled);
  c->setFillColor(VSTGUI::CColor{76,126,162,255});
  c->drawRect({4,40,1276,41},VSTGUI::kDrawFilled);
+ // Two recessed metal nameplates in the existing 40px header. Their
+ // surfaces are entirely behind the title and pattern-length buttons;
+ // neither click geometry nor parameter state is modified.
+ c->setFillColor(VSTGUI::CColor{2,10,19,255});
+ c->drawRect({172.,5.,460.,37.},VSTGUI::kDrawFilled);
+ c->drawRect({527.,5.,753.,36.},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{76,108,129,255});
+ c->drawRect({174.,6.,458.,7.},VSTGUI::kDrawFilled);
+ c->drawRect({529.,6.,751.,7.},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{13,31,46,255});
+ c->drawRect({174.,8.,458.,34.},VSTGUI::kDrawFilled);
+ c->drawRect({529.,8.,751.,33.},VSTGUI::kDrawFilled);
+ // Fine brushed graphite texture confined to the title plaque.
+ for(int band=0;band<5;++band) {
+   const double yy=9.+band*5.;
+   c->setFillColor(band%2?VSTGUI::CColor{17,36,50,255}:
+                          VSTGUI::CColor{20,39,54,255});
+   c->drawRect({530.,yy,750.,yy+1.},VSTGUI::kDrawFilled);
+ }
+ c->setFillColor(VSTGUI::CColor{45,70,87,255});
+ c->drawRect({174.,34.,458.,35.},VSTGUI::kDrawFilled);
+ c->drawRect({529.,33.,751.,34.},VSTGUI::kDrawFilled);
  drawInset(c,{17,46,228,103},VSTGUI::CColor{12,31,46,255});
  drawInset(c,{323,46,774,99},VSTGUI::CColor{10,27,43,255});
  drawInset(c,{779,46,1106,99},VSTGUI::CColor{10,27,43,255});
