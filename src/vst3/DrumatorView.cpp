@@ -1392,14 +1392,18 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
 
  if(sampleEditorOpen_) {
    // Modal overlay, fully inside the existing 1280-wide view at 100% zoom.
-   // Match the Drumator blue-metal shell; keep editor geometry and hit zones.
-   c->setFillColor(VSTGUI::CColor{10,27,42,255});
+   // Satin graphite, matching the approved instrument trays. Material only:
+   // the editor rectangle, waveform, markers and all hit zones stay fixed.
+   c->setFillColor(VSTGUI::CColor{27,33,39,255});
    c->drawRect({230,100,1050,605},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{24,52,72,255});
+   // Narrow metallic title shoulder; restrained lower bevel.
+   c->setFillColor(VSTGUI::CColor{37,43,49,255});
    c->drawRect({234,104,1046,151},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{95,147,177,255});
+   c->setFillColor(VSTGUI::CColor{91,102,111,255});
    c->drawRect({234,104,1046,106},VSTGUI::kDrawFilled);
-   c->setFrameColor(VSTGUI::CColor{86,139,173,255});
+   c->setFillColor(VSTGUI::CColor{53,61,68,255});
+   c->drawRect({234,149,1046,151},VSTGUI::kDrawFilled);
+   c->setFrameColor(VSTGUI::CColor{91,102,111,255});
    c->drawRect({230,100,1050,605},VSTGUI::kDrawStroked);
    c->setFont(VSTGUI::kNormalFont,18);c->setFontColor(letters);
    c->drawString("SAMPLE EDITOR",{260,114,1000,148});
