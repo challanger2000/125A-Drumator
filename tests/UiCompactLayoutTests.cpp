@@ -42,8 +42,18 @@ int main(){
  EXPECT(!UiCompactLayout::hit(301.,UiCompactLayout::sampleMenu));
  // Reusable component family geometry: paired choices and EDIT must
  // remain fixed-width, non-overlapping, and use the same hit logic as draw.
- EXPECT(UiCompactLayout::barOne.right-UiCompactLayout::barOne.left==79.);
- EXPECT(UiCompactLayout::barTwo.right-UiCompactLayout::barTwo.left==79.);
+ EXPECT(UiCompactLayout::barOne.right-UiCompactLayout::barOne.left==83.);
+ EXPECT(UiCompactLayout::barTwo.right-UiCompactLayout::barTwo.left==83.);
+ // Header controls gain lettering clearance without leaving their assigned bays.
+ EXPECT(UiCompactLayout::patternButtonWidth==47.);
+ EXPECT(UiCompactLayout::patternButtonWidth<UiCompactLayout::patternPitch);
+ EXPECT(UiCompactLayout::patternTools.right-UiCompactLayout::patternTools.left==116.);
+ EXPECT(UiCompactLayout::songToggle.right-UiCompactLayout::songToggle.left==69.);
+ EXPECT(UiCompactLayout::songEdit.right-UiCompactLayout::songEdit.left==79.);
+ EXPECT(UiCompactLayout::patternStart+7.*UiCompactLayout::patternPitch+
+        UiCompactLayout::patternButtonWidth<UiCompactLayout::patternTools.left);
+ EXPECT(UiCompactLayout::patternTools.right<UiCompactLayout::songToggle.left);
+ EXPECT(UiCompactLayout::songToggle.right<UiCompactLayout::songEdit.left);
  EXPECT(UiCompactLayout::barOne.right<UiCompactLayout::barTwo.left);
  EXPECT(UiCompactLayout::barTwo.right<UiCompactLayout::patternStart); // centered title begins x=465
  EXPECT(UiCompactLayout::edit.right-UiCompactLayout::edit.left==64.);
