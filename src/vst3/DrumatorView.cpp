@@ -753,11 +753,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    backgroundBitmap_->draw(c,{0,0,1280,fullHeight});
  // Brushed anodized-steel fascia: fine, low-contrast horizontal milling
  // marks remain native at all supported zoom levels. No resource or hit changes.
- for(int yy=2;yy<static_cast<int>(fullHeight);yy+=4){
-   const auto light=((yy/4)%3)==0;
-   c->setFillColor(light?VSTGUI::CColor{39,82,116,255}:
-                         VSTGUI::CColor{19,51,77,255});
-   c->drawRect({3.,static_cast<double>(yy),1277.,
+ // Keep milling marks on exposed chassis only. Repeated bright lines
+ // across the entire editor looked like blue pinstripes at 100% zoom.
+ for(int yy=3;yy<static_cast<int>(fullHeight);yy+=6){
+   if(yy>=40&&yy<static_cast<int>(bottom)+4)continue;
+   c->setFillColor(((yy/6)%4)==0?VSTGUI::CColor{27,62,90,255}:
+                                    VSTGUI::CColor{18,47,73,255});
+   c->drawRect({4.,static_cast<double>(yy),1276.,
                 static_cast<double>(yy)+0.5},VSTGUI::kDrawFilled);
  }
  // Dark control deck with precise machined nameplate seam.
