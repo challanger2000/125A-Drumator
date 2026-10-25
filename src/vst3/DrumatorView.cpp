@@ -749,23 +749,31 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  const auto bottom=gridBottom();
  const auto fullHeight=getViewSize().getHeight();
- c->setFillColor(background);
+ // The former bright-blue bitmap was still visible behind the fascia
+ // despite subsequent low-contrast line overlays. The approved hardware
+ // reference uses dark desaturated blue steel, not saturated cyan stripes.
+ // Paint only the exposed chassis with deterministic 1px micro-grain;
+ // leave all tested controls, trays and hit rectangles untouched.
+ c->setFillColor(VSTGUI::CColor{6,25,44,255});
  c->drawRect({0,0,1280,fullHeight},VSTGUI::kDrawFilled);
- // Draw the approved blue metal texture in logical pixels; host zoom transforms it.
- // The source is 1672x941, larger than the 1280x850 maximum editor area.
- if(backgroundBitmap_ && backgroundBitmap_->getWidth()>0 && backgroundBitmap_->getHeight()>0)
-   backgroundBitmap_->draw(c,{0,0,1280,fullHeight});
- // Brushed anodized-steel fascia: fine, low-contrast horizontal milling
- // marks remain native at all supported zoom levels. No resource or hit changes.
- // Keep milling marks on exposed chassis only. Repeated bright lines
- // across the entire editor looked like blue pinstripes at 100% zoom.
- for(int yy=3;yy<static_cast<int>(fullHeight);yy+=6){
-   if(yy>=40&&yy<static_cast<int>(bottom)+4)continue;
-   c->setFillColor(((yy/6)%4)==0?VSTGUI::CColor{27,62,90,255}:
-                                    VSTGUI::CColor{18,47,73,255});
-   c->drawRect({4.,static_cast<double>(yy),1276.,
-                static_cast<double>(yy)+0.5},VSTGUI::kDrawFilled);
- }
+ const auto brushSteel=[&](int first,int last,bool topBand) {
+   for(int yy=first;yy<last;++yy) {
+     const int grain=(yy*11+3)%17;
+     c->setFillColor(topBand?
+       (grain==0?VSTGUI::CColor{9,34,59,255}:
+        grain==5?VSTGUI::CColor{5,28,51,255}:
+                 VSTGUI::CColor{7,31,55,255}):
+       (grain==0?VSTGUI::CColor{9,32,54,255}:
+        grain==5?VSTGUI::CColor{5,25,45,255}:
+                 VSTGUI::CColor{7,29,50,255}));
+     c->drawRect({3.,static_cast<double>(yy),1277.,
+                  static_cast<double>(yy+1)},VSTGUI::kDrawFilled);
+   }
+ };
+ brushSteel(2,std::min(40,static_cast<int>(fullHeight)),true);
+ if(fullHeight>bottom)
+   brushSteel(std::max(0,static_cast<int>(bottom)),
+              static_cast<int>(fullHeight),false);
  // Dark control deck with precise machined nameplate seam.
  c->setFillColor(VSTGUI::CColor{11,27,42,255});
  c->drawRect({0,42,1280,108},VSTGUI::kDrawFilled);
