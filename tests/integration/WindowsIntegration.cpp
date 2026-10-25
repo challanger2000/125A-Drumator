@@ -629,7 +629,7 @@ void captureVstgui(DrumatorView& v,const std::string& title,double scale){
 void testGuiPhysicalStepsRaster(){
  Fixture f;f.kit(namedKit('X',4));f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
- auto sample=[](DrumatorView& view){
+ auto sample=[](DrumatorView& view,int step){
   auto rect=view.getViewSize();
   auto bmp=VSTGUI::renderBitmapOffscreen(
    VSTGUI::CPoint(rect.getWidth(),rect.getHeight()),1.,
@@ -639,30 +639,34 @@ void testGuiPhysicalStepsRaster(){
   check(a!=nullptr,"GUI physical-key pixel access missing");
   std::array<std::uint32_t,17*34> pixels{};
   std::size_t k=0;
-  for(int yy=177;yy<211;++yy)for(int xx=623;xx<640;++xx){
+  const int left=623+19*step;
+  for(int yy=177;yy<211;++yy)for(int xx=left;xx<left+17;++xx){
    check(a->setPosition(xx,yy),"GUI key raster out of view");
    VSTGUI::CColor c{};a->getColor(c);
    pixels[k++]=(std::uint32_t(c.red)<<16)|(std::uint32_t(c.green)<<8)|c.blue;
   }
   a->forget();return pixels;
  };
- // Toggle-off->on always reactivates at the step default (100), not the
- // original historical velocity. Assert an actual blank->on->blank lifecycle.
- if(f.c->velocity(f.c->currentPattern(),0,0)!=0)
-    click(*v,631.,UiCompactLayout::header+88.);
- check(f.c->velocity(f.c->currentPattern(),0,0)==0,"GUI blank baseline");
- const auto before=sample(*v);
- click(*v,631.,UiCompactLayout::header+88.);
- check(f.c->velocity(f.c->currentPattern(),0,0)==100,
-       "GUI newly activated step must have velocity 100");
- const auto after=sample(*v);
- std::size_t diff=0;
- for(std::size_t i=0;i<before.size();++i)if(before[i]!=after[i])++diff;
- check(diff>=65,"GUI physical keycap did not visually respond to toggle");
- click(*v,631.,UiCompactLayout::header+88.);
- check(f.c->velocity(f.c->currentPattern(),0,0)==0,"GUI step did not clear");
- check(sample(*v)==before,"GUI keycap raster did not restore blank appearance");
- evidence("GUI keycap active/inactive/revert native raster PASS");
+ // Test normal keys, quarter markers, and final key. A newly enabled
+ // step gets velocity 100, not any historical value.
+ for(const int step:{0,4,15,31}){
+  const double x=631.+19.*step;
+  if(f.c->velocity(f.c->currentPattern(),0,step)!=0)
+     click(*v,x,UiCompactLayout::header+88.);
+  check(f.c->velocity(f.c->currentPattern(),0,step)==0,"GUI blank baseline");
+  const auto before=sample(*v,step);
+  click(*v,x,UiCompactLayout::header+88.);
+  check(f.c->velocity(f.c->currentPattern(),0,step)==100,
+        "GUI newly activated step must have velocity 100");
+  const auto after=sample(*v,step);
+  std::size_t diff=0;
+  for(std::size_t i=0;i<before.size();++i)if(before[i]!=after[i])++diff;
+  check(diff>=65,"GUI physical keycap did not visually respond to toggle");
+  click(*v,x,UiCompactLayout::header+88.);
+  check(f.c->velocity(f.c->currentPattern(),0,step)==0,"GUI step did not clear");
+  check(sample(*v,step)==before,"GUI keycap raster did not restore blank appearance");
+ }
+ evidence("GUI keycaps 0/4/15/31 active/inactive/revert native raster PASS");
 }
 void testVisualRender(){
  for(const auto zoom: {1.0,1.2,1.3,1.5}){
