@@ -118,7 +118,8 @@ VSTGUI::CRect editorRect(const UiWaveEditorLayout::Rect& r){
 }
 void drawBrandLogo(VSTGUI::CDrawContext* c) {
  constexpr double scale=62./887.;
- constexpr double x0=37.,y0=10.;
+ // Logo position only: 7 logical px up and left (~9 px at editor zoom 130%).
+ constexpr double x0=30.,y0=3.;
  for(const auto& shape: kBrandLogoPaths){
    auto* path=c->createGraphicsPath();
    if(!path)continue;
