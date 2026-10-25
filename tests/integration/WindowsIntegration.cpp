@@ -698,6 +698,18 @@ void testVisualRender(){
    check(f.c->setState(&footerZoomInput)==kResultOk&&v->zoomMatches(1.3),
          "GUI46 native 16-row footer capture must use true 130pct zoom");
    captureVstgui(*v,"gui46-16-rows-130",1.3);
+   // GUI47: actual 5-8 navigation state at 130%; footer counter,
+   // viewport and vertical scrollbar all read the same firstRow_.
+   const auto bottomPage1=v->getViewSize().getHeight()-UiCompactLayout::footer;
+   click(*v,1190.,bottomPage1+17.);
+   check(IntegrationAccess::firstRow(*v)==4&&IntegrationAccess::selectedRow(*v)==4,
+         "GUI47 right footer arrow did not select instrument group 5-8");
+   captureVstgui(*v,"gui47-instruments-5-8-130",1.3);
+   const auto bottomPage2=v->getViewSize().getHeight()-UiCompactLayout::footer;
+   click(*v,1100.,bottomPage2+17.);
+   check(IntegrationAccess::firstRow(*v)==0,
+         "GUI47 left footer arrow did not return to instruments 1-4");
+
    std::array<std::uint8_t,5> defaultZoom{{'D','Z','M','2',0}};
    drumator::qa::ByteStream defaultZoomInput(defaultZoom.data(),defaultZoom.size());
    check(f.c->setState(&defaultZoomInput)==kResultOk&&v->zoomMatches(1.0),
