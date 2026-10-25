@@ -917,11 +917,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(chosen?VSTGUI::CColor{83,178,209,255}:
                             VSTGUI::CColor{37,88,124,255});
    c->drawRect({12,y+10.,15,y+rowH-11.},VSTGUI::kDrawFilled);
-   // Machined undercut between the upper button shelf and rotary deck.
-   c->setFillColor(VSTGUI::CColor{3,13,24,255});
-   c->drawRect({18.,y+43.,615.,y+45.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{55,84,102,255});
-   c->drawRect({18.,y+45.,615.,y+46.},VSTGUI::kDrawFilled);
+   // The top controls and rotaries occupy adjacent zones. No decorative
+   // shelf stripe: it previously crowded the VOL/PAN/PITCH legends.
    // Readable row functions versus visually separated step sequencer.
    drawInset(c,{18,y+46.,615,y+120.},VSTGUI::CColor{16,34,49,255});
    drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
@@ -940,7 +937,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Sample name remains editable on Shift-click; click opens WAV/FLAC picker.
    const auto& raw=controller_.label(row);
    std::string fitted=raw;
-   c->setFont(VSTGUI::kNormalFont,12);
+   c->setFont(VSTGUI::kNormalFont,13);
    const double space=UiCompactLayout::sample.right-UiCompactLayout::sample.left-8.;
    if(c->getStringWidth(fitted.c_str())>space) {
      const auto pos=raw.find_last_of('.');
@@ -954,32 +951,16 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }
      if(c->getStringWidth(fitted.c_str())>space)fitted="...";
    }
-   // Smoked-glass sample readout with a real source-present pilot slit.
-   // Paint remains inside the existing sample field: label bounds and
-   // sample-load/rename/drop hit geometry are deliberately unchanged.
+   // One clean recessed sample display. Removed stacked reflection bands
+   // and the extra pilot light: EDIT enabled state already indicates whether
+   // a sample exists. Preserve the original load/rename/drop hit region.
    const double glassLeft=UiCompactLayout::sample.left;
    const double glassRight=UiCompactLayout::sample.right;
    drawInset(c,{glassLeft,y+9,glassRight,y+40},
-             VSTGUI::CColor{3,16,26,255});
-   c->setFillColor(VSTGUI::CColor{8,29,42,255});
-   c->drawRect({glassLeft+3.,y+14.,glassRight-3.,y+34.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{22,51,65,255});
-   c->drawRect({glassLeft+4.,y+14.,glassRight-4.,y+15.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{2,11,19,255});
-   c->drawRect({glassLeft+4.,y+34.,glassRight-4.,y+37.},VSTGUI::kDrawFilled);
-   // No decorative false LEDs: this lens is bright only when the actual
-   // Controller has an imported sample. It sits above the text glyphs.
-   const bool samplePresent=controller_.hasSample(row);
-   c->setFillColor(VSTGUI::CColor{1,8,16,255});
-   c->drawRect({glassLeft+5.,y+10.,glassLeft+18.,y+14.},VSTGUI::kDrawFilled);
-   c->setFillColor(samplePresent?VSTGUI::CColor{59,147,186,255}:
-                                 VSTGUI::CColor{18,41,55,255});
-   c->drawRect({glassLeft+7.,y+11.,glassLeft+16.,y+13.},VSTGUI::kDrawFilled);
-   c->setFillColor(samplePresent?VSTGUI::CColor{147,227,248,255}:
-                                 VSTGUI::CColor{38,60,73,255});
-   c->drawRect({glassLeft+9.,y+11.,glassLeft+14.,y+12.},VSTGUI::kDrawFilled);
+             VSTGUI::CColor{5,19,30,255});
+   c->setFont(VSTGUI::kNormalFont,13);
    c->setFontColor(letters);
-   c->drawString(fitted.c_str(),{glassLeft+5.,y+9.,glassRight-2.,y+40.},VSTGUI::kLeftText);
+   c->drawString(fitted.c_str(),{glassLeft+5.,y+9.,glassRight-3.,y+40.},VSTGUI::kLeftText);
    drawControl(c,{275,y+9,301,y+40},"...");
     drawControl(c,{UiCompactLayout::edit.left,y+9,UiCompactLayout::edit.right,y+40},"EDIT",false,controller_.hasSample(row));
    drawControl(c,{303,y+9,329,y+40},"<");
