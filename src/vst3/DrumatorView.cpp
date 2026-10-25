@@ -719,6 +719,7 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
 }
 DrumatorView::~DrumatorView() {
  if(backgroundBitmap_){backgroundBitmap_->forget();backgroundBitmap_=nullptr;}
+ if(productLogoBitmap_){productLogoBitmap_->forget();productLogoBitmap_=nullptr;}
  if(knobBitmap_){knobBitmap_->forget();knobBitmap_=nullptr;}
  if(screwBitmap_){screwBitmap_->forget();screwBitmap_=nullptr;}
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
@@ -922,6 +923,7 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  // The view itself owns the drop-target interface, as in Phraseator.
  controller_.registerView(this);
  backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Faceplate.png"));
+ productLogoBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("Metallisches DRUMATOR-Logo mit Untertitel.png"));
  knobBitmap_=new VSTGUI::CMultiFrameBitmap(VSTGUI::CResourceDescription("125A_Drumator_Knob.png"),{{125.,125.},101,1});
  screwBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Screw.png"));
 }
@@ -942,18 +944,30 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // The enlarged steel head is an open surface, without stacked insets.
  c->setFillColor(VSTGUI::CColor{4,15,27,255});
  c->drawRect({0.,UiCompactLayout::header-2.,1280.,UiCompactLayout::header},VSTGUI::kDrawFilled);
- // Restrained silver-machined title: dark relief, cool metal body, bright upper edge.
- c->setFont(VSTGUI::kNormalFont,28);
- c->setFontColor(VSTGUI::CColor{8,17,26,255});
- c->drawString("DRUMATOR",{430.,7.,850.,47.},VSTGUI::kCenterText);
- c->setFontColor(VSTGUI::CColor{164,182,196,255});
- c->drawString("DRUMATOR",{430.,5.,850.,45.},VSTGUI::kCenterText);
- c->setFontColor(VSTGUI::CColor{223,231,238,255});
- c->drawString("DRUMATOR",{430.,4.,850.,44.},VSTGUI::kCenterText);
- // Product descriptor from the approved hardware reference, aligned beneath title.
- c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(VSTGUI::CColor{193,210,225,255});
- c->drawString("D R U M   S A M P L E R   &   S T E P   S E Q U E N C E R",
-               {425.,39.,855.,59.},VSTGUI::kCenterText);
+ // Original product-title bitmap. Its native 2172:724 proportions are
+ // maintained and it is clipped to the top title band, keeping header
+ // control captions and all button hit geometry unaffected.
+ if(productLogoBitmap_&&productLogoBitmap_->getWidth()>0.&&
+    productLogoBitmap_->getHeight()>0.) {
+   constexpr double productHeight=70.;
+   const double sf=productHeight/productLogoBitmap_->getHeight();
+   const double productWidth=sf*productLogoBitmap_->getWidth();
+   const double x=(1280.-productWidth)/2.;
+   const double y=-2.;
+   VSTGUI::CDrawContext::Transform tx(*c,
+       VSTGUI::CGraphicsTransform().scale(sf,sf)
+         .translate(x/sf,y/sf));
+   productLogoBitmap_->draw(c,{0.,0.,productLogoBitmap_->getWidth(),
+                                 productLogoBitmap_->getHeight()});
+ }
+ else {
+   // Visible fallback for a host that cannot locate the bundled PNG.
+   c->setFont(VSTGUI::kNormalFont,28);c->setFontColor(letters);
+   c->drawString("DRUMATOR",{430.,5.,850.,45.},VSTGUI::kCenterText);
+   c->setFont(VSTGUI::kNormalFont,11);
+   c->drawString("DRUM SAMPLER & STEP SEQUENCER",{425.,39.,855.,59.},
+                 VSTGUI::kCenterText);
+ }
  drawBrandLogo(c);
  c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
  // All four group captions are on one shared baseline, 26px below GUI31.
