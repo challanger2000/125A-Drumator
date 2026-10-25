@@ -691,6 +691,17 @@ void testVisualRender(){
    Fixture f;f.kit(namedKit('X',16));f.open();
    auto* v=IntegrationAccess::view(*f.c,0);
    captureVstgui(*v,"v2-16-rows-page-1",1.0);
+   // GUI46: inspect bottom fascia and group navigation with 16 instruments
+   // at actual host zoom (not merely an upscaled raster).
+   std::array<std::uint8_t,5> footerZoom{{'D','Z','M','2',2}};
+   drumator::qa::ByteStream footerZoomInput(footerZoom.data(),footerZoom.size());
+   check(f.c->setState(&footerZoomInput)==kResultOk&&v->zoomMatches(1.3),
+         "GUI46 native 16-row footer capture must use true 130pct zoom");
+   captureVstgui(*v,"gui46-16-rows-130",1.3);
+   std::array<std::uint8_t,5> defaultZoom{{'D','Z','M','2',0}};
+   drumator::qa::ByteStream defaultZoomInput(defaultZoom.data(),defaultZoom.size());
+   check(f.c->setState(&defaultZoomInput)==kResultOk&&v->zoomMatches(1.0),
+         "GUI46 reset editor zoom after footer capture");
    click(*v,900.,114.);
    captureVstgui(*v,"v2-pattern-actions-menu",1.0);
    click(*v,15.,390.);
