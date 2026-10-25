@@ -7,7 +7,7 @@ Fixture& fa23Kit(Fixture& f){
 DrumatorView& fa23Open(Fixture& f){
  f.open();auto* view=IntegrationAccess::view(*f.c,0);
  // Direct row EDIT action opens the WAV modal without opening the sample popup.
- click(*view,240.,128.);
+ click(*view,240.,UiCompactLayout::header+20.);
  check(IntegrationAccess::sampleEditorOpen(*view),"FA23 actual WAV editor did not open");
  return *view;
 }
@@ -50,7 +50,7 @@ void testFa23ModalDrop(){
    emptyFixture.kit(emptyKit);emptyFixture.open();
    auto* emptyView=IntegrationAccess::view(*emptyFixture.c,0);
    check(!emptyFixture.c->hasSample(0),"UI empty row falsely enables EDIT");
-   click(*emptyView,240.,128.);
+   click(*emptyView,240.,UiCompactLayout::header+20.);
    check(!IntegrationAccess::sampleEditorOpen(*emptyView),"UI EDIT opened an empty row");
  }
  FinalAuditFiles files;
@@ -60,7 +60,7 @@ void testFa23ModalDrop(){
    auto* target=IntegrationAccess::view(*positive.c,0);
    const auto replacement=constantStereo(-.125f,.375f);
    AuditFilePackage source(files.write("positive-drop.wav",replacement));
-   VSTGUI::DragEventData drop{};drop.drag=&source;drop.pos={150.,128.};
+   VSTGUI::DragEventData drop{};drop.drag=&source;drop.pos={150.,UiCompactLayout::header+20.};
    const auto allowed=target->onDragEnter(drop);
    const bool changed=target->onDrop(drop);
    check(allowed!=VSTGUI::DragOperation::None&&changed&&
@@ -70,7 +70,7 @@ void testFa23ModalDrop(){
  Fixture f;fa23Kit(f);auto& view=fa23Open(f);
  const auto before=auditReturnedKit(*f.p).wav[0];
  AuditFilePackage package(files.write("replacement.wav",constantStereo(-.125f,.375f)));
- VSTGUI::DragEventData drag{};drag.drag=&package;drag.pos={150.,128.};
+ VSTGUI::DragEventData drag{};drag.drag=&package;drag.pos={150.,UiCompactLayout::header+20.};
  const auto operation=view.onDragEnter(drag);const bool accepted=view.onDrop(drag);
  check(operation==VSTGUI::DragOperation::None&&!accepted&&auditReturnedKit(*f.p).wav[0]==before,
        "FA23 modal WAV editor admitted a file drop into the covered sample row");
@@ -1494,7 +1494,7 @@ void testFr10GlobalKnobEdgeHit(){
  Fixture f;fa23Kit(f);f.open();
  auto* view=IntegrationAccess::view(*f.c,0);
  check(f.c->swingPercent()==0,"FR10 fixture swing should default to zero");
- VSTGUI::CPoint point(UiCompactLayout::globalKnobCenters[0]+16.5,76.);
+ VSTGUI::CPoint point(UiCompactLayout::globalKnobCenters[0]+16.5,UiCompactLayout::globalKnobY);
  view->onMouseDown(point,VSTGUI::CButtonState(VSTGUI::kLButton));
  point.y-=25.;
  view->onMouseMoved(point,VSTGUI::CButtonState(VSTGUI::kLButton));

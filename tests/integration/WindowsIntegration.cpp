@@ -586,7 +586,7 @@ void captureVstgui(DrumatorView& v,const std::string& title,double scale){
  if(title=="v2-song-board"){
    // Regression: the Song overlay must erase the entire row UI, INCLUDING
    // the 28-pixel strip to the right of the former 1252px background.
-   check(width==1280&&height>200&&access->setPosition(1260,140),
+   check(width==1280&&height>200&&access->setPosition(1260,UiCompactLayout::header+32.),
          "Song overlay offscreen oracle pixel missing");
    VSTGUI::CColor pixel{};access->getColor(pixel);
    check(pixel.red==26&&pixel.green==35&&pixel.blue==45,
@@ -642,7 +642,7 @@ void testGuiPhysicalStepsRaster(){
   std::array<std::uint32_t,17*34> pixels{};
   std::size_t k=0;
   const int left=623+19*step;
-  for(int yy=177;yy<211;++yy)for(int xx=left;xx<left+17;++xx){
+  for(int yy=static_cast<int>(UiCompactLayout::header)+69;yy<static_cast<int>(UiCompactLayout::header)+103;++yy)for(int xx=left;xx<left+17;++xx){
    check(a->setPosition(xx,yy),"GUI key raster out of view");
    VSTGUI::CColor c{};a->getColor(c);
    pixels[k++]=(std::uint32_t(c.red)<<16)|(std::uint32_t(c.green)<<8)|c.blue;
@@ -1290,7 +1290,7 @@ void testPatternLengthControls(){
  f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
  check(f.c->patternLength(0)==32,"UX pattern length initial state");
- click(*v,322.,20.);
+ click(*v,322.,UiCompactLayout::headerButtonTop+13.);
  check(f.c->patternLength(0)==16,"UX visible 1 TAKT control failed");
  const double blockedX=UiCompactLayout::stepX+20.*UiCompactLayout::stepWidth+8.;
  const auto oldHidden=f.c->velocity(0,0,20);
@@ -1299,9 +1299,9 @@ void testPatternLengthControls(){
  click(*v,1248.,UiCompactLayout::header+88.);
  click(*v,blockedX,UiCompactLayout::header+UiCompactLayout::baseRow+12.);
  check(f.c->velocity(0,0,20)==oldHidden,"UX edited inactive velocity in 1T");
- click(*v,322.,20.);
+ click(*v,322.,UiCompactLayout::headerButtonTop+13.);
  check(f.c->patternLength(0)==16,"UX selected length not idempotent");
- click(*v,414.,20.);
+ click(*v,414.,UiCompactLayout::headerButtonTop+13.);
  check(f.c->patternLength(0)==32,"UX visible 2 TAKTE control failed");
  click(*v,900.,114.);
  click(*v,900.,150.);

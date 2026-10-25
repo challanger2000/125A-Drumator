@@ -193,7 +193,7 @@ void testAuditSamplePathFailures() {
        "FA04 path OOM escaped or changed accepted kit/Undo/path");
  auto* view=IntegrationAccess::view(*f.c,0);
  AuditFilePackage package(pathText);
- VSTGUI::DragEventData drag{};drag.drag=&package;drag.pos={100.,122.};
+ VSTGUI::DragEventData drag{};drag.drag=&package;drag.pos={100.,UiCompactLayout::header+14.};
  escaped=false;
  allocationFail=0;
  try {(void)view->onDragEnter(drag);}catch(const std::exception&){escaped=true;}
@@ -253,7 +253,7 @@ void testAuditMinimumHeightMenus() {
  const auto height=view->getViewSize().getHeight();
  check(height==300.&&view->visibleRowsForHit()==1,
        "FA06 fixture must reach supported 300px host-refusal viewport");
- const auto top=UiCompactLayout::popupTop(108.,height,230.);
+ const auto top=UiCompactLayout::popupTop(UiCompactLayout::header,height,230.);
  check(top>=0.&&top+225.<=height,"FA06 complete FILL menu outside viewport");
  // Independent golden first-bar velocities for the nine visible FILL labels.
  const std::array<std::array<std::uint8_t,16>,9> golden{{
@@ -269,15 +269,15 @@ void testAuditMinimumHeightMenus() {
  }};
  for(std::size_t item=0;item<golden.size();++item) {
    f.kit(kit);
-   click(*view,425.,126.);click(*view,450.,top+static_cast<double>(item)*25.+12.);
+   click(*view,425.,UiCompactLayout::header+18.);click(*view,450.,top+static_cast<double>(item)*25.+12.);
    const auto saved=auditReturnedKit(*f.p);
    for(std::size_t step=0;step<kSteps;++step)
      check(saved.grid[step]==golden[item][step%16],"FA06 clipped or misrouted FILL menu item");
  }
- const auto outputTop=UiCompactLayout::popupTop(108.,height,210.);
+ const auto outputTop=UiCompactLayout::popupTop(UiCompactLayout::header,height,210.);
  check(outputTop>=0.&&outputTop+200.<=height,"FA06 complete output menu outside viewport");
  for(unsigned bus=0;bus<16;++bus) {
-   click(*view,550.,126.);
+   click(*view,550.,UiCompactLayout::header+18.);
    click(*view,450.+static_cast<double>(bus/8)*102.,outputTop+(bus%8)*25.+12.);
    check(auditReturnedKit(*f.p).output[0]==bus,"FA06 output menu item inaccessible at minimum height");
  }

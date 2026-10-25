@@ -27,7 +27,7 @@ void testSecondAuditViewInvalidation() {
  };
  // This path includes the real first View's click handler, not just a direct
  // Controller call. Its local invalid() must not conceal the stale other HWND.
- bothInvalidated("MUTE VIA VIEW",[&]{click(*first,475.,126.);return f.c->isRowMuted(0);});
+ bothInvalidated("MUTE VIA VIEW",[&]{click(*first,475.,UiCompactLayout::header+18.);return f.c->isRowMuted(0);});
  bothInvalidated("SOLO CONTROLLER",[&]{return f.c->toggleRowGate(0,true);});
  bothInvalidated("ROW VOL",[&]{return f.c->adjustRowMix(0,false,1);});
  bothInvalidated("ROW PAN",[&]{return f.c->adjustRowMix(0,true,1);});
