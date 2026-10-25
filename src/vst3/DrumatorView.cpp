@@ -977,9 +977,21 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({12.,y+rowH-10.,1258.,y+rowH-9.},VSTGUI::kDrawFilled);
    c->setFrameColor(chosen?accent:rowBlueBorder);
    c->drawRect({9,y+3.,1261,y+rowH-4.},VSTGUI::kDrawStroked);
-   c->setFillColor(chosen?VSTGUI::CColor{83,178,209,255}:
-                            VSTGUI::CColor{37,88,124,255});
-   c->drawRect({12,y+10.,15,y+rowH-11.},VSTGUI::kDrawFilled);
+   // Four subdued inset instrument identity rails, tied to absolute row
+   // index (not page position or currently loaded sample). Paint only.
+   constexpr std::array<VSTGUI::CColor,4> rowAccents{{
+     {158,61,65,255},   // muted red
+     {181,114,44,255},  // warm amber
+     {68,139,92,255},   // subdued green
+     {125,91,161,255}   // violet
+   }};
+   const auto rail=rowAccents[row%rowAccents.size()];
+   c->setFillColor(VSTGUI::CColor{5,17,25,255});
+   c->drawRect({12.,y+9.,18.,y+rowH-10.},VSTGUI::kDrawFilled);
+   c->setFillColor(rail);
+   c->drawRect({13.,y+11.,17.,y+rowH-12.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{110,128,139,255});
+   c->drawRect({13.,y+11.,14.,y+rowH-12.},VSTGUI::kDrawFilled);
    // The top controls and rotaries occupy adjacent zones. No decorative
    // shelf stripe: it previously crowded the VOL/PAN/PITCH legends.
    // Readable row functions versus visually separated step sequencer.
