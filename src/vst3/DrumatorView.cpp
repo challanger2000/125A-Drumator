@@ -222,6 +222,17 @@ void drawHardwareStep(VSTGUI::CDrawContext* c,double sx,double y,
                 lit?VSTGUI::CColor{121,47,15,255}:
                     VSTGUI::CColor{13,28,38,255});
  c->drawRect({sx+4.,b-2.,sx+14.,b},VSTGUI::kDrawFilled);
+ // Every physical step has a recessed indicator lens, including OFF
+ // and disabled keys. Previously the aperture appeared only for ON keys.
+ // This is paint only, inside the existing 19px step pitch.
+ c->setFillColor(VSTGUI::CColor{2,9,17,255});
+ c->drawRect({sx+5.,y+64.,sx+15.,y+69.},VSTGUI::kDrawFilled);
+ c->setFillColor(disabled?VSTGUI::CColor{13,23,32,255}:
+                           VSTGUI::CColor{25,45,58,255});
+ c->drawRect({sx+6.,y+65.,sx+14.,y+68.},VSTGUI::kDrawFilled);
+ c->setFillColor(disabled?VSTGUI::CColor{31,43,51,255}:
+                           VSTGUI::CColor{58,80,93,255});
+ c->drawRect({sx+7.,y+65.,sx+13.,y+66.},VSTGUI::kDrawFilled);
  if(lit){
   // Dedicated amber pilot lamp in the key bank's upper recess.
   // It reflects the actual step state; there are no decorative fake LEDs.
