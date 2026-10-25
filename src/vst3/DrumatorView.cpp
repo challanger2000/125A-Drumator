@@ -1485,13 +1485,24 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        static_cast<double>(sampleEditorFirst_)/sampleEditorFrames_;
    c->setFillColor(accent);
    c->drawRect({thumbX,387,thumbX+thumbWidth,402},VSTGUI::kDrawFilled);
-   char info[180]{};
-   std::snprintf(info,sizeof(info),"START %u   END %u   FADE IN %u   FADE OUT %u   GAIN %u%%",
-        sampleEditorEdit_.start,sampleEditorEdit_.end,
-        sampleEditorEdit_.fadeIn,sampleEditorEdit_.fadeOut,
-        static_cast<unsigned>(std::lround(sampleEditorEdit_.gain*100.f)));
+   // Separate labels and values; source WAV sample rate, never host tempo/rate.
+   // Internal edits remain exact integer audio-frame positions and durations.
+   const double msPerFrame=sampleEditorRate_?1000.0/sampleEditorRate_:0.;
+   constexpr const char* labels[]={"START","END","FADE IN","FADE OUT","GAIN"};
+   const double positions[]={sampleEditorEdit_.start*msPerFrame,
+     sampleEditorEdit_.end*msPerFrame,sampleEditorEdit_.fadeIn*msPerFrame,
+     sampleEditorEdit_.fadeOut*msPerFrame,
+     std::round(sampleEditorEdit_.gain*100.f)};
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   c->drawString(info,{270,508,1020,532});
+   for(std::size_t i=0;i<5;++i){
+     const double left=268.+i*153.;
+     char value[48]{};
+     if(i==4)std::snprintf(value,sizeof(value),"%.0f %%",positions[i]);
+     else if(sampleEditorRate_)std::snprintf(value,sizeof(value),"%.2f ms",positions[i]);
+     else std::snprintf(value,sizeof(value),"-- ms");
+     c->drawString(labels[i],{left,497,left+140.,515});
+     c->drawString(value,{left,519,left+140.,539});
+   }
    // All eight controls use the same rect for paint, hit-test and press.
    drawControl(c,editorRect(UiWaveEditorLayout::zoomIn),"ZOOM +");
    drawControl(c,editorRect(UiWaveEditorLayout::zoomOut),"ZOOM -");
@@ -1614,9 +1625,12 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
    if(auto* parent=getParentView())parent->setViewSize({0,0,1280,editorHeight});
    setViewSize({0,0,1280,editorHeight});
  }
- sampleEditorEdit_=edit;sampleEditorFrames_=frames;sampleEditorWave_=wave;
+ sampleEditorEdit_=edit;sampleEditorFrames_=frames;
+ sampleEditorRate_=controller_.editorWaveSampleRate();sampleEditorWave_=wave;
  sampleEditorRow_=row;sampleEditorFirst_=0;sampleEditorLast_=frames;
  sampleEditorDrag_=0;sampleEditorPressed_=-1;sampleEditorOpen_=true;
+ // A valid snapshot supersedes the initial empty-state hint, even on project recall.
+ status_="SAMPLE READY FOR EDITING";
  invalid();return true;
 }
 void DrumatorView::setSampleEditorGain(double x) {
