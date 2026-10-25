@@ -72,6 +72,7 @@ private:
  SampleEdit sampleEditorEdit_{};
  std::uint32_t sampleEditorRevision_{0};
  std::uint32_t sampleEditorFrames_{0};
+ std::uint32_t sampleEditorRate_{0};
  std::uint32_t sampleEditorFirst_{0},sampleEditorLast_{0};
  std::array<WaveformRange,256> sampleEditorWave_{};
  std::array<WaveformRange,256> sampleEditorWaveRight_{};
