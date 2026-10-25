@@ -110,6 +110,7 @@ namespace drumator {
 // including Undo/clipboard/paths, rather than mirroring the commit algorithm.
 struct IntegrationAccess {
  static bool sampleEditorOpen(const DrumatorView& view){return view.sampleEditorOpen_;}
+ static std::string sampleEditorStatus(const DrumatorView& v){return v.status_;}
  static bool openSampleEditorForCapture(DrumatorView& view,std::size_t row){return view.openSampleEditor(row);}
  static std::array<double,3> rotaryImageStatus(const DrumatorView& view){
    const auto* bmp=view.knobBitmap_;
@@ -709,6 +710,52 @@ void testWaveEditorDesignCaptures(){
    captureVstgui(*v,factor==1.0?"wave-editor-100":"wave-editor-130",factor);
  }
  evidence("Wave editor native captures 100/130: actual encoded stereo float32 WAV, start/end, fade-in/out and gain visible");
+}
+void testWaveEditorLongCaptures(){
+ constexpr std::uint32_t rate=48000;
+ constexpr std::size_t frames=rate*2;
+ for(double factor:{1.0,1.3}){
+   Fixture f;
+   auto kit=namedKit('X',4);
+   auto& wav=kit.wav[0];
+   wav.resize(44+frames*8);
+   auto put=[&](std::size_t at,std::uint32_t value,unsigned count){
+     for(unsigned n=0;n<count;++n)wav[at+n]=static_cast<std::uint8_t>(value>>(8*n));
+   };
+   std::memcpy(wav.data(),"RIFF",4);put(4,static_cast<std::uint32_t>(wav.size()-8),4);
+   std::memcpy(wav.data()+8,"WAVEfmt ",8);
+   put(16,16,4);put(20,3,2);put(22,2,2);put(24,rate,4);
+   put(28,rate*8,4);put(32,8,2);put(34,32,2);
+   std::memcpy(wav.data()+36,"data",4);put(40,static_cast<std::uint32_t>(frames*8),4);
+   for(std::size_t i=0;i<frames;++i){
+     const double t=static_cast<double>(i)/rate;
+     const float env=static_cast<float>((0.3+0.6*std::abs(std::sin(t*7.7)))*
+                            (0.5+0.5*std::abs(std::sin(t*49.))));
+     const float l=env*static_cast<float>(std::sin(t*730.));
+     const float r=env*static_cast<float>(std::sin(t*920.+.4));
+     std::memcpy(wav.data()+44+i*8,&l,4);
+     std::memcpy(wav.data()+48+i*8,&r,4);
+   }
+   // Deliberately do not invent a sample name: embedded audio alone is sufficient.
+   kit.names[0].clear();
+   kit.sampleEdits[0]=SampleEdit{4800,86400,4800,7200,1.25f};
+   f.kit(kit);f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   std::array<std::uint8_t,5> zoomState{{'D','Z','M','2',
+      static_cast<std::uint8_t>(factor==1.?0:2)}};
+   drumator::qa::ByteStream input(zoomState.data(),zoomState.size());
+   check(f.c->setState(&input)==kResultOk&&v->zoomMatches(factor),
+         "Wave long capture editor zoom");
+   check(IntegrationAccess::openSampleEditorForCapture(*v,0),
+         "Wave long capture loaded audio unavailable");
+   check(IntegrationAccess::sampleEditorStatus(*v).find("EMPTY")==std::string::npos,
+         "Wave editor incorrectly shows EMPTY for loaded audio");
+   check(f.c->editorWaveSampleRate()==rate,"Wave editor source rate mismatch");
+   captureVstgui(*v,factor==1.?"wave-long-fit-100":"wave-long-fit-130",factor);
+   check(IntegrationAccess::zoomSample(*v,true),"Wave long zoom-in failed");
+   captureVstgui(*v,factor==1.?"wave-long-zoom-100":"wave-long-zoom-130",factor);
+ }
+ evidence("Wave long sample: native 2s 48kHz stereo WAV, zoomed/full 100/130 and no EMPTY PASS");
 }
 void testVelocityDesignCaptures(){
  // Native GUI design fixture only. No production implementation changes.
@@ -2121,6 +2168,7 @@ int main(int argc,char** argv){
  run("VSTGUI native pixel render set",testVisualRender);
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
  run("VSTGUI wave editor design capture 100/130",testWaveEditorDesignCaptures);
+ run("VSTGUI long WAV display full/zoom at 100/130",testWaveEditorLongCaptures);
   run("GUI physical step state/raster toggle",testGuiPhysicalStepsRaster);
  run("UX direct pattern length",testPatternLengthControls);
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
