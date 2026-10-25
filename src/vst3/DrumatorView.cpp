@@ -837,52 +837,27 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  if(backgroundBitmap_&&backgroundBitmap_->getWidth()>=1280.&&
     backgroundBitmap_->getHeight()>=fullHeight)
    backgroundBitmap_->draw(c,{0.,0.,1280.,fullHeight});
- // Dark control deck with precise machined nameplate seam.
- c->setFillColor(VSTGUI::CColor{11,27,42,255});
- c->drawRect({0,42,1280,108},VSTGUI::kDrawFilled);
- // Layered steel fascia edge: upper specular bevel and dark undercut.
- c->setFillColor(VSTGUI::CColor{95,151,187,255});
- c->drawRect({5.,1.,1275.,2.},VSTGUI::kDrawFilled);
- c->setFillColor(VSTGUI::CColor{6,18,31,255});
- c->drawRect({4.,37.,1276.,40.},VSTGUI::kDrawFilled);
+ // Open steel fascia: leave the approved faceplate visible between the
+ // instrument-like recessed control groups instead of painting a full opaque
+ // rectangular deck and two decorative nameplate frames above it.
  c->setFillColor(VSTGUI::CColor{4,15,27,255});
- c->drawRect({0,40,1280,43},VSTGUI::kDrawFilled);
- c->setFillColor(VSTGUI::CColor{76,126,162,255});
- c->drawRect({4,40,1276,41},VSTGUI::kDrawFilled);
- // Two recessed metal nameplates in the existing 40px header. Their
- // surfaces are entirely behind the title and pattern-length buttons;
- // neither click geometry nor parameter state is modified.
- c->setFillColor(VSTGUI::CColor{2,10,19,255});
- c->drawRect({172.,5.,460.,37.},VSTGUI::kDrawFilled);
- c->drawRect({527.,5.,753.,36.},VSTGUI::kDrawFilled);
- c->setFillColor(VSTGUI::CColor{76,108,129,255});
- c->drawRect({174.,6.,458.,7.},VSTGUI::kDrawFilled);
- c->drawRect({529.,6.,751.,7.},VSTGUI::kDrawFilled);
- c->setFillColor(VSTGUI::CColor{13,31,46,255});
- c->drawRect({174.,8.,458.,34.},VSTGUI::kDrawFilled);
- c->drawRect({529.,8.,751.,33.},VSTGUI::kDrawFilled);
- // Fine brushed graphite texture confined to the title plaque.
- for(int band=0;band<5;++band) {
-   const double yy=9.+band*5.;
-   c->setFillColor(band%2?VSTGUI::CColor{17,36,50,255}:
-                          VSTGUI::CColor{20,39,54,255});
-   c->drawRect({530.,yy,750.,yy+1.},VSTGUI::kDrawFilled);
- }
- c->setFillColor(VSTGUI::CColor{45,70,87,255});
- c->drawRect({174.,34.,458.,35.},VSTGUI::kDrawFilled);
- c->drawRect({529.,33.,751.,34.},VSTGUI::kDrawFilled);
+ c->drawRect({0.,40.,1280.,43.},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{67,107,135,255});
+ c->drawRect({4.,40.,1276.,41.},VSTGUI::kDrawFilled);
  drawInset(c,{17,46,228,103},VSTGUI::CColor{12,31,46,255});
  drawInset(c,{323,46,774,99},VSTGUI::CColor{10,27,43,255});
  drawInset(c,{779,46,1106,99},VSTGUI::CColor{10,27,43,255});
  drawInset(c,{1124,46,1253,103},VSTGUI::CColor{12,31,46,255});
- c->setFont(VSTGUI::kNormalFont,20);c->setFontColor(letters);
- c->drawString("125A DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
+ c->setFont(VSTGUI::kNormalFont,23);c->setFontColor(letters);
+ c->drawString("DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
  drawBrandLogo(c);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
- c->drawString("PATTERN",{180,13,276,33},VSTGUI::kLeftText);
+ c->drawString("LENGTH",{180,13,276,33},VSTGUI::kLeftText);
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
  drawControl(c,{UiCompactLayout::barOne.left,8,UiCompactLayout::barOne.right,34},"1 BAR",oneBar);
  drawControl(c,{UiCompactLayout::barTwo.left,8,UiCompactLayout::barTwo.right,34},"2 BARS",!oneBar);
+ c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+ c->drawString("PATTERN",{340,84,458,97},VSTGUI::kLeftText);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    char label[12]{};
    std::snprintf(label,sizeof(label),"%c",static_cast<char>('A'+pattern));
