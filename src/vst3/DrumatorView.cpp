@@ -1033,27 +1033,27 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Individual graphite instrument trays with subtle selectable blue edge.
    c->setFillColor(VSTGUI::CColor{3,13,23,255});
    c->drawRect({8,y+2.,1261,y+rowH-2.},VSTGUI::kDrawFilled);
-   c->setFillColor(chosen?rowBlueSelected:(i%2?rowBlueB:rowBlueA));
+   c->setFillColor(chosen?VSTGUI::CColor{36,42,48,255}:VSTGUI::CColor{30,36,42,255});
    c->drawRect({10,y+4.,1260,y+rowH-5.},VSTGUI::kDrawFilled);
    // Satin graphite face inside the blue steel carrier. A narrow exposed
    // perimeter and opposing specular/undercut edges give each row a distinct
    // hardware tray without altering its size or any clickable rectangle.
    // Satin faceplate: upper shoulder catches light; lower deck recedes.
    // Pure paint, with unchanged widget geometry and interaction rectangles.
-   c->setFillColor(chosen?VSTGUI::CColor{26,49,63,255}:
-                            VSTGUI::CColor{21,40,53,255});
+   c->setFillColor(chosen?VSTGUI::CColor{37,43,49,255}:
+                            VSTGUI::CColor{34,40,46,255});
    c->drawRect({12.,y+7.,1258.,y+40.},VSTGUI::kDrawFilled);
-   c->setFillColor(chosen?VSTGUI::CColor{19,39,52,255}:
-                            VSTGUI::CColor{14,29,41,255});
+   c->setFillColor(chosen?VSTGUI::CColor{30,36,42,255}:
+                            VSTGUI::CColor{27,33,39,255});
    c->drawRect({12.,y+40.,1258.,y+rowH-9.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{91,117,131,255});
+   c->setFillColor(VSTGUI::CColor{91,102,111,255});
    c->drawRect({11.,y+5.,1259.,y+6.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{46,72,89,255});
+   c->setFillColor(VSTGUI::CColor{56,64,72,255});
    c->drawRect({11.,y+6.,12.,y+rowH-9.},VSTGUI::kDrawFilled);
    c->setFillColor(VSTGUI::CColor{5,17,27,255});
    c->drawRect({1258.,y+7.,1260.,y+rowH-7.},VSTGUI::kDrawFilled);
    c->drawRect({11.,y+rowH-9.,1260.,y+rowH-6.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{44,68,84,255});
+   c->setFillColor(VSTGUI::CColor{53,61,68,255});
    c->drawRect({12.,y+rowH-10.,1258.,y+rowH-9.},VSTGUI::kDrawFilled);
    c->setFrameColor(chosen?accent:rowBlueBorder);
    c->drawRect({9,y+3.,1261,y+rowH-4.},VSTGUI::kDrawStroked);
@@ -1077,9 +1077,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Readable row functions versus visually separated step sequencer.
    // Quiet, continuous control deck: the knob mounts already provide
    // physical separation; no second inset frame around all rotaries.
-   c->setFillColor(VSTGUI::CColor{16,34,49,255});
+   c->setFillColor(VSTGUI::CColor{28,34,40,255});
    c->drawRect({18.,y+46.,615.,y+120.},VSTGUI::kDrawFilled);
-   drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
+   drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{24,30,35,255});
    // Dark dividing seam and a single silver-blue return: two separate
    // recessed modules, not a painted line running through the controls.
    c->setFillColor(VSTGUI::CColor{2,10,18,255});
