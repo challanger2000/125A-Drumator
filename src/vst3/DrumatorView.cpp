@@ -1037,11 +1037,32 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      }
      if(c->getStringWidth(fitted.c_str())>space)fitted="...";
    }
-   // Dark recessed file-name display, no imaginary audio waveforms.
-   drawInset(c,{UiCompactLayout::sample.left,y+9,UiCompactLayout::sample.right,y+40},
+   // Smoked-glass sample readout with a real source-present pilot slit.
+   // Paint remains inside the existing sample field: label bounds and
+   // sample-load/rename/drop hit geometry are deliberately unchanged.
+   const double glassLeft=UiCompactLayout::sample.left;
+   const double glassRight=UiCompactLayout::sample.right;
+   drawInset(c,{glassLeft,y+9,glassRight,y+40},
              VSTGUI::CColor{3,16,26,255});
+   c->setFillColor(VSTGUI::CColor{8,29,42,255});
+   c->drawRect({glassLeft+3.,y+14.,glassRight-3.,y+34.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{22,51,65,255});
+   c->drawRect({glassLeft+4.,y+14.,glassRight-4.,y+15.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{2,11,19,255});
+   c->drawRect({glassLeft+4.,y+34.,glassRight-4.,y+37.},VSTGUI::kDrawFilled);
+   // No decorative false LEDs: this lens is bright only when the actual
+   // Controller has an imported sample. It sits above the text glyphs.
+   const bool samplePresent=controller_.hasSample(row);
+   c->setFillColor(VSTGUI::CColor{1,8,16,255});
+   c->drawRect({glassLeft+5.,y+10.,glassLeft+18.,y+14.},VSTGUI::kDrawFilled);
+   c->setFillColor(samplePresent?VSTGUI::CColor{59,147,186,255}:
+                                 VSTGUI::CColor{18,41,55,255});
+   c->drawRect({glassLeft+7.,y+11.,glassLeft+16.,y+13.},VSTGUI::kDrawFilled);
+   c->setFillColor(samplePresent?VSTGUI::CColor{147,227,248,255}:
+                                 VSTGUI::CColor{38,60,73,255});
+   c->drawRect({glassLeft+9.,y+11.,glassLeft+14.,y+12.},VSTGUI::kDrawFilled);
    c->setFontColor(letters);
-   c->drawString(fitted.c_str(),{UiCompactLayout::sample.left+5,y+9,UiCompactLayout::sample.right-2,y+40},VSTGUI::kLeftText);
+   c->drawString(fitted.c_str(),{glassLeft+5.,y+9.,glassRight-2.,y+40.},VSTGUI::kLeftText);
    drawControl(c,{275,y+9,301,y+40},"...");
     drawControl(c,{UiCompactLayout::edit.left,y+9,UiCompactLayout::edit.right,y+40},"EDIT",false,controller_.hasSample(row));
    drawControl(c,{303,y+9,329,y+40},"<");
