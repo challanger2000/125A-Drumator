@@ -130,6 +130,21 @@ void drawPopupPlate(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r) {
  c->setFillColor(VSTGUI::CColor{3,13,23,255});
  c->drawRect({r.left+2.,r.bottom-4.,r.right-2.,r.bottom-2.},VSTGUI::kDrawFilled);
 }
+// Legible flat menu items; existing geometry and clicks are unchanged.
+void drawMenuItem(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
+                  const char* label,bool selected=false,bool enabled=true) {
+ c->setFillColor(selected?VSTGUI::CColor{32,76,104,255}:VSTGUI::CColor{14,32,46,255});
+ c->drawRect(r,VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{45,69,83,255});
+ c->drawRect({r.left+3.,r.bottom-1.,r.right-3.,r.bottom},VSTGUI::kDrawFilled);
+ if(selected){
+   c->setFillColor(VSTGUI::CColor{91,177,218,255});
+   c->drawRect({r.left,r.top,r.left+3.,r.bottom-1.},VSTGUI::kDrawFilled);
+ }
+ c->setFont(VSTGUI::kNormalFont,13);
+ c->setFontColor(enabled?VSTGUI::CColor{234,244,250,255}:VSTGUI::CColor{130,146,159,255});
+ c->drawString(label,{r.left+10.,r.top,r.right-5.,r.bottom},VSTGUI::kLeftText);
+}
 void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
                  const char* title,bool selected=false,bool enabled=true) {
  // Contact shadow and raised keycap, inset by a further pixel when selected.
@@ -286,6 +301,10 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  // with their title/nameplate. Row labels are deliberately placed higher.
  const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:-37.;
  const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:-24.;
+ if(rowModule) {
+   c->setFillColor(VSTGUI::CColor{13,31,45,255});
+   c->drawRect({cx-38.,cy-47.,cx+38.,cy-34.},VSTGUI::kDrawFilled);
+ }
  c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom});
  if(rowModule) {
    const double r=UiCompactLayout::rowKnobMountRadius;
@@ -1272,7 +1291,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_),fullHeight,230.);
    const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALLOP","SNARE + GHOST"};
    drawPopupPlate(c,{401.,top-4.,618.,top+229.});
-   for(int i=0;i<9;++i)drawControl(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
+   for(int i=0;i<9;++i)drawMenuItem(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
  }
  if(popup_==1) {
    drawPopupPlate(c,{1094.,35.,1233.,42.+30.*UiCompactLayout::userZooms.size()});
@@ -1280,14 +1299,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      char z[20]{};
      std::snprintf(z,sizeof(z),"%u%%",static_cast<unsigned>(
                    std::lround(UiCompactLayout::userZooms[i]*100.)));
-     drawControl(c,{1098,39.+i*30.,1229,68.+i*30.},z,
+     drawMenuItem(c,{1098,39.+i*30.,1229,68.+i*30.},z,
                 std::abs(editor_.getZoomFactor()-UiCompactLayout::userZooms[i])<0.001);
    }
  }else if(popup_==2) {
    drawPopupPlate(c,{778.,82.,972.,272.});
    const char* options[]={ "COPY","PASTE","CLEAR","UNDO","RANDOM VELOCITY","VELOCITY 100","DUPLICATE"};
    for(int i=0;i<7;++i)
-     drawControl(c,{782,86.+i*26.,968,111.+i*26.},options[i],
+     drawMenuItem(c,{782,86.+i*26.,968,111.+i*26.},options[i],
                  false,(i!=3||controller_.canUndoCurrentPattern())&&
                        (i!=6||controller_.canDuplicateCurrentPattern()));
  }else if(popup_==3&&popupRow_<controller_.visibleRows()) {
@@ -1298,7 +1317,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(i==0)std::snprintf(z,sizeof(z),"MAIN");
      else std::snprintf(z,sizeof(z),"OUT %u",i+1);
      const auto col=i/8,row=i%8;
-     drawControl(c,{413+col*102.,top+row*25.,511+col*102.,top+row*25.+24.},z,
+     drawMenuItem(c,{413+col*102.,top+row*25.,511+col*102.,top+row*25.+24.},z,
                  controller_.rowOutput(popupRow_)==i);
    }
  }else if(popup_==5&&popupRow_<controller_.visibleRows()) {
@@ -1306,14 +1325,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawPopupPlate(c,{74.,top-4.,308.,top+94.});
    const char* options[]={"LOAD SAMPLE","RENAME ROW","REMOVE SAMPLE"};
    for(int i=0;i<3;++i)
-      drawControl(c,{78,top+i*30.,304,top+i*30.+29.},options[i]);
+      drawMenuItem(c,{78,top+i*30.,304,top+i*30.+29.},options[i]);
  }else if(popup_==4&&popupRow_<controller_.visibleRows()) {
    const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,145.);
    drawPopupPlate(c,{511.,top-4.,619.,top+139.});
    for(unsigned i=0;i<5;++i) {
      char z[12]{};
      std::snprintf(z,sizeof(z),"CHOKE %u",i);
-     drawControl(c,{515,top+i*27.,615,top+i*27.+26.},z,
+     drawMenuItem(c,{515,top+i*27.,615,top+i*27.+26.},z,
                  controller_.rowChoke(popupRow_)==i);
    }
  }
