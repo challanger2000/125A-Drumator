@@ -278,7 +278,10 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
                 const char* title,const char* value,bool selected=false,
                 bool rowModule=false) {
  fraction=std::clamp(fraction,0.,1.);
- c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+ c->setFont(VSTGUI::kNormalFont,12);
+ c->setFontColor(VSTGUI::CColor{164,214,235,255});
+ // Higher-contrast engraved legends improve hardware-panel readability at
+ // 100% while keeping their original 13px label bounds and knob geometry.
  // Global controls share their historic layout; a bezel here would collide
  // with their title/nameplate. Row labels are deliberately placed higher.
  const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:-37.;
@@ -1076,7 +1079,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    else std::snprintf(name,sizeof(name),"OUT %u v",out+1);
    drawControl(c,{535,y+9,615,y+40},name,popup_==3&&popupRow_==row);
    std::snprintf(name,sizeof(name),"CH%u v",controller_.rowChoke(row));
-   c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
+   c->setFont(VSTGUI::kNormalFont,11);
+   c->setFontColor(VSTGUI::CColor{164,214,235,255});
    c->drawString("CHOKE",{570,y+52,615,y+73});
    drawControl(c,{570,y+73,615,y+105},name,popup_==4&&popupRow_==row);
    const double centers[]={133.,254.,375.,496.};
@@ -1114,8 +1118,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(step%4==0) {
        char index[8]{};
        std::snprintf(index,sizeof(index),"%u",static_cast<unsigned>(step+1));
-       // Bare group numbers on the blue row, no unwanted dark boxes.
-       c->setFont(VSTGUI::kNormalFont,12);
+       // Legible engraved four-step bank indexes, still within the original rail.
+       c->setFont(VSTGUI::kNormalFont,13);
        c->setFontColor(inactive?VSTGUI::CColor{146,165,180,255}:
                                 VSTGUI::CColor{226,242,253,255});
        c->drawString(index,{sx+3.,y+36.,sx+32.,y+57.},VSTGUI::kLeftText);
@@ -1123,13 +1127,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      // Only actual step velocity lights the amber LED aperture.
      drawHardwareStep(c,sx,y,velocity>0&&!inactive,inactive,step%4==0);
    }
-   c->setFont(VSTGUI::kNormalFont,10);c->setFontColor(accent);
+   c->setFont(VSTGUI::kNormalFont,11);
+   c->setFontColor(VSTGUI::CColor{164,214,235,255});
    c->drawString("VEL",{1233,y+44,1259,y+62});
    drawControl(c,{1233,y+70,1259,y+105},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
    if(velocityExpanded_[row]){
      c->setFillColor(velocityWellBlue);
      c->drawRect({16,y+130,1266,y+159},VSTGUI::kDrawFilled);
-     c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+     c->setFont(VSTGUI::kNormalFont,12);
+     c->setFontColor(VSTGUI::CColor{164,214,235,255});
      c->drawString("VELOCITY",{78,y+130,170,y+158},VSTGUI::kLeftText);
      if(row==velocityRow_) {
        char current[48]{};
