@@ -1253,7 +1253,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->setFillColor(VSTGUI::CColor{77,120,147,255});
  c->drawRect({9,bottom+1.,1271,bottom+2.},VSTGUI::kDrawFilled);
  drawInset(c,{217,bottom+5.,1022,bottom+35.},VSTGUI::CColor{9,27,41,255});
- drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"ADD ROW");
+ drawControl(c,{UiCompactLayout::rowAdd.left,bottom+5,UiCompactLayout::rowAdd.right,bottom+34},"ADD ROW",false,controller_.visibleRows()<kRows);
  drawControl(c,{UiCompactLayout::rowRemove.left,bottom+5,UiCompactLayout::rowRemove.right,bottom+34},"REMOVE ROW",false,controller_.canHideLast());
  char range[64]{};
  std::snprintf(range,sizeof(range),"%u-%u / %u INSTRUMENTS",
