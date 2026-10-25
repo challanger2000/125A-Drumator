@@ -303,8 +303,8 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  // Global controls share their historic layout; a bezel here would collide
  // with their title/nameplate. Row labels are deliberately placed higher.
  const bool isMaster=!rowModule&&std::string_view(title)=="MASTER";
- const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:(isMaster?-70.:-47.);
- const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:(isMaster?-54.:-34.);
+ const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:(isMaster?-54.:-47.);
+ const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:(isMaster?-38.:-34.);
  // Legends remain on the faceplate, rather than getting their own
  // decorative plaque. Global controls use the upper free fascia strip.
  if(rowModule) {
@@ -884,16 +884,21 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawString("DRUMATOR",{430.,5.,850.,45.},VSTGUI::kCenterText);
  drawBrandLogo(c);
  c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
+ // All four group captions are on one shared baseline, 26px below GUI31.
+ // Button faces and hit regions are untouched.
+ constexpr double groupLabelShift=26.;
  const auto groupTitle=[&](const char* name,double left,double right){
-   c->drawString(name,{left,UiCompactLayout::groupTitleTop,
-                       right,UiCompactLayout::groupTitleBottom},VSTGUI::kCenterText);
+   c->drawString(name,{left,UiCompactLayout::groupTitleTop+groupLabelShift,
+                       right,UiCompactLayout::groupTitleBottom+groupLabelShift},
+                 VSTGUI::kCenterText);
  };
- groupTitle("GLOBAL",22.,259.);
- groupTitle("PATTERN LENGTH",272.,442.);
- groupTitle("PATTERN",457.,845.);
- groupTitle("TOOLS",857.,963.);
- groupTitle("SONG MODE",971.,1111.);
- // MASTER legend is painted on the same header baseline by drawRotary().
+ groupTitle("PATTERN LENGTH",UiCompactLayout::barOne.left,UiCompactLayout::barTwo.right);
+ groupTitle("PATTERN",UiCompactLayout::patternStart,
+            UiCompactLayout::patternStart+7.*UiCompactLayout::patternPitch+
+                UiCompactLayout::patternButtonWidth);
+ groupTitle("TOOLS",UiCompactLayout::patternTools.left,UiCompactLayout::patternTools.right);
+ groupTitle("SONG MODE",UiCompactLayout::songToggle.left,UiCompactLayout::songEdit.right);
+ // MASTER caption moves toward its dial; SWING and HUMANIZE stay put.
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
  drawControl(c,{UiCompactLayout::barOne.left,UiCompactLayout::headerButtonTop,
                UiCompactLayout::barOne.right,UiCompactLayout::headerButtonBottom},"1 BAR",oneBar);
