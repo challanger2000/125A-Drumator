@@ -63,6 +63,53 @@ const VSTGUI::CColor rowBlueBorder{53,91,121,255};
 const VSTGUI::CColor stepWellBlue{6,17,30,255};
 const VSTGUI::CColor velocityWellBlue{9,28,43,255};
 
+// GUI Step 1: material-only rendering. Confined strictly to y [0, header).
+// A soft, deterministic horizontal satin brushing with no tile seam,
+// no high-contrast waves, no extra bevels and no changes to widget geometry.
+void drawHeaderSteel(VSTGUI::CDrawContext* c) {
+ constexpr auto width=UiCompactLayout::width;
+ constexpr int headerHeight=static_cast<int>(UiCompactLayout::header);
+ // Uniform dark navy-steel alloy; sub-1% hairline grain is deliberately
+ // very low in contrast relative to text and keycaps.
+ for(int y=0;y<headerHeight;++y) {
+   const double fy=static_cast<double>(y);
+   // Broad, matte directional light, never a hard reflection stripe.
+   const double shoulder=4.0*std::exp(-std::pow((fy-37.)/39.,2.));
+   const double lower=2.0*std::exp(-std::pow((fy-117.)/34.,2.));
+   const double edgeShade=2.0*(fy/static_cast<double>(headerHeight));
+   // Integer mixer generates stable, extremely fine horizontal tool marks.
+   std::uint32_t hash=static_cast<std::uint32_t>(y+1)*0x9e3779b9u;
+   hash^=hash>>16;
+   hash*=0x85ebca6bu;
+   hash^=hash>>13;
+   const double grain=static_cast<double>(static_cast<int>(hash%7u)-3)*0.48;
+   const auto channel=[&](double base) {
+     return static_cast<std::uint8_t>(std::clamp(
+         std::lround(base+shoulder+lower-edgeShade+grain),0L,255L));
+   };
+   c->setFillColor(VSTGUI::CColor{channel(23.),channel(43.),channel(62.),255});
+   c->drawRect({0.,fy,width,fy+1.},VSTGUI::kDrawFilled);
+ }
+ // Sparse brushed microfibers. These are separate hairline highlights and
+ // attenuated tool shadows, not stripes, veins or large-scale texture waves.
+ for(int i=0;i<155;++i){
+   std::uint32_t seed=static_cast<std::uint32_t>(i+19)*0x45d9f3bu;
+   seed^=seed>>16;
+   seed*=0x27d4eb2du;
+   seed^=seed>>15;
+   const int y=static_cast<int>(seed%static_cast<std::uint32_t>(headerHeight));
+   const double x=static_cast<double>((seed>>8)%1100u);
+   const double length=50.+static_cast<double>((seed>>18)%175u);
+   const bool light=(seed&0x80000000u)!=0;
+   // Only a slight tonal separation from the surface immediately underneath.
+   c->setFillColor(light?VSTGUI::CColor{30,51,69,255}:
+                           VSTGUI::CColor{21,41,58,255});
+   c->drawRect({x,static_cast<double>(y),
+                std::min(width,x+length),static_cast<double>(y)+0.42},
+               VSTGUI::kDrawFilled);
+ }
+}
+
 // Exact 125A vector logo from the authoritative brand master, rendered
 // natively through VSTGUI (SVG paths contain only M, L, Z commands).
 // The source master is 1774x887; keep its proportions unchanged.
@@ -828,6 +875,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  if(backgroundBitmap_&&backgroundBitmap_->getWidth()>=1280.&&
     backgroundBitmap_->getHeight()>=fullHeight)
    backgroundBitmap_->draw(c,{0.,0.,1280.,fullHeight});
+ // Keep all existing rows and controls intact; replace ONLY header material.
+ drawHeaderSteel(c);
  // The enlarged steel head is an open surface, without stacked insets.
  c->setFillColor(VSTGUI::CColor{4,15,27,255});
  c->drawRect({0.,UiCompactLayout::header-2.,1280.,UiCompactLayout::header},VSTGUI::kDrawFilled);
