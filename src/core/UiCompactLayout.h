@@ -22,8 +22,8 @@ struct UiCompactLayout final {
  static constexpr double scrollLeft=1263.,scrollRight=1279.,scrollTop=header+7.;
  struct Slot {double left,right;};
  static constexpr Slot barOne{273.,356.},barTwo{359.,442.},edit{208.,272.};
- static constexpr Slot patternTools{850.,966.},songToggle{969.,1038.},
-                       songEdit{1041.,1120.};
+ static constexpr Slot patternTools{850.,969.},songToggle{972.,1042.},
+                       songEdit{1045.,1125.};
  static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
