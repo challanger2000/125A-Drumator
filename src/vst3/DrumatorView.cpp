@@ -127,6 +127,10 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
                             r.bottom-(selected?2.:4.)};
    c->setFillColor(VSTGUI::CColor{1,9,18,255});
    c->drawRect({r.left+2.,r.bottom-4.,r.right-1.,r.bottom-1.},VSTGUI::kDrawFilled);
+   // Deep skirt remains visible beneath the cap even on selected buttons.
+   c->setFillColor(selected?VSTGUI::CColor{20,63,93,255}:
+                             VSTGUI::CColor{15,35,51,255});
+   c->drawRect({r.left+3.,r.bottom-4.,r.right-3.,r.bottom-2.},VSTGUI::kDrawFilled);
    // Raised perimeter edge: a light-catching top lip and a deep lower skirt.
    c->setFillColor(VSTGUI::CColor{118,155,179,255});
    c->drawRect({r.left+3.,r.top+1.,r.right-3.,r.top+2.},VSTGUI::kDrawFilled);
@@ -158,7 +162,7 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
  c->setFrameColor(VSTGUI::CColor{5,23,38,255});
  c->drawRect(r,VSTGUI::kDrawStroked);
  c->setFont(VSTGUI::kNormalFont,12);
- c->setFontColor(!enabled?VSTGUI::CColor{113,131,147,255}:
+ c->setFontColor(!enabled?VSTGUI::CColor{143,156,169,255}:
                  selected?VSTGUI::CColor{245,252,255,255}:letters);
  c->drawString(title,{r.left,r.top+(selected?1.:0.),r.right,r.bottom+(selected?1.:0.)});
 }
@@ -765,6 +769,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // Dark control deck with precise machined nameplate seam.
  c->setFillColor(VSTGUI::CColor{11,27,42,255});
  c->drawRect({0,42,1280,108},VSTGUI::kDrawFilled);
+ // Layered steel fascia edge: upper specular bevel and dark undercut.
+ c->setFillColor(VSTGUI::CColor{95,151,187,255});
+ c->drawRect({5.,1.,1275.,2.},VSTGUI::kDrawFilled);
+ c->setFillColor(VSTGUI::CColor{6,18,31,255});
+ c->drawRect({4.,37.,1276.,40.},VSTGUI::kDrawFilled);
  c->setFillColor(VSTGUI::CColor{4,15,27,255});
  c->drawRect({0,40,1280,43},VSTGUI::kDrawFilled);
  c->setFillColor(VSTGUI::CColor{76,126,162,255});
