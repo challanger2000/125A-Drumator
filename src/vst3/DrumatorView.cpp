@@ -961,6 +961,25 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(VSTGUI::CColor{43,71,88,255});
    c->drawRect({21.,y+115.,612.,y+116.},VSTGUI::kDrawFilled);
    drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
+   // Recessed graphite index rail: the step numerals now sit on their
+   // own machined scale above the eight key banks, as on hardware sequencers.
+   // All paint stays behind the existing numbers and outside their key hit
+   // rectangles; no geometry, event or state changes.
+   c->setFillColor(VSTGUI::CColor{3,13,23,255});
+   c->drawRect({623.,y+31.,1227.,y+62.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{56,84,101,255});
+   c->drawRect({625.,y+32.,1225.,y+33.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{16,33,47,255});
+   c->drawRect({625.,y+34.,1225.,y+58.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{5,16,27,255});
+   c->drawRect({625.,y+59.,1225.,y+61.},VSTGUI::kDrawFilled);
+   for(int bank=1;bank<8;++bank) {
+     const double edge=kGridX+bank*4*kCellWidth;
+     c->setFillColor(VSTGUI::CColor{6,19,31,255});
+     c->drawRect({edge-1.,y+36.,edge,y+56.},VSTGUI::kDrawFilled);
+     c->setFillColor(VSTGUI::CColor{39,64,79,255});
+     c->drawRect({edge,y+37.,edge+1.,y+55.},VSTGUI::kDrawFilled);
+   }
    // Dark dividing seam and a single silver-blue return: two separate
    // recessed modules, not a painted line running through the controls.
    c->setFillColor(VSTGUI::CColor{2,10,18,255});
