@@ -676,6 +676,14 @@ void testVisualRender(){
    kit.displayNames[0]="KICK_LONG_AUDIO_SAMPLE_NAME_IN_2026.wav";
    f.kit(kit);f.open();
    auto* v=IntegrationAccess::view(*f.c,0);
+   // Raster scaling alone previously produced a misleading 150%-named
+   // screenshot whose actual plugin zoom indicator still read 100%.
+   // Exercise the real attached editor zoom before taking each native render.
+   const std::uint8_t zoomCode=zoom==1.?0:zoom==1.2?1:zoom==1.3?2:3;
+   std::array<std::uint8_t,5> zoomState{{'D','Z','M','2',zoomCode}};
+   drumator::qa::ByteStream zoomInput(zoomState.data(),zoomState.size());
+   check(f.c->setState(&zoomInput)==kResultOk&&v->zoomMatches(zoom),
+         "native screenshot zoom state does not match raster scale");
    captureVstgui(*v,zoom==1.?"v2-four-rows-100":zoom==1.2?"v2-four-rows-120":
         zoom==1.3?"v2-four-rows-130":"v2-four-rows-150",zoom);
  }
