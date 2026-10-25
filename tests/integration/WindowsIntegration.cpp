@@ -110,6 +110,7 @@ namespace drumator {
 // including Undo/clipboard/paths, rather than mirroring the commit algorithm.
 struct IntegrationAccess {
  static bool sampleEditorOpen(const DrumatorView& view){return view.sampleEditorOpen_;}
+ static bool openSampleEditorForCapture(DrumatorView& view,std::size_t row){return view.openSampleEditor(row);}
  static std::array<double,3> rotaryImageStatus(const DrumatorView& view){
    const auto* bmp=view.knobBitmap_;
    return {bmp&&bmp->isLoaded()?1.:0.,bmp?bmp->getWidth():-1.,bmp?bmp->getHeight():-1.};
@@ -669,6 +670,45 @@ void testGuiPhysicalStepsRaster(){
   check(sample(*v,step)==before,"GUI keycap raster did not restore blank appearance");
  }
  evidence("GUI keycaps 0/4/15/31 active/inactive/revert native raster PASS");
+}
+void testWaveEditorDesignCaptures(){
+ // Test fixture contains genuine 48kHz IEEE float32 stereo WAVE bytes,
+ // imported through the normal encoded kit/controller/processor state.
+ for(const double factor:{1.0,1.3}){
+   Fixture f;
+   auto kit=namedKit('X',4);
+   kit.names[0]="Wave_Editor_Demo_48k_stereo.wav";
+   kit.wav[0]=constantStereo(0.f,0.f);
+   // Retain valid RIFF/WAVE headers, replace PCM with a transient-rich,
+   // amplitude-modulated real stereo signal (not a painted waveform).
+   for(std::size_t n=0;n<1024;++n){
+     const double t=static_cast<double>(n)/1024.;
+     const float envelope=static_cast<float>((0.15+0.75*std::abs(std::sin(t*11.0)))*
+         (0.35+0.65*std::abs(std::sin(t*73.0))));
+     const float l=envelope*static_cast<float>(std::sin(t*91.0));
+     const float r=envelope*static_cast<float>(std::sin(t*67.0+0.6));
+     std::memcpy(kit.wav[0].data()+44+n*8,&l,4);
+     std::memcpy(kit.wav[0].data()+48+n*8,&r,4);
+   }
+   kit.sampleEdits[0]=SampleEdit{90,940,110,140,1.25f};
+   f.kit(kit);
+   f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   const std::uint8_t zoomCode=factor==1.0?0:2;
+   std::array<std::uint8_t,5> zoomState{{'D','Z','M','2',zoomCode}};
+   drumator::qa::ByteStream input(zoomState.data(),zoomState.size());
+   check(f.c->setState(&input)==kResultOk&&v->zoomMatches(factor),
+         "Wave editor native capture zoom mismatch");
+   check(IntegrationAccess::openSampleEditorForCapture(*v,0)&&
+         IntegrationAccess::sampleEditorOpen(*v),
+         "Wave editor did not open loaded WAV sample");
+   const auto draft=IntegrationAccess::sampleEditorDraft(*v);
+   check(draft.start==90&&draft.end==940&&draft.fadeIn==110&&
+         draft.fadeOut==140&&std::abs(draft.gain-1.25f)<0.001f,
+         "Wave editor visible marker/fade/gain state differs from WAV test fixture");
+   captureVstgui(*v,factor==1.0?"wave-editor-100":"wave-editor-130",factor);
+ }
+ evidence("Wave editor native captures 100/130: actual encoded stereo float32 WAV, start/end, fade-in/out and gain visible");
 }
 void testVelocityDesignCaptures(){
  // Native GUI design fixture only. No production implementation changes.
@@ -2080,6 +2120,7 @@ int main(int argc,char** argv){
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
+ run("VSTGUI wave editor design capture 100/130",testWaveEditorDesignCaptures);
   run("GUI physical step state/raster toggle",testGuiPhysicalStepsRaster);
  run("UX direct pattern length",testPatternLengthControls);
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
