@@ -302,8 +302,8 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:-37.;
  const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:-24.;
  if(rowModule) {
-   c->setFillColor(VSTGUI::CColor{13,31,45,255});
-   c->drawRect({cx-38.,cy-47.,cx+38.,cy-34.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{10,26,39,255});
+   c->drawRect({cx-38.,cy-49.,cx+38.,cy-34.},VSTGUI::kDrawFilled);
  }
  c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom});
  if(rowModule) {
@@ -1291,7 +1291,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_),fullHeight,230.);
    const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALLOP","SNARE + GHOST"};
    drawPopupPlate(c,{401.,top-4.,618.,top+229.});
-   for(int i=0;i<9;++i)drawMenuItem(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
+   for(int i=0;i<9;++i) {
+     drawMenuItem(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
+     // Separate the three clusters without moving menu hits or remapping
+     // existing commands: quick repeats, snare combination, special rhythms.
+     if(i==2||i==5) {
+       c->setFillColor(VSTGUI::CColor{105,148,171,255});
+       c->drawRect({414.,top+(i+1)*25.-1.,606.,top+(i+1)*25.},VSTGUI::kDrawFilled);
+     }
+   }
  }
  if(popup_==1) {
    drawPopupPlate(c,{1094.,35.,1233.,42.+30.*UiCompactLayout::userZooms.size()});
