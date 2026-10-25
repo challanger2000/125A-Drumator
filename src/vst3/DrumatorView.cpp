@@ -248,6 +248,21 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
    c->drawEllipse({cx-r+1.,cy-r+1.,cx+r-1.,cy+r-1.},VSTGUI::kDrawStroked);
    c->setFrameColor(VSTGUI::CColor{11,29,43,255});
    c->drawEllipse({cx-r+3.,cy-r+3.,cx+r-3.,cy+r-3.},VSTGUI::kDrawStroked);
+   // Restrained functional blue scale ticks on the free left half of the
+   // metal bezel. Right side stays clear for the existing numeric value.
+   // Their brightness follows the real normalized knob value, not decoration.
+   constexpr double kPi=3.14159265358979323846;
+   const int activeTicks=static_cast<int>(std::lround(fraction*9.));
+   for(int tick=0;tick<9;++tick) {
+     const double angle=(-142.+13.*tick)*kPi/180.;
+     const double dx=std::sin(angle),dy=-std::cos(angle);
+     c->setFrameColor(tick<activeTicks?
+         VSTGUI::CColor{53,164,218,255}:VSTGUI::CColor{27,58,77,255});
+     c->setLineWidth(tick<activeTicks?2.:1.);
+     c->drawLine({cx+dx*31.,cy+dy*31.},
+                 {cx+dx*34.,cy+dy*34.});
+   }
+   c->setLineWidth(1.);
  }
  // A bitmap object can exist even when its PNG resource was not loaded,
  // notably in native offscreen QA outside the installed VST3 bundle.
