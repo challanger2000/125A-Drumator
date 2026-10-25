@@ -823,38 +823,20 @@ DrumatorView::DrumatorView(const VSTGUI::CRect& size,
  setMouseEnabled(true);
  // The view itself owns the drop-target interface, as in Phraseator.
  controller_.registerView(this);
- backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("abstraktes_blaues_metall_mit_sanftem_glanz.png"));
+ backgroundBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Faceplate.png"));
  knobBitmap_=new VSTGUI::CMultiFrameBitmap(VSTGUI::CResourceDescription("125A_Drumator_Knob.png"),{{125.,125.},101,1});
  screwBitmap_=new VSTGUI::CBitmap(VSTGUI::CResourceDescription("125A_Drumator_Screw.png"));
 }
 void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  const auto bottom=gridBottom();
  const auto fullHeight=getViewSize().getHeight();
- // The former bright-blue bitmap was still visible behind the fascia
- // despite subsequent low-contrast line overlays. The approved hardware
- // reference uses dark desaturated blue steel, not saturated cyan stripes.
- // Paint only the exposed chassis with deterministic 1px micro-grain;
- // leave all tested controls, trays and hit rectangles untouched.
+ // Dedicated static blue-steel faceplate under all interactive controls.
+ // Paint dynamic row trays, labels and buttons above it as before.
  c->setFillColor(VSTGUI::CColor{6,25,44,255});
  c->drawRect({0,0,1280,fullHeight},VSTGUI::kDrawFilled);
- const auto brushSteel=[&](int first,int last,bool topBand) {
-   for(int yy=first;yy<last;++yy) {
-     const int grain=(yy*11+3)%17;
-     c->setFillColor(topBand?
-       (grain==0?VSTGUI::CColor{9,34,59,255}:
-        grain==5?VSTGUI::CColor{5,28,51,255}:
-                 VSTGUI::CColor{7,31,55,255}):
-       (grain==0?VSTGUI::CColor{9,32,54,255}:
-        grain==5?VSTGUI::CColor{5,25,45,255}:
-                 VSTGUI::CColor{7,29,50,255}));
-     c->drawRect({3.,static_cast<double>(yy),1277.,
-                  static_cast<double>(yy+1)},VSTGUI::kDrawFilled);
-   }
- };
- brushSteel(2,std::min(40,static_cast<int>(fullHeight)),true);
- if(fullHeight>bottom)
-   brushSteel(std::max(0,static_cast<int>(bottom)),
-              static_cast<int>(fullHeight),false);
+ if(backgroundBitmap_&&backgroundBitmap_->getWidth()>=1280.&&
+    backgroundBitmap_->getHeight()>=fullHeight)
+   backgroundBitmap_->draw(c,{0.,0.,1280.,fullHeight});
  // Dark control deck with precise machined nameplate seam.
  c->setFillColor(VSTGUI::CColor{11,27,42,255});
  c->drawRect({0,42,1280,108},VSTGUI::kDrawFilled);
