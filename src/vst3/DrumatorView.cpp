@@ -127,6 +127,9 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
                             r.bottom-(selected?2.:4.)};
    c->setFillColor(VSTGUI::CColor{1,9,18,255});
    c->drawRect({r.left+2.,r.bottom-4.,r.right-1.,r.bottom-1.},VSTGUI::kDrawFilled);
+   // Raised perimeter edge: a light-catching top lip and a deep lower skirt.
+   c->setFillColor(VSTGUI::CColor{118,155,179,255});
+   c->drawRect({r.left+3.,r.top+1.,r.right-3.,r.top+2.},VSTGUI::kDrawFilled);
    const double split=face.top+face.getHeight()*.53;
    c->setFillColor(!enabled?VSTGUI::CColor{37,46,54,255}:
            selected?VSTGUI::CColor{29,79,111,255}:VSTGUI::CColor{64,96,119,255});
@@ -172,6 +175,9 @@ void drawHardwareStep(VSTGUI::CDrawContext* c,double sx,double y,
  c->drawRect(socket,VSTGUI::kDrawStroked);
  c->setFillColor(VSTGUI::CColor{1,11,20,255});
  c->drawRect({sx+3.,y+73.,sx+17.,y+102.},VSTGUI::kDrawFilled);
+ // The outside of each key's raised cap casts an asymmetric socket shadow.
+ c->setFillColor(VSTGUI::CColor{0,5,11,255});
+ c->drawRect({sx+16.,y+76.,sx+18.,y+103.},VSTGUI::kDrawFilled);
  const double t=y+(lit?72.:71.),b=y+(lit?98.:97.);
  c->setFillColor(disabled?VSTGUI::CColor{32,40,49,255}:
                 lit?VSTGUI::CColor{173,70,22,255}:
@@ -185,6 +191,13 @@ void drawHardwareStep(VSTGUI::CDrawContext* c,double sx,double y,
                 lit?VSTGUI::CColor{255,185,85,255}:
                     VSTGUI::CColor{123,146,162,255});
  c->drawRect({sx+4.,t+1.,sx+15.,t+3.},VSTGUI::kDrawFilled);
+ // Fine top bevel and left metallic return suggest a separate keycap
+ // rather than a flat illuminated rectangle.
+ c->setFillColor(disabled?VSTGUI::CColor{62,71,80,255}:
+                lit?VSTGUI::CColor{255,208,112,255}:
+                    VSTGUI::CColor{165,187,201,255});
+ c->drawRect({sx+5.,t,sx+14.,t+1.},VSTGUI::kDrawFilled);
+ c->drawRect({sx+3.,t+3.,sx+4.,b-3.},VSTGUI::kDrawFilled);
  // Black sidewall makes the key read as a physical raised cap.
  c->setFillColor(disabled?VSTGUI::CColor{21,28,35,255}:
                 lit?VSTGUI::CColor{107,44,16,255}:
@@ -738,6 +751,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // The source is 1672x941, larger than the 1280x850 maximum editor area.
  if(backgroundBitmap_ && backgroundBitmap_->getWidth()>0 && backgroundBitmap_->getHeight()>0)
    backgroundBitmap_->draw(c,{0,0,1280,fullHeight});
+ // Brushed anodized-steel fascia: fine, low-contrast horizontal milling
+ // marks remain native at all supported zoom levels. No resource or hit changes.
+ for(int yy=2;yy<static_cast<int>(fullHeight);yy+=4){
+   const auto light=((yy/4)%3)==0;
+   c->setFillColor(light?VSTGUI::CColor{39,82,116,255}:
+                         VSTGUI::CColor{19,51,77,255});
+   c->drawRect({3.,static_cast<double>(yy),1277.,
+                static_cast<double>(yy)+0.5},VSTGUI::kDrawFilled);
+ }
  // Dark control deck with precise machined nameplate seam.
  c->setFillColor(VSTGUI::CColor{11,27,42,255});
  c->drawRect({0,42,1280,108},VSTGUI::kDrawFilled);
