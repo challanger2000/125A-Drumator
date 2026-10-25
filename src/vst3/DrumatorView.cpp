@@ -291,21 +291,26 @@ void drawRowStatusButton(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
  // Distinct status lens with gentle engraved recess, not a solid bright cap.
  const double left=r.left+5.,right=r.right-5.,top=r.top+3.;
  const VSTGUI::CColor inactiveYellow{116,87,38,255};
- const VSTGUI::CColor activeYellow{235,179,56,255};
- const VSTGUI::CColor activeRed{184,69,73,255};
- const VSTGUI::CColor activeGreen{76,177,107,255};
+ const VSTGUI::CColor activeYellow{249,197,68,255};
+ const VSTGUI::CColor activeRed{211,78,83,255};
+ const VSTGUI::CColor activeGreen{88,205,125,255};
  const auto tint=kind==0?(active?activeYellow:inactiveYellow):
                  kind==1?activeRed:activeGreen;
  if(!active&&kind!=0)return; // inactive M/S is identical to earlier GUI
  c->setFillColor(VSTGUI::CColor{6,16,25,255});
  c->drawRect({left-1.,top-1.,right+1.,top+3.},VSTGUI::kDrawFilled);
  c->setFillColor(tint);
- c->drawRect({left,top,right,top+2.},VSTGUI::kDrawFilled);
+ c->drawRect({left,top,right,top+(active?3.:2.)},VSTGUI::kDrawFilled);
  if(active){
-   c->setFillColor(kind==0?VSTGUI::CColor{254,220,115,255}:
-                   kind==1?VSTGUI::CColor{218,116,116,255}:
-                           VSTGUI::CColor{132,220,151,255});
+   c->setFillColor(kind==0?VSTGUI::CColor{255,230,137,255}:
+                   kind==1?VSTGUI::CColor{244,147,148,255}:
+                           VSTGUI::CColor{164,240,182,255});
    c->drawRect({left+1.,top,right-1.,top+1.},VSTGUI::kDrawFilled);
+   // Narrow secondary reflected edge for a subtle illuminated lens.
+   c->setFillColor(kind==0?VSTGUI::CColor{106,81,33,255}:
+                   kind==1?VSTGUI::CColor{91,39,45,255}:
+                           VSTGUI::CColor{35,91,58,255});
+   c->drawRect({left+2.,top+4.,right-2.,top+5.},VSTGUI::kDrawFilled);
  }
 }
 
