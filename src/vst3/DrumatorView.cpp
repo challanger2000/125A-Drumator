@@ -954,11 +954,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // control captions and all button hit geometry unaffected.
  if(productLogoBitmap_&&productLogoBitmap_->getWidth()>0.&&
     productLogoBitmap_->getHeight()>0.) {
-   constexpr double productHeight=70.;
+   constexpr double productHeight=99.;
    const double sf=productHeight/productLogoBitmap_->getHeight();
    const double productWidth=sf*productLogoBitmap_->getWidth();
    const double x=(1280.-productWidth)/2.;
-   const double y=-2.;
+   const double y=-15.;
    VSTGUI::CDrawContext::Transform tx(*c,
        VSTGUI::CGraphicsTransform().scale(sf,sf)
          .translate(x,y));
