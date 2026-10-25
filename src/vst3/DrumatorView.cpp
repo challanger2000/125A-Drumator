@@ -110,6 +110,38 @@ void drawHeaderSteel(VSTGUI::CDrawContext* c) {
  }
 }
 
+// GUI38: matching satin-brushed 125A steel only on exposed lower chassis.
+// All row modules, fasteners, details, and header are rendered afterwards.
+void drawLowerChassisSteel(VSTGUI::CDrawContext* c,double top,double bottom) {
+ constexpr double width=UiCompactLayout::width;
+ for(int yi=static_cast<int>(top);yi<static_cast<int>(bottom);++yi) {
+   const double y=static_cast<double>(yi);
+   const double local=static_cast<double>(yi-static_cast<int>(top));
+   const double shoulder=4.0*std::exp(-std::pow((std::fmod(local,160.)-37.)/39.,2.));
+   const double lower=2.0*std::exp(-std::pow((std::fmod(local,160.)-117.)/34.,2.));
+   const double edgeShade=2.0*(std::fmod(local,160.)/160.);
+   std::uint32_t hash=static_cast<std::uint32_t>(yi+1)*0x9e3779b9u;
+   hash^=hash>>16;hash*=0x85ebca6bu;hash^=hash>>13;
+   const double grain=static_cast<double>(static_cast<int>(hash%7u)-3)*0.48;
+   const auto channel=[&](double base) {
+     return static_cast<std::uint8_t>(std::clamp(
+       std::lround(base+shoulder+lower-edgeShade+grain),0L,255L));
+   };
+   c->setFillColor(VSTGUI::CColor{channel(23.),channel(43.),channel(62.),255});
+   c->drawRect({0.,y,width,y+1.},VSTGUI::kDrawFilled);
+ }
+ for(int i=0;i<static_cast<int>((bottom-top)*155./160.);++i) {
+   std::uint32_t seed=static_cast<std::uint32_t>(i+19)*0x45d9f3bu;
+   seed^=seed>>16;seed*=0x27d4eb2du;seed^=seed>>15;
+   const double y=top+static_cast<double>(seed%static_cast<std::uint32_t>(std::max(1.,bottom-top)));
+   const double x=static_cast<double>((seed>>8)%1100u);
+   const double length=50.+static_cast<double>((seed>>18)%175u);
+   c->setFillColor((seed&0x80000000u)?VSTGUI::CColor{30,51,69,255}:
+                                            VSTGUI::CColor{21,41,58,255});
+   c->drawRect({x,y,std::min(width,x+length),y+0.42},VSTGUI::kDrawFilled);
+ }
+}
+
 // Exact 125A vector logo from the authoritative brand master, rendered
 // natively through VSTGUI (SVG paths contain only M, L, Z commands).
 // The source master is 1774x887; keep its proportions unchanged.
@@ -876,6 +908,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  if(backgroundBitmap_&&backgroundBitmap_->getWidth()>=1280.&&
     backgroundBitmap_->getHeight()>=fullHeight)
    backgroundBitmap_->draw(c,{0.,0.,1280.,fullHeight});
+ // Replace the old blue bitmap only on exposed lower chassis surfaces.
+ drawLowerChassisSteel(c,UiCompactLayout::header,fullHeight);
  // Keep all existing rows and controls intact; replace ONLY header material.
  drawHeaderSteel(c);
  // The enlarged steel head is an open surface, without stacked insets.
@@ -1158,8 +1192,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({UiCompactLayout::scrollLeft+3.,thumbTop+2.,UiCompactLayout::scrollLeft+5.,thumbTop+thumb-2.},VSTGUI::kDrawFilled);
  }
  // Fixed machined fascia and recessed status window.
- c->setFillColor(VSTGUI::CColor{10,28,42,255});
- c->drawRect({0,bottom,1280,bottom+UiCompactLayout::footer},VSTGUI::kDrawFilled);
+ // Lower status fascia has the same material; its machined trim,
+ // buttons, text and hit zones remain unchanged.
+ drawLowerChassisSteel(c,bottom,bottom+UiCompactLayout::footer);
  c->setFillColor(VSTGUI::CColor{77,120,147,255});
  c->drawRect({9,bottom+1.,1271,bottom+2.},VSTGUI::kDrawFilled);
  drawInset(c,{217,bottom+5.,1022,bottom+35.},VSTGUI::CColor{9,27,41,255});
