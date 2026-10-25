@@ -117,8 +117,8 @@ VSTGUI::CRect editorRect(const UiWaveEditorLayout::Rect& r){
  return {r.left,r.top,r.right,r.bottom};
 }
 void drawBrandLogo(VSTGUI::CDrawContext* c) {
- constexpr double scale=40./887.;
- constexpr double x0=16.,y0=3.;
+ constexpr double scale=62./887.;
+ constexpr double x0=37.,y0=10.;
  for(const auto& shape: kBrandLogoPaths){
    auto* path=c->createGraphicsPath();
    if(!path)continue;
@@ -882,6 +882,10 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawRect({0.,UiCompactLayout::header-2.,1280.,UiCompactLayout::header},VSTGUI::kDrawFilled);
  c->setFont(VSTGUI::kNormalFont,28);c->setFontColor(letters);
  c->drawString("DRUMATOR",{430.,5.,850.,45.},VSTGUI::kCenterText);
+ // Product descriptor from the approved hardware reference, aligned beneath title.
+ c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(VSTGUI::CColor{193,210,225,255});
+ c->drawString("D R U M   S A M P L E R   &   S T E P   S E Q U E N C E R",
+               {425.,39.,855.,59.},VSTGUI::kCenterText);
  drawBrandLogo(c);
  c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
  // All four group captions are on one shared baseline, 26px below GUI31.
