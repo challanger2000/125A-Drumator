@@ -163,6 +163,8 @@ struct IntegrationAccess {
   static double rowTop(DrumatorView& v,std::size_t i){return v.rowTopOnPage(i);}
   static bool velocityExpanded(DrumatorView& v,std::size_t row){return v.velocityExpanded_[row];}
   static int activeKnob(DrumatorView& v){return v.activeKnob_;}
+  static int popup(DrumatorView& v){return v.popup_;}
+  static std::size_t popupRow(DrumatorView& v){return v.popupRow_;}
  static std::size_t songPage(DrumatorView& v){return v.songPage_;}
  static std::size_t songSlot(DrumatorView& v){return v.songSlot_;}
  static const auto& paths(Controller& c){return c.samplePaths_;}
@@ -700,9 +702,15 @@ void testVisualRender(){
    click(*v,575.,108.+19.); // MAIN / OUT selector
    captureVstgui(*v,"v2-output-menu",1.0);
    click(*v,15.,400.);
-   click(*v,592.,108.+69.); // discrete CHOKE selector
+   // The CHOKE label is at rowTop+52..73, but the clickable selector is
+   // rowTop+73..105. The former +69 capture silently recorded a CLOSED
+   // popup identical to v2-two-velocity-rows; reject that false visual PASS.
+   click(*v,592.,108.+88.); // center of actual CHOKE selector
+   check(IntegrationAccess::popup(*v)==4&&IntegrationAccess::popupRow(*v)==0,
+         "V2 choke visual oracle: menu did not open from actual selector");
    captureVstgui(*v,"v2-choke-menu",1.0);
    click(*v,15.,400.);
+   check(IntegrationAccess::popup(*v)==0,"V2 choke popup did not dismiss");
    click(*v,425.,108.+19.); // row-local Fill menu
    captureVstgui(*v,"v2-fill-menu",1.0);
    click(*v,15.,400.);
