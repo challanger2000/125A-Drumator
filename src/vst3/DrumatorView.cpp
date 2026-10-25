@@ -283,6 +283,33 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
 }
 
 
+ // This specialized indicator is strictly paint-only. Preserve the original
+ // drawControl's cap, text, dimensions and hit geometry.
+void drawRowStatusButton(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
+                         const char* title,bool active,int kind) {
+ drawControl(c,r,title,false);
+ // Distinct status lens with gentle engraved recess, not a solid bright cap.
+ const double left=r.left+5.,right=r.right-5.,top=r.top+3.;
+ const VSTGUI::CColor inactiveYellow{116,87,38,255};
+ const VSTGUI::CColor activeYellow{235,179,56,255};
+ const VSTGUI::CColor activeRed{184,69,73,255};
+ const VSTGUI::CColor activeGreen{76,177,107,255};
+ const auto tint=kind==0?(active?activeYellow:inactiveYellow):
+                 kind==1?activeRed:activeGreen;
+ if(!active&&kind!=0)return; // inactive M/S is identical to earlier GUI
+ c->setFillColor(VSTGUI::CColor{6,16,25,255});
+ c->drawRect({left-1.,top-1.,right+1.,top+3.},VSTGUI::kDrawFilled);
+ c->setFillColor(tint);
+ c->drawRect({left,top,right,top+2.},VSTGUI::kDrawFilled);
+ if(active){
+   c->setFillColor(kind==0?VSTGUI::CColor{254,220,115,255}:
+                   kind==1?VSTGUI::CColor{218,116,116,255}:
+                           VSTGUI::CColor{132,220,151,255});
+   c->drawRect({left+1.,top,right-1.,top+1.},VSTGUI::kDrawFilled);
+ }
+}
+
+
 
 void drawHardwareStep(VSTGUI::CDrawContext* c,double sx,double y,
                       bool lit,bool disabled,bool downbeat) {
@@ -1079,9 +1106,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{303,y+9,329,y+40},"<");
    drawControl(c,{332,y+9,358,y+40},">");
    drawControl(c,{362,y+9,398,y+40},"PLAY");
+   // FILL is a momentary menu/action, not a persistent per-row active
+   // state; retain its existing neutral appearance.
    drawControl(c,{403,y+9,452,y+40},"FILL");
-   drawControl(c,{457,y+9,491,y+40},"M",controller_.isRowMuted(row));
-   drawControl(c,{496,y+9,530,y+40},"S",controller_.isRowSolo(row));
+   drawRowStatusButton(c,{457,y+9,491,y+40},"M",controller_.isRowMuted(row),1);
+   drawRowStatusButton(c,{496,y+9,530,y+40},"S",controller_.isRowSolo(row),2);
    const auto out=controller_.rowOutput(row);
    if(out==0)std::snprintf(name,sizeof(name),"MAIN v");
    else std::snprintf(name,sizeof(name),"OUT %u v",out+1);
@@ -1138,7 +1167,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFont(VSTGUI::kNormalFont,11);
    c->setFontColor(VSTGUI::CColor{164,214,235,255});
    c->drawString("VEL",{1233,y+44,1259,y+62});
-   drawControl(c,{1233,y+70,1259,y+105},velocityExpanded_[row]?"^":"v",velocityExpanded_[row]);
+   drawRowStatusButton(c,{1233,y+70,1259,y+105},
+                       velocityExpanded_[row]?"^":"v",velocityExpanded_[row],0);
    if(velocityExpanded_[row]){
      c->setFillColor(velocityWellBlue);
      c->drawRect({16,y+130,1266,y+159},VSTGUI::kDrawFilled);
