@@ -11,7 +11,7 @@ struct UiCompactLayout final {
  static constexpr double headerButtonTop=101.,headerButtonBottom=133.,
       groupTitleTop=49.,groupTitleBottom=65.,globalKnobY=119.,
       songEditorHeight=432.,patternStart=457.,patternPitch=49.,
-      patternButtonWidth=44.;
+      patternButtonWidth=47.;
  static constexpr double stepX=622.,stepWidth=19.;
  static constexpr double knobRadius=25.,rowKnobY=88.;
  // Render geometry contract: labels clear the mounted 30px ring by 3px.
@@ -21,9 +21,9 @@ struct UiCompactLayout final {
  static_assert(rowKnobY+rowKnobMountRadius < 120.);
  static constexpr double scrollLeft=1263.,scrollRight=1279.,scrollTop=header+7.;
  struct Slot {double left,right;};
- static constexpr Slot barOne{273.,352.},barTwo{362.,441.},edit{208.,272.};
- static constexpr Slot patternTools{857.,963.},songToggle{971.,1036.},
-                       songEdit{1043.,1111.};
+ static constexpr Slot barOne{273.,356.},barTwo{359.,442.},edit{208.,272.};
+ static constexpr Slot patternTools{850.,966.},songToggle{969.,1038.},
+                       songEdit{1041.,1120.};
  static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
