@@ -161,6 +161,17 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
  }
  c->setFrameColor(VSTGUI::CColor{5,23,38,255});
  c->drawRect(r,VSTGUI::kDrawStroked);
+ // Cold-blue pilot lights show actual selected/engaged control state.
+ // Their small upper-right sockets avoid the centered legends on M/S keys.
+ if(selected&&enabled&&r.getWidth()>=30.&&r.getHeight()>=24.) {
+   const double px=r.right-8.,py=r.top+5.;
+   c->setFillColor(VSTGUI::CColor{2,18,31,255});
+   c->drawRect({px-1.,py-1.,px+5.,py+5.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{40,112,158,255});
+   c->drawRect({px,py,px+4.,py+4.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{136,224,251,255});
+   c->drawRect({px+1.,py+1.,px+3.,py+3.},VSTGUI::kDrawFilled);
+ }
  c->setFont(VSTGUI::kNormalFont,12);
  c->setFontColor(!enabled?VSTGUI::CColor{143,156,169,255}:
                  selected?VSTGUI::CColor{245,252,255,255}:letters);
@@ -859,9 +870,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Satin graphite face inside the blue steel carrier. A narrow exposed
    // perimeter and opposing specular/undercut edges give each row a distinct
    // hardware tray without altering its size or any clickable rectangle.
-   c->setFillColor(chosen?VSTGUI::CColor{21,41,54,255}:
-                            VSTGUI::CColor{16,32,44,255});
-   c->drawRect({12.,y+7.,1258.,y+rowH-9.},VSTGUI::kDrawFilled);
+   // Satin faceplate: upper shoulder catches light; lower deck recedes.
+   // Pure paint, with unchanged widget geometry and interaction rectangles.
+   c->setFillColor(chosen?VSTGUI::CColor{26,49,63,255}:
+                            VSTGUI::CColor{21,40,53,255});
+   c->drawRect({12.,y+7.,1258.,y+40.},VSTGUI::kDrawFilled);
+   c->setFillColor(chosen?VSTGUI::CColor{19,39,52,255}:
+                            VSTGUI::CColor{14,29,41,255});
+   c->drawRect({12.,y+40.,1258.,y+rowH-9.},VSTGUI::kDrawFilled);
    c->setFillColor(VSTGUI::CColor{91,117,131,255});
    c->drawRect({11.,y+5.,1259.,y+6.},VSTGUI::kDrawFilled);
    c->setFillColor(VSTGUI::CColor{46,72,89,255});
@@ -876,6 +892,11 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFillColor(chosen?VSTGUI::CColor{83,178,209,255}:
                             VSTGUI::CColor{37,88,124,255});
    c->drawRect({12,y+10.,15,y+rowH-11.},VSTGUI::kDrawFilled);
+   // Machined undercut between the upper button shelf and rotary deck.
+   c->setFillColor(VSTGUI::CColor{3,13,24,255});
+   c->drawRect({18.,y+43.,615.,y+45.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{55,84,102,255});
+   c->drawRect({18.,y+45.,615.,y+46.},VSTGUI::kDrawFilled);
    // Readable row functions versus visually separated step sequencer.
    drawInset(c,{18,y+46.,615,y+120.},VSTGUI::CColor{16,34,49,255});
    drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
