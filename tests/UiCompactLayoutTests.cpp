@@ -47,9 +47,9 @@ int main(){
  // Header controls gain lettering clearance without leaving their assigned bays.
  static_assert(UiCompactLayout::patternButtonWidth==47.);
  static_assert(UiCompactLayout::patternButtonWidth<UiCompactLayout::patternPitch);
- EXPECT(UiCompactLayout::patternTools.right-UiCompactLayout::patternTools.left==116.);
- EXPECT(UiCompactLayout::songToggle.right-UiCompactLayout::songToggle.left==69.);
- EXPECT(UiCompactLayout::songEdit.right-UiCompactLayout::songEdit.left==79.);
+ EXPECT(UiCompactLayout::patternTools.right-UiCompactLayout::patternTools.left==119.);
+ EXPECT(UiCompactLayout::songToggle.right-UiCompactLayout::songToggle.left==70.);
+ EXPECT(UiCompactLayout::songEdit.right-UiCompactLayout::songEdit.left==80.);
  EXPECT(UiCompactLayout::patternStart+7.*UiCompactLayout::patternPitch+
         UiCompactLayout::patternButtonWidth<UiCompactLayout::patternTools.left);
  EXPECT(UiCompactLayout::patternTools.right<UiCompactLayout::songToggle.left);
