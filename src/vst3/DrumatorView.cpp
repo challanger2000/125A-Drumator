@@ -334,16 +334,25 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
    c->drawEllipse({cx-27.,cy-27.,cx+27.,cy+27.},VSTGUI::kDrawFilled);
    c->setFrameColor(VSTGUI::CColor{78,117,142,255});
    c->drawEllipse({cx-26.,cy-26.,cx+26.,cy+26.},VSTGUI::kDrawStroked);
+   // The reference uses individual illuminated blue pilot lenses, not
+   // tiny radial strokes. Keep the arc left of the dial: the legend above
+   // and the numeric readout to its right must remain unobstructed.
    constexpr double kPi=3.14159265358979323846;
-   const int activeTicks=static_cast<int>(std::lround(fraction*9.));
-   for(int tick=0;tick<9;++tick){
-     const double angle=(-142.+13.*tick)*kPi/180.;
+   constexpr int kLenses=11;
+   const int litLenses=static_cast<int>(std::lround(fraction*kLenses));
+   for(int tick=0;tick<kLenses;++tick){
+     const double angle=(-140.+9.*tick)*kPi/180.;
      const double dx=std::sin(angle),dy=-std::cos(angle);
-     c->setFrameColor(tick<activeTicks?
-         VSTGUI::CColor{91,201,251,255}:VSTGUI::CColor{45,115,166,255});
-     c->setLineWidth(tick<activeTicks?2.:1.5);
-     c->drawLine({cx+dx*30.,cy+dy*30.},
-                 {cx+dx*33.,cy+dy*33.});
+     const double x=cx+dx*32.,y=cy+dy*32.;
+     const bool lit=tick<litLenses;
+     const double radius=lit?2.2:1.65;
+     c->setFillColor(lit?VSTGUI::CColor{54,177,238,255}:
+                         VSTGUI::CColor{42,99,139,255});
+     c->drawEllipse({x-radius,y-radius,x+radius,y+radius},VSTGUI::kDrawFilled);
+     if(lit){
+       c->setFillColor(VSTGUI::CColor{170,236,255,255});
+       c->drawEllipse({x-.75,y-.75,x+.75,y+.75},VSTGUI::kDrawFilled);
+     }
    }
    c->setLineWidth(1.);
  }
@@ -868,14 +877,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawRect({0.,40.,1280.,43.},VSTGUI::kDrawFilled);
  c->setFillColor(VSTGUI::CColor{67,107,135,255});
  c->drawRect({4.,40.,1276.,41.},VSTGUI::kDrawFilled);
- drawInset(c,{17,46,260,103},VSTGUI::CColor{12,31,46,255});
+ drawInset(c,{17,39,260,103},VSTGUI::CColor{12,31,46,255});
  drawInset(c,{323,46,774,99},VSTGUI::CColor{10,27,43,255});
  drawInset(c,{779,46,1106,99},VSTGUI::CColor{10,27,43,255});
- drawInset(c,{1124,46,1253,103},VSTGUI::CColor{12,31,46,255});
+ drawInset(c,{1124,39,1253,103},VSTGUI::CColor{12,31,46,255});
  c->setFont(VSTGUI::kNormalFont,23);c->setFontColor(letters);
  c->drawString("DRUMATOR",{465,5,815,35},VSTGUI::kCenterText);
  drawBrandLogo(c);
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+ c->drawString("GLOBAL",{94,13,170,33},VSTGUI::kLeftText);
  c->drawString("LENGTH",{180,13,276,33},VSTGUI::kLeftText);
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
  drawControl(c,{UiCompactLayout::barOne.left,8,UiCompactLayout::barOne.right,34},"1 BAR",oneBar);
