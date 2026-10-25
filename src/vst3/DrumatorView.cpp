@@ -119,7 +119,7 @@ VSTGUI::CRect editorRect(const UiWaveEditorLayout::Rect& r){
 void drawBrandLogo(VSTGUI::CDrawContext* c) {
  constexpr double scale=62./887.;
  // Logo position only: 7 logical px up and left (~9 px at editor zoom 130%).
- constexpr double x0=30.,y0=3.;
+ constexpr double x0=30.,y0=-3.;
  for(const auto& shape: kBrandLogoPaths){
    auto* path=c->createGraphicsPath();
    if(!path)continue;
@@ -196,7 +196,7 @@ void drawMenuItem(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
  c->drawString(label,{r.left+10.,r.top,r.right-5.,r.bottom},VSTGUI::kLeftText);
 }
 void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
-                 const char* title,bool selected=false,bool enabled=true) {
+                 const char* title,bool selected=false,bool enabled=true,int fontSize=12) {
  // Contact shadow and raised keycap, inset by a further pixel when selected.
  c->setFillColor(VSTGUI::CColor{2,13,23,255});
  c->drawRect(r,VSTGUI::kDrawFilled);
@@ -241,13 +241,13 @@ void drawControl(VSTGUI::CDrawContext* c,const VSTGUI::CRect& r,
  c->setFrameColor(VSTGUI::CColor{5,23,38,255});
  c->drawRect(r,VSTGUI::kDrawStroked);
  // Selected keycaps are blue already; remove tiny square pilot artifacts.
- c->setFont(VSTGUI::kNormalFont,12);
+ c->setFont(VSTGUI::kNormalFont,fontSize);
  c->setFontColor(!enabled?VSTGUI::CColor{143,156,169,255}:
                  selected?VSTGUI::CColor{245,252,255,255}:letters);
  // Center text against the raised keycap, not its dark lower contact skirt.
  const double press=selected?1.:0.;
- c->drawString(title,{r.left+3.,r.top+2.+press,
-                      r.right-3.,r.bottom-4.+press},VSTGUI::kCenterText);
+ c->drawString(title,{r.left+6.,r.top+1.+press,
+                      r.right-6.,r.bottom-2.+press},VSTGUI::kCenterText);
 }
 
 
@@ -881,8 +881,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // The enlarged steel head is an open surface, without stacked insets.
  c->setFillColor(VSTGUI::CColor{4,15,27,255});
  c->drawRect({0.,UiCompactLayout::header-2.,1280.,UiCompactLayout::header},VSTGUI::kDrawFilled);
- c->setFont(VSTGUI::kNormalFont,28);c->setFontColor(letters);
+ // Restrained silver-machined title: dark relief, cool metal body, bright upper edge.
+ c->setFont(VSTGUI::kNormalFont,28);
+ c->setFontColor(VSTGUI::CColor{8,17,26,255});
+ c->drawString("DRUMATOR",{430.,7.,850.,47.},VSTGUI::kCenterText);
+ c->setFontColor(VSTGUI::CColor{164,182,196,255});
  c->drawString("DRUMATOR",{430.,5.,850.,45.},VSTGUI::kCenterText);
+ c->setFontColor(VSTGUI::CColor{223,231,238,255});
+ c->drawString("DRUMATOR",{430.,4.,850.,44.},VSTGUI::kCenterText);
  // Product descriptor from the approved hardware reference, aligned beneath title.
  c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(VSTGUI::CColor{193,210,225,255});
  c->drawString("D R U M   S A M P L E R   &   S T E P   S E Q U E N C E R",
@@ -918,14 +924,14 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  }
  drawControl(c,{UiCompactLayout::patternTools.left,UiCompactLayout::headerButtonTop,
                UiCompactLayout::patternTools.right,UiCompactLayout::headerButtonBottom},
-             "PATTERN MENU",popup_==2);
+             "PATTERN MENU",popup_==2,true,11);
  drawControl(c,{UiCompactLayout::songToggle.left,UiCompactLayout::headerButtonTop,
                UiCompactLayout::songToggle.right,UiCompactLayout::headerButtonBottom},
              controller_.songEnabled()?"SONG ON":"SONG OFF",
-             controller_.songEnabled());
+             controller_.songEnabled(),true,11);
  drawControl(c,{UiCompactLayout::songEdit.left,UiCompactLayout::headerButtonTop,
                UiCompactLayout::songEdit.right,UiCompactLayout::headerButtonBottom},
-             songEditorOpen_?"PATTERN":"SONG EDIT",songEditorOpen_);
+             songEditorOpen_?"PATTERN":"SONG EDIT",songEditorOpen_,true,11);
  const auto zoom=editor_.getZoomFactor();
  char zoomLabel[32]{};
  std::snprintf(zoomLabel,sizeof(zoomLabel),"ZOOM %u%%   v",
