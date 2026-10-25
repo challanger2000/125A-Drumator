@@ -924,6 +924,20 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({18.,y+45.,615.,y+46.},VSTGUI::kDrawFilled);
    // Readable row functions versus visually separated step sequencer.
    drawInset(c,{18,y+46.,615,y+120.},VSTGUI::CColor{16,34,49,255});
+   // Fine horizontal machining in the graphite rotary deck. The grain is
+   // restrained to the existing inset, rendered before labels and controls,
+   // and follows expanded row geometry without adding any hit targets.
+   // Alternating low-contrast highlights and cuts evoke brushed anodized
+   // metal without introducing the bright blue stripes of the old skin.
+   for(int grain=0;grain<12;++grain) {
+     const double gy=y+49.+grain*5.;
+     c->setFillColor(grain%3==0?
+         VSTGUI::CColor{25,46,61,255}:
+         VSTGUI::CColor{19,37,51,255});
+     c->drawRect({20.,gy,613.,gy+1.},VSTGUI::kDrawFilled);
+   }
+   c->setFillColor(VSTGUI::CColor{43,71,88,255});
+   c->drawRect({21.,y+115.,612.,y+116.},VSTGUI::kDrawFilled);
    drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
    // Dark dividing seam and a single silver-blue return: two separate
    // recessed modules, not a painted line running through the controls.
