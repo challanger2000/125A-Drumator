@@ -737,7 +737,7 @@ void testWaveEditorLongCaptures(){
      std::memcpy(wav.data()+48+i*8,&r,4);
    }
    // Deliberately do not invent a sample name: embedded audio alone is sufficient.
-   kit.names[0].clear();
+   kit.names[0]="wave-qa-synthetic.wav"; // Required internal KitCodec identity; never shown as an imported filename.
    kit.sampleEdits[0]=SampleEdit{4800,86400,4800,7200,1.25f};
    f.kit(kit);f.open();
    auto* v=IntegrationAccess::view(*f.c,0);
