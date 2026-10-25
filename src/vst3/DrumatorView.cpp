@@ -929,7 +929,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  char zoomLabel[32]{};
  std::snprintf(zoomLabel,sizeof(zoomLabel),"ZOOM %u%%   v",
                static_cast<unsigned>(std::lround(zoom*100.)));
- drawControl(c,{1120,7,1250,35},zoomLabel,popup_==1);
+ drawControl(c,{1116,7,1254,35},zoomLabel,popup_==1);
  char text[36]{};
  std::snprintf(text,sizeof(text),"%u%%",controller_.swingPercent());
  drawRotary(c,knobBitmap_,UiCompactLayout::globalKnobCenters[0],UiCompactLayout::globalKnobY,controller_.swingPercent()/50.,"SWING",text,activeKnob_==4);
