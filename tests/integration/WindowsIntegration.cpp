@@ -747,6 +747,25 @@ void testVisualRender(){
    click(*v,1077,114.);
    captureVstgui(*v,"v2-song-board",1.0);
  }
+ {
+   // GUI39: actual editor state and native captured inactive/active indicators.
+   Fixture f;f.kit(namedKit('X',4));f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   constexpr double zoom=1.3;
+   std::array<std::uint8_t,5> zoomState{{'D','Z','M','2',2}};
+   drumator::qa::ByteStream zoomInput(zoomState.data(),zoomState.size());
+   check(f.c->setState(&zoomInput)==kResultOk&&v->zoomMatches(zoom),
+         "GUI39 status raster requires actual 130pct editor zoom");
+   captureVstgui(*v,"gui39-inactive-130",zoom);
+   const double top=UiCompactLayout::header;
+   click(*v,473.,top+22.); // MUTE row 0
+   click(*v,513.,top+22.); // SOLO row 0
+   click(*v,1246.,top+88.); // VEL row 0
+   check(f.c->isRowMuted(0)&&f.c->isRowSolo(0)&&
+         IntegrationAccess::velocityExpanded(*v,0),
+         "GUI39 active lamps not backed by real controller/view states");
+   captureVstgui(*v,"gui39-active-130",zoom);
+ }
  evidence("V2 native VSTGUI vector controls and per-row Velocity windows captured");
 }
 void testPrecisionPanel(){
