@@ -1133,12 +1133,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const auto out=controller_.rowOutput(row);
    if(out==0)std::snprintf(name,sizeof(name),"MAIN v");
    else std::snprintf(name,sizeof(name),"OUT %u v",out+1);
-   drawControl(c,{535,y+9,615,y+40},name,popup_==3&&popupRow_==row);
+   drawControl(c,{535,y+9,615,y+40},name,popup_==3&&popupRow_==row,true,11);
    std::snprintf(name,sizeof(name),"CH%u v",controller_.rowChoke(row));
    c->setFont(VSTGUI::kNormalFont,11);
    c->setFontColor(VSTGUI::CColor{164,214,235,255});
-   c->drawString("CHOKE",{570,y+52,615,y+73});
-   drawControl(c,{570,y+73,615,y+105},name,popup_==4&&popupRow_==row);
+   c->drawString("CHOKE",{570,y+52,615,y+73},VSTGUI::kCenterText);
+   drawControl(c,{570,y+73,615,y+105},name,popup_==4&&popupRow_==row,true,10);
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
@@ -1164,7 +1164,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      drawRotary(c,knobBitmap_,centers[3],y+88,controller_.rowRandomVelocity(row)/100.,
                 "RANDOM RT",legacy,chosen&&activeKnob_==3,true);
    }else{
-     drawControl(c,{448,y+73,544,y+105},"RANDOM VEL");
+     drawControl(c,{448,y+73,544,y+105},"RANDOM VEL",false,true,11);
    }
    const auto steps=controller_.patternLength(controller_.currentPattern());
    for(std::size_t step=0;step<32;++step) {
