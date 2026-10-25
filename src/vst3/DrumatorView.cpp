@@ -903,8 +903,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  drawControl(c,{UiCompactLayout::barTwo.left,8,UiCompactLayout::barTwo.right,34},"2 BARS",!oneBar);
  for(std::size_t pattern=0;pattern<8;++pattern) {
    char label[12]{};
-   std::snprintf(label,sizeof(label),"%c %uT",static_cast<char>('A'+pattern),
-                 controller_.patternLength(pattern)==16?1u:2u);
+   std::snprintf(label,sizeof(label),"%c",static_cast<char>('A'+pattern));
    const auto x=kPatternX+pattern*kPatternWidth;
    drawControl(c,{x,kPatternY,x+49,kPatternY+30},label,
                pattern==controller_.currentPattern());
