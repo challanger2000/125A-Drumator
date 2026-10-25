@@ -848,10 +848,21 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->drawRect({8,y+2.,1261,y+rowH-2.},VSTGUI::kDrawFilled);
    c->setFillColor(chosen?rowBlueSelected:(i%2?rowBlueB:rowBlueA));
    c->drawRect({10,y+4.,1260,y+rowH-5.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{76,116,144,255});
-   c->drawRect({10,y+4.,1259,y+5.},VSTGUI::kDrawFilled);
-   c->setFillColor(VSTGUI::CColor{4,17,30,255});
-   c->drawRect({10,y+rowH-8.,1260,y+rowH-5.},VSTGUI::kDrawFilled);
+   // Satin graphite face inside the blue steel carrier. A narrow exposed
+   // perimeter and opposing specular/undercut edges give each row a distinct
+   // hardware tray without altering its size or any clickable rectangle.
+   c->setFillColor(chosen?VSTGUI::CColor{21,41,54,255}:
+                            VSTGUI::CColor{16,32,44,255});
+   c->drawRect({12.,y+7.,1258.,y+rowH-9.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{91,117,131,255});
+   c->drawRect({11.,y+5.,1259.,y+6.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{46,72,89,255});
+   c->drawRect({11.,y+6.,12.,y+rowH-9.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{5,17,27,255});
+   c->drawRect({1258.,y+7.,1260.,y+rowH-7.},VSTGUI::kDrawFilled);
+   c->drawRect({11.,y+rowH-9.,1260.,y+rowH-6.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{44,68,84,255});
+   c->drawRect({12.,y+rowH-10.,1258.,y+rowH-9.},VSTGUI::kDrawFilled);
    c->setFrameColor(chosen?accent:rowBlueBorder);
    c->drawRect({9,y+3.,1261,y+rowH-4.},VSTGUI::kDrawStroked);
    c->setFillColor(chosen?VSTGUI::CColor{83,178,209,255}:
@@ -860,7 +871,22 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    // Readable row functions versus visually separated step sequencer.
    drawInset(c,{18,y+46.,615,y+120.},VSTGUI::CColor{16,34,49,255});
    drawInset(c,{620,y+28.,1230,y+115.},VSTGUI::CColor{13,31,47,255});
+   // Dark dividing seam and a single silver-blue return: two separate
+   // recessed modules, not a painted line running through the controls.
+   c->setFillColor(VSTGUI::CColor{2,10,18,255});
+   c->drawRect({616.,y+30.,618.,y+115.},VSTGUI::kDrawFilled);
+   c->setFillColor(VSTGUI::CColor{69,99,116,255});
+   c->drawRect({618.,y+31.,619.,y+113.},VSTGUI::kDrawFilled);
    drawInset(c,{kGridX-3.,y+64.,kGridRight+4.,y+110.},stepWellBlue);
+   // Eight physically indexed four-step groups. Markers live above/below
+   // the key sockets and never consume a step's existing 19px hit target.
+   for(int group=4;group<32;group+=4) {
+     const double gx=kGridX+group*kCellWidth;
+     c->setFillColor(VSTGUI::CColor{63,92,108,255});
+     c->drawRect({gx,y+61.,gx+1.,y+68.},VSTGUI::kDrawFilled);
+     c->setFillColor(VSTGUI::CColor{30,58,76,255});
+     c->drawRect({gx,y+105.,gx+1.,y+109.},VSTGUI::kDrawFilled);
+   }
    char name[16]{};
    std::snprintf(name,sizeof(name),"%02u",static_cast<unsigned>(row+1));
    drawControl(c,{16,y+9,74,y+40},name,chosen);
