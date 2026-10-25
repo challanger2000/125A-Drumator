@@ -956,7 +956,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double y=-2.;
    VSTGUI::CDrawContext::Transform tx(*c,
        VSTGUI::CGraphicsTransform().scale(sf,sf)
-         .translate(x/sf,y/sf));
+         .translate(x,y));
    productLogoBitmap_->draw(c,{0.,0.,productLogoBitmap_->getWidth(),
                                  productLogoBitmap_->getHeight()});
  }
