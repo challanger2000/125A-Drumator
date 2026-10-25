@@ -301,9 +301,8 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  // with their title/nameplate. Row labels are deliberately placed higher.
  const double titleTop=rowModule?UiCompactLayout::rowKnobLabelTop:-37.;
  const double titleBottom=rowModule?UiCompactLayout::rowKnobLabelBottom:-24.;
- // Labels are engraved directly on the graphite deck; a separate
- // rectangular title plaque created a second, visually noisy control rail.
- c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom});
+ // Legends remain on the faceplate, rather than getting their own
+ // decorative plaque. Global controls use the upper free fascia strip.
  if(rowModule) {
    const double r=UiCompactLayout::rowKnobMountRadius;
    c->setFillColor(VSTGUI::CColor{4,15,26,255});
@@ -327,7 +326,28 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
                  {cx+dx*34.,cy+dy*34.});
    }
    c->setLineWidth(1.);
+ }else{
+   // Hardware-style global control mount. The original 50px hit target
+   // and the approved 101-frame knob sprite stay exactly where they are.
+   // A single steel bezel and a sparse, value-driven cyan scale are enough.
+   c->setFillColor(VSTGUI::CColor{3,14,25,255});
+   c->drawEllipse({cx-27.,cy-27.,cx+27.,cy+27.},VSTGUI::kDrawFilled);
+   c->setFrameColor(VSTGUI::CColor{78,117,142,255});
+   c->drawEllipse({cx-26.,cy-26.,cx+26.,cy+26.},VSTGUI::kDrawStroked);
+   constexpr double kPi=3.14159265358979323846;
+   const int activeTicks=static_cast<int>(std::lround(fraction*9.));
+   for(int tick=0;tick<9;++tick){
+     const double angle=(-142.+13.*tick)*kPi/180.;
+     const double dx=std::sin(angle),dy=-std::cos(angle);
+     c->setFrameColor(tick<activeTicks?
+         VSTGUI::CColor{67,176,233,255}:VSTGUI::CColor{24,57,81,255});
+     c->setLineWidth(tick<activeTicks?2.:1.);
+     c->drawLine({cx+dx*30.,cy+dy*30.},
+                 {cx+dx*33.,cy+dy*33.});
+   }
+   c->setLineWidth(1.);
  }
+ c->drawString(title,{cx-46.,cy+titleTop,cx+46.,cy+titleBottom});
  // A bitmap object can exist even when its PNG resource was not loaded,
  // notably in native offscreen QA outside the installed VST3 bundle.
  // Treat that as unavailable and paint an actual usable fallback control.
@@ -359,11 +379,12 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  }
  c->setLineWidth(1.);
  c->setFont(VSTGUI::kNormalFont,rowModule?11:12);c->setFontColor(letters);
- // Row readouts begin beyond the 30px mount and end before the next
- // row action; globals retain their original, independently tested bounds.
+ // Row values retain their established bounds. Global readouts sit below
+ // and to the right of the dial, rather than competing with its midpoint.
+ // Swing 0..50, Humanize 0..100 and Master 0..200 remain unchanged.
  c->drawString(value,rowModule?
      VSTGUI::CRect{cx+34.,cy-12.,cx+70.,cy+13.}:
-     VSTGUI::CRect{cx+29.,cy-12.,cx+72.,cy+13.},VSTGUI::kLeftText);
+     VSTGUI::CRect{cx+26.,cy+7.,cx+72.,cy+24.},VSTGUI::kLeftText);
 }
 } // anonymous namespace: shared rotary painter and palette
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
