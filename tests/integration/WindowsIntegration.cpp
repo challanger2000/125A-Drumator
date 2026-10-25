@@ -670,6 +670,36 @@ void testGuiPhysicalStepsRaster(){
  }
  evidence("GUI keycaps 0/4/15/31 active/inactive/revert native raster PASS");
 }
+void testVelocityDesignCaptures(){
+ // Native GUI design fixture only. No production implementation changes.
+ constexpr std::array<std::size_t,6> steps{{0,4,8,12,16,20}};
+ constexpr std::array<std::uint8_t,6> values{{20,40,64,90,110,127}};
+ for(const auto zoomFactor: {1.0,1.3}){
+   Fixture f;
+   auto kit=namedKit('X',4);
+   kit.grid.fill(0);
+   for(std::size_t n=0;n<steps.size();++n)kit.grid[steps[n]]=values[n];
+   f.kit(kit);
+   f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   const std::uint8_t zoomCode=zoomFactor==1.0?0:2;
+   std::array<std::uint8_t,5> zoomState{{'D','Z','M','2',zoomCode}};
+   drumator::qa::ByteStream input(zoomState.data(),zoomState.size());
+   check(f.c->setState(&input)==kResultOk&&v->zoomMatches(zoomFactor),
+         "Velocity visual QA: actual host/editor zoom mismatch");
+   click(*v,1248.,UiCompactLayout::header+88.);
+   check(IntegrationAccess::velocityExpanded(*v,0),
+         "Velocity visual QA: first row did not expand");
+   for(std::size_t n=0;n<kSteps;++n){
+     std::uint8_t expected=0;
+     for(std::size_t i=0;i<steps.size();++i)if(steps[i]==n)expected=values[i];
+     check(f.c->velocity(0,0,n)==expected,
+           "Velocity visual QA: fixture values differ from actual controller state");
+   }
+   captureVstgui(*v,zoomFactor==1.0?"velocity-design-100":"velocity-design-130",zoomFactor);
+ }
+ evidence("Velocity design reference: six native velocity levels 20/40/64/90/110/127 at real 100% and 130% editor zoom");
+}
 void testVisualRender(){
  for(const auto zoom: {1.0,1.2,1.3,1.5}){
    Fixture f;auto kit=namedKit('X',4);
@@ -2049,6 +2079,7 @@ int main(int argc,char** argv){
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
+ run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
   run("GUI physical step state/raster toggle",testGuiPhysicalStepsRaster);
  run("UX direct pattern length",testPatternLengthControls);
  run("P18 native pattern duplicate menu",testPatternDuplicateMenu);
