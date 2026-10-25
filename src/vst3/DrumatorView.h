@@ -48,6 +48,7 @@ public:
 private:
  Controller& controller_;
  VSTGUI::CBitmap* backgroundBitmap_{nullptr};
+ VSTGUI::CBitmap* productLogoBitmap_{nullptr};
  VSTGUI::CBitmap* knobBitmap_{nullptr};
  VSTGUI::CBitmap* screwBitmap_{nullptr};
  VSTGUI::CTextEdit* nameEdit_{nullptr};
