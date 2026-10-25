@@ -340,8 +340,8 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
      const double angle=(-142.+13.*tick)*kPi/180.;
      const double dx=std::sin(angle),dy=-std::cos(angle);
      c->setFrameColor(tick<activeTicks?
-         VSTGUI::CColor{67,176,233,255}:VSTGUI::CColor{24,57,81,255});
-     c->setLineWidth(tick<activeTicks?2.:1.);
+         VSTGUI::CColor{91,201,251,255}:VSTGUI::CColor{45,115,166,255});
+     c->setLineWidth(tick<activeTicks?2.:1.5);
      c->drawLine({cx+dx*30.,cy+dy*30.},
                  {cx+dx*33.,cy+dy*33.});
    }
@@ -868,7 +868,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  c->drawRect({0.,40.,1280.,43.},VSTGUI::kDrawFilled);
  c->setFillColor(VSTGUI::CColor{67,107,135,255});
  c->drawRect({4.,40.,1276.,41.},VSTGUI::kDrawFilled);
- drawInset(c,{17,46,228,103},VSTGUI::CColor{12,31,46,255});
+ drawInset(c,{17,46,260,103},VSTGUI::CColor{12,31,46,255});
  drawInset(c,{323,46,774,99},VSTGUI::CColor{10,27,43,255});
  drawInset(c,{779,46,1106,99},VSTGUI::CColor{10,27,43,255});
  drawInset(c,{1124,46,1253,103},VSTGUI::CColor{12,31,46,255});
