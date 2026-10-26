@@ -1,0 +1,85 @@
+name: Drumator 125A Plugin Tester – verified Windows artifact
+
+on:
+  push:
+    branches: [gui/ppg-blue-background-20261024]
+    paths:
+      - '.github/workflows/125a-plugin-tester-qa.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  tester:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Validate source-to-artifact provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $run = Invoke-RestMethod -Uri 'https://api.github.com/repos/challanger2000/125A-Drumator/actions/runs/40369818428' -Headers $headers
+          if ($run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
+              $run.head_sha -cne 'b53603f84fd44002f3b7c12a8238af15d56769bb') {
+            throw "Unverified Drumator source/artifact run: $($run.head_sha) $($run.conclusion)"
+          }
+          Write-Output "Verified Windows source: $($run.head_sha)"
+      - name: Download the successfully tested VST3 bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: 125A-Drumator-M11-Full-Kit-Stress-QA
+          run-id: 40369818428
+          github-token: ${{ github.token }}
+          path: artifact
+      - name: Run pinned 125A Plugin Tester v0.2.10
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $PWD 'artifact/125A Drumator.vst3'
+          $binary = Join-Path $bundle 'Contents/x86_64-win/125A Drumator.vst3'
+          $moduleInfo = Join-Path $bundle 'Contents/Resources/moduleinfo.json'
+          if (!(Test-Path $binary) -or !(Test-Path $moduleInfo)) {
+            throw 'Windows Drumator VST3 artifact is incomplete'
+          }
+          $info = Get-Content $moduleInfo -Raw | ConvertFrom-Json
+          if ($info.Classes[0].Name -cne '125A Drumator') { throw 'Wrong plugin identity' }
+          $tester = Join-Path $PWD '125A_Plugin_Tester.exe'
+          Invoke-WebRequest -Uri 'https://github.com/challanger2000/125A-Plugin-Tester-Final/releases/download/v0.2.10/125A_Plugin_Tester.exe' -OutFile $tester
+          $actualHash = (Get-FileHash $tester -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedHash = 'b0f386422d107ac6fa8b15c3e1e86113f52b013e277fc94b16d28b929438bfea'
+          if ($actualHash -cne $expectedHash) { throw "125A Tester hash mismatch: $actualHash" }
+          $reports = Join-Path $PWD '125A-QA-Reports'
+          New-Item -ItemType Directory -Path $reports -Force | Out-Null
+          [Environment]::SetEnvironmentVariable('125A_PLUGIN_TESTER_REPORT_DIR', $reports, 'Process')
+          Write-Output 'Starting real 125A Plugin Tester v0.2.10 --portable-test on the packaged Drumator VST3'
+          $exitCode = 127
+          try {
+            $process = Start-Process -FilePath $tester -ArgumentList @('--portable-test', ('"' + $bundle + '"')) -PassThru -Wait -NoNewWindow
+            $exitCode = $process.ExitCode
+          } finally {
+            Get-ChildItem $reports -File -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Output "125A report: $($_.Name), bytes=$($_.Length)"
+              if ($_.Name -match 'QA_Report\\.txt$') { Get-Content $_.FullName | Write-Output }
+            }
+          }
+          $qa = @(Get-ChildItem $reports -Filter '*_125A_QA_Report.txt' -File)
+          if ($qa.Count -ne 1) { throw "Expected one actual 125A QA report, found $($qa.Count)" }
+          $report = Get-Content $qa[0].FullName -Raw
+          if ($report -notmatch '(?m)^RESULT:\\s*\\d+ PASS / \\d+ WARNING / \\d+ FAIL') {
+            throw 'Tester report is missing a complete result summary'
+          }
+          if ($exitCode -ne 0 -or $report -match '(?m)^RELEASE: NOT RECOMMENDED') {
+            throw "125A Plugin Tester reported failure (exit=$exitCode); inspect uploaded report"
+          }
+          Write-Output "125A Plugin Tester completed: exit=$exitCode; see report for PASS/WARNING/FAIL details"
+      - name: Archive independent tester evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 125A-Drumator-Independent-Plugin-Tester-v0.2.10
+          path: 125A-QA-Reports/
+          if-no-files-found: warn

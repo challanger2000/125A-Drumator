@@ -50,3 +50,15 @@ Nur `OutputMeter.h` (Kommentar-Klarstellung), `DrumatorProcessor.cpp` (gezielter
 - **Konkrete Folgerung:** Der erste korrigierte Reply-Verbrauch war quelllogisch ausreichend gegen spätere `setInt`-/Send-Fehler, aber die ältere Ausnahmegrenze erfasste noch nicht den potentiell allokierenden `reply->getAttributes()`-Aufruf unmittelbar nach dem Nachrichtenaufbau. Dadurch konnte eine injizierte `std::bad_alloc` aus `Processor::notify` entweichen.
 - **Nachbesserung:** Die Attribute-Getter-Grenze erhält ein eigenes C++-Exception-Guard mit dokumentiertem Rückgabefehler. Auch `Controller::notify(MeterSnapshot)` schützt jetzt das Attribut-Decoding als extern aufrufbare VST3-Hostgrenze. Die bestehende Test-Injektion bleibt strikt, und die Fehlermeldung nennt bei einem erneuten Testversagen den jeweiligen Allokationsindex.
 - Der Nachlauf für den exakten Nachbesserungs-Commit ist **NOT RUN**, bis eine neue Windows-Actions-Run-ID mit belastbarem Ergebnis vorliegt. Keine Umbenennung des fehlgeschlagenen Vorlaufs in PASS.
+
+## Windows-QA-Nachlauf 2 – unabhängig ausgewerteter Erfolg (26.10.2026)
+
+- **Exakter getesteter Codecommit:** `b53603f84fd44002f3b7c12a8238af15d56769bb`.
+- [Actions #40369818428](https://github.com/challanger2000/125A-Drumator/actions/runs/40369818428): **SUCCESS**, 23/23 CTests, inklusive S13 Mehrfach-Editor-/Missing Registry-/Ausnahme-/Peak-Regression, 47/47 offizieller Steinberg Validator, paketierte Audio-/Editor-Smokes PASS; Windows-Runner, nicht Studio One.
+- Echte Logbelege: `S13 IPC meter with absent registry and two native editors PASS`, `A26 combined 16 active buses, 64 voices, 12 imports, Cycle Stop and PCM PASS`, `100% tests passed, 0 tests failed out of 23`, `Result: 47 tests passed, 0 tests failed`.
+- F14 48 kHz/256 Frames/64 Voices/16×: p95=0,6251 ms, p99=0,671 ms, Maximum=0,7159 ms, 0/180 Deadline-Misses auf dem geteilten CI-Runner. **Keine ASIO-Garantie und kein kontrollierter CPU-Before/After-Vergleich.**
+- Windows Build-Artefakt: `125A-Drumator-M11-Full-Kit-Stress-QA` (ID `12671344093`, Actions-Archiv-Digest `sha256:719ccf182aa83eecfce7493e0a8a0a08f3fa3c8525e6d56e9485e8e52dcae11e`), archiviert mit diesem geprüften Run. Archiv-Digest ist kein Hash der enthaltenen VST3-DLL.
+
+## Separates 125A Plugin Tester Gate
+
+Um ohne erneute vollständige Compilation das **tatsächlich gebaute VST3-Bundle** zu prüfen, wurde `.github/workflows/125a-plugin-tester-qa.yml` als einmalig bei ihrer eigenen Änderung auslösbare, vom Core-Build getrennte Windows-QA eingerichtet. Sie prüft die exakte Actions-Baseline `b53603f`, lädt ausschließlich das nachweislich erfolgreiche VST3-Archiv aus Run #40369818428, prüft Identität und den SHA-256 der **offiziellen 125A Plugin Tester v0.2.10 Release-EXE** (`b0f386422d107ac6fa8b15c3e1e86113f52b013e277fc94b16d28b929438bfea`) und führt `--portable-test` mit eigenem Berichtsordner aus. Berichte werden unabhängig vom Testausgang hochgeladen. Vollständige 125A-Tester-Abnahme erst nach Auswertung des separaten Runs. Dies ersetzt keinen realen Studio-One-/ASIO-Hosttest.
