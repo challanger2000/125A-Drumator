@@ -8,9 +8,11 @@ namespace drumator {
 struct UiCompactLayout final {
  static constexpr double width=1280.,header=160.,baseRow=130.,velocityRow=30.,footer=54.;
  static constexpr std::size_t perPage=4;
+ // Move the complete header control group starting with PATTERN; logo and left controls stay fixed.
+ static constexpr double headerRightShift=-12.;
  static constexpr double headerButtonTop=101.,headerButtonBottom=133.,
       groupTitleTop=49.,groupTitleBottom=65.,globalKnobY=119.,
-      songEditorHeight=432.,patternStart=457.,patternPitch=49.,
+      songEditorHeight=432.,patternStart=457.+headerRightShift,patternPitch=49.,
       patternButtonWidth=47.;
  static constexpr double stepX=622.,stepWidth=19.;
  static constexpr double knobRadius=25.,rowKnobY=88.;
@@ -22,18 +24,29 @@ struct UiCompactLayout final {
  static constexpr double scrollLeft=1263.,scrollRight=1279.,scrollTop=header+7.;
  struct Slot {double left,right;};
  static constexpr Slot barOne{273.,356.},barTwo{359.,442.},edit{208.,272.};
- static constexpr Slot patternTools{850.,969.},songToggle{972.,1042.},
-                       songEdit{1045.,1125.};
+ static constexpr Slot patternTools{850.+headerRightShift,969.+headerRightShift},
+                       songToggle{972.+headerRightShift,1042.+headerRightShift},
+                       songEdit{1045.+headerRightShift,1125.+headerRightShift};
  static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
    velocityToggle{1233.,1259.},rowAdd{16.,110.},rowRemove{116.,210.};
  static constexpr std::array<double,4> rowKnobCenters{{133.,254.,375.,496.}};
- static constexpr std::array<double,3> globalKnobCenters{{79.,177.,1180.}};
+ static constexpr std::array<double,3> globalKnobCenters{{79.,177.,1180.+headerRightShift}};
+ // One geometry contract for the moved MAIN L/R LEDs, CLIP text and click reset.
+ static constexpr double meterLeft=1255.+headerRightShift;
+ static constexpr double meterRight=1267.+headerRightShift;
+ static constexpr double meterClipLeft=1226.+headerRightShift;
+ static constexpr double meterClipRight=1279.+headerRightShift;
+ static constexpr double meterResetLeft=meterLeft-2.;
+ static constexpr double meterResetRight=meterRight+13.;
  static_assert(barTwo.right<patternStart);
  static_assert(patternStart+7.*patternPitch+patternButtonWidth<patternTools.left);
  static_assert(patternTools.right<songToggle.left&&songToggle.right<songEdit.left);
  static_assert(songEdit.right<globalKnobCenters[2]-50.);
+ static_assert(patternStart+(7.*patternPitch+patternButtonWidth)/2.==width/2.);
+ static_assert(meterRight+7.<=width-12.&&meterClipRight<=width-12.);
+ static_assert(meterLeft>globalKnobCenters[2]+72.);
  static constexpr std::array<double,4> userZooms{{1.,1.2,1.3,1.5}};
  static constexpr bool hit(double x,Slot slot) noexcept {return x>=slot.left&&x<slot.right;}
  // At the supported 300px minimum, tall modal menus must extend over the

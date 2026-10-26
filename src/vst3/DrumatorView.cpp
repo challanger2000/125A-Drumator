@@ -1027,8 +1027,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
       }
    }
  };
- drawMeter(1255.,mainMeterL_,holdMeterL_);
- drawMeter(1267.,mainMeterR_,holdMeterR_);
+ drawMeter(UiCompactLayout::meterLeft,mainMeterL_,holdMeterL_);
+ drawMeter(UiCompactLayout::meterRight,mainMeterR_,holdMeterR_);
  c->setFont(VSTGUI::kNormalFont,10);
  c->setFontColor(clipBits?VSTGUI::CColor{255,95,73,255}:
                       VSTGUI::CColor{120,162,181,255});
@@ -1040,7 +1040,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
          break;
       }
  }
- c->drawString(clipText,{1226.,66.,1279.,85.},VSTGUI::kRightText);
+ c->drawString(clipText,{UiCompactLayout::meterClipLeft,66.,
+                        UiCompactLayout::meterClipRight,85.},VSTGUI::kRightText);
  // MASTER caption moves toward its dial; SWING and HUMANIZE stay put.
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
  drawControl(c,{UiCompactLayout::barOne.left,UiCompactLayout::headerButtonTop,
@@ -1785,7 +1786,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  const double x=pos.x,y=pos.y;
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
- if(!sampleEditorOpen_&&x>=1248.&&x<=1280.&&y>=66.&&y<=151.){
+ if(!sampleEditorOpen_&&x>=UiCompactLayout::meterResetLeft&&
+    x<=UiCompactLayout::meterResetRight&&y>=66.&&y<=151.){
    if(auto link=controller_.meterLink())link->clearClips();
    invalid();return done;
  }

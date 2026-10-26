@@ -1200,6 +1200,28 @@ void test11IMeterStereoAndStems(){
  captureVstgui(*vs,"gui49-11i-out2-clip-130",1.3);
  evidence("M11I MAIN L/R real post-ramp samples, separate 0dBFS/overrange, 16-bus inactive mask, OUT2-only clip and click reset PASS");
 }
+void test11IHeaderPatternCentered(){
+  // Fixed centered product title is the alignment datum for eight A-H keys.
+  constexpr double patternAxis=UiCompactLayout::patternStart+
+      (7.*UiCompactLayout::patternPitch+UiCompactLayout::patternButtonWidth)/2.;
+  check(patternAxis==UiCompactLayout::width/2.,
+        "GUI 11I PATTERN A-H group not centered below DRUMATOR");
+  check(UiCompactLayout::barTwo.right<UiCompactLayout::patternStart&&
+        UiCompactLayout::patternStart+7.*UiCompactLayout::patternPitch+
+          UiCompactLayout::patternButtonWidth<UiCompactLayout::patternTools.left&&
+        UiCompactLayout::patternTools.right<UiCompactLayout::songToggle.left&&
+        UiCompactLayout::songToggle.right<UiCompactLayout::songEdit.left&&
+        UiCompactLayout::songEdit.right<UiCompactLayout::globalKnobCenters[2]-50.,
+        "GUI 11I moved header controls collide");
+  check(UiCompactLayout::meterRight+7.<=UiCompactLayout::width-12.&&
+        UiCompactLayout::meterClipRight<=UiCompactLayout::width-12.&&
+        UiCompactLayout::meterLeft>UiCompactLayout::globalKnobCenters[2]+72.,
+        "GUI 11I meter clips chassis or MASTER readout");
+  check(UiCompactLayout::meterResetLeft<UiCompactLayout::meterLeft&&
+        UiCompactLayout::meterResetRight>UiCompactLayout::meterRight+7.,
+        "GUI 11I new meter reset click zone misses LED columns");
+  evidence("GUI 11I centered PATTERN A-H, following groups, MASTER and meter margins PASS");
+}
 void test11IRotaryMinCenterMax(){
  struct ControlState {
    const char* name;
@@ -2658,6 +2680,7 @@ int main(int argc,char** argv){
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
  run("GUI49 musical four-sample native 130pct capture",testGui49MusicalFourSampleCapture);
+ run("GUI 11I centered PATTERN and meter header geometry",test11IHeaderPatternCentered);
  run("M11I actual MAIN and stem meter, GUI capture and clip reset",test11IMeterStereoAndStems);
  run("M11I normal 16bit mono FLAC import",test11IMonoFlacImport);
  run("M11I six rotary Min Center Max and double-click defaults",test11IRotaryMinCenterMax);
