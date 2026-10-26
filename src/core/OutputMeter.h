@@ -10,15 +10,15 @@
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 namespace drumator {
 // The processor is the sole audio-thread writer. The editor periodically
-// exchanges block peaks; clip bits are sticky until explicitly cleared.
+// receives accumulated block peaks; clip bits are sticky until cleared.
 // All registry allocations/locks run outside process().
 class OutputMeter final {
 public:
  static constexpr unsigned kBuses=16;
  std::atomic<std::uint32_t> mainL{0},mainR{0};
  std::atomic<std::uint32_t> clipMask{0},fullScaleMask{0};
- // One coherent L/R block snapshot for control-thread IPC, independent of
- // destructive legacy test probes and of the number of editor windows.
+ // Per-channel maximum between successful control-thread snapshots,
+ // independent of the number of editor windows.
  std::atomic<std::uint64_t> blockSequence{0};
  std::atomic<std::uint32_t> clipResetEpoch{0};
  static std::uint32_t encode(float peak) noexcept {
@@ -29,8 +29,8 @@ public:
  }
  static void accumulate(std::atomic<std::uint32_t>& slot,std::uint32_t value) noexcept {
    auto old=slot.load(std::memory_order_relaxed);
-   // The audio callback is the sole writer. UI can only consume via
-   // exchange(0), so two attempts plus fallback are strictly bounded.
+   // The audio callback is the sole positive writer. The control thread
+   // may clear a previously delivered value via CAS; this stays bounded.
    for(int attempt=0;attempt<2&&old<value;++attempt)
      if(slot.compare_exchange_weak(old,value,
           std::memory_order_relaxed,std::memory_order_relaxed))return;

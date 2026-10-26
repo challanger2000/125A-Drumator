@@ -162,8 +162,10 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    // The control actor consumes one MAX peak of each channel across all
    // blocks since its last request. Multiple Views read the Controller
    // cache; none of them exchanges atomic PCM peaks.
-   const auto peakL=meter_->mainL.exchange(0,std::memory_order_acq_rel);
-   const auto peakR=meter_->mainR.exchange(0,std::memory_order_acq_rel);
+   // Snapshot without consuming: rejected/throwing SDK attribute or host
+   // notification operations must not lose transients before delivery.
+   const auto peakL=meter_->mainL.load(std::memory_order_acquire);
+   const auto peakR=meter_->mainR.load(std::memory_order_acquire);
    const auto seq=meter_->blockSequence.load(std::memory_order_acquire);
    Steinberg::tresult status=Steinberg::kResultFalse;
    try{
@@ -175,6 +177,15 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
         attrs->setInt("Reset",meter_->clipResetEpoch.load(std::memory_order_acquire))==Steinberg::kResultOk)
        status=sendMessage(reply);
    }catch(...){status=Steinberg::kOutOfMemory;}
+   if(status==Steinberg::kResultOk) {
+     // Consume only the exact peaks successfully sent. If the audio callback
+     // published a greater peak meanwhile, preserve it for the next reply.
+     auto seenL=peakL,seenR=peakR;
+     (void)meter_->mainL.compare_exchange_strong(
+         seenL,0,std::memory_order_acq_rel,std::memory_order_acquire);
+     (void)meter_->mainR.compare_exchange_strong(
+         seenR,0,std::memory_order_acq_rel,std::memory_order_acquire);
+   }
    reply->release();return status;
  }
  if(std::strcmp(id,"Drumator.MeterClear")==0){

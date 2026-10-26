@@ -1,0 +1,45 @@
+# 125A Drumator – Schritt 13: unabhängige Übernahmeprüfung (26.10.2026)
+
+**Status: Entwicklungskandidat. V1-FINAL nicht freigegeben. Studio One / ASIO / 125A Plugin Tester: NOT RUN.**
+
+## Verifizierte Übergabe
+
+- Repository: `challanger2000/125A-Drumator`; Branch: `gui/ppg-blue-background-20261024`.
+- Ausgangs-HEAD: `fe01de080c2acdec61e5478aed0854d31dc7a224`. GitHub Actions [#40364959472](https://github.com/challanger2000/125A-Drumator/actions/runs/40364959472) hat für **exakt diesen Commit** SUCCESS gemeldet; Windows-Job: Build, CTest, SDK-Validator, Packaged-Audio-/Editor-Smokes erfolgreich. 23/23 CTests und 47/47 Validator sind der belegte **Ausgangsstand**.
+- Die Entwicklungs-Version bleibt 0.1.0; die abgenommenen GUI-/SONG-/Sample-Editor-Grafiken sind unverändert.
+- Die Baseline ist **kein veröffentlichtes FULL/V1-Release**. `125A-Engineering/RELEASE-REGISTER.md` enthält keinen Drumator als ausgeliefertes Finalprodukt; keine RELEASE-Freigabe aus Dateinamen abgeleitet.
+- Die Regeln aus `125A-Engineering/START-HERE.md`, den relevanten Engineering-Standards, `AGENTS.md` sowie dem bestehenden [S13-Audit](STEP13-TECHNICAL-AUDIT-IN-PROGRESS.md) wurden als Grundlage gelesen. Dies ist eine gezielte unabhängige Nachprüfung der S13-Meter-Reparaturen, **kein behaupteter neuer Vollaudit**.
+
+## Unabhängige Quellprüfung der S13-Reparaturen
+
+| Anforderung | Kontrollierter Code/Test | Bewertung vor neuem Windows-Lauf |
+|---|---|---|
+| Messwerte über VST3-Verbindung | `Processor::notify(MeterRequest)`, `Controller::notify(MeterSnapshot)`; S13-Integration mit absichtlich unauflösbarer lokaler `MeterId` | Source-Pfad vorhanden; real getrennter Host-Prozess **NOT RUN** |
+| Mehrere Editoren | `DrumatorView::pollMeter` liest gemeinsam Controller-Momentaufnahme; S13 zwei native Views | Testorakel vorhanden; Windows-PASS am Ausgangscommit |
+| Peak über lauten und stillen Block | `OutputMeter::accumulate/observe` und S13 Transienten-Orakel | Testorakel vorhanden; Windows-PASS am Ausgangscommit |
+| Mehrere aktive Outputs, exakt 0 dBFS | S13 unabhängiger `OutputMeter::observe`-Test sowie 11I tatsächlicher Processor-PCM-Render | Testorakel vorhanden; echtes Studio-One-Multi-Out **NOT RUN** |
+| GUI-/Nachrichten-Ausnahmegrenzen | `Controller::requestMeterSnapshot/clearMeterClips`, `Processor::notify`, S13 Alloc-Fault | Ursprüngliche Exception-Abwehr vorhanden, aber unten dokumentierte Datenverlustlücke |
+| Transport, Cold-SONG, Cycle, Rücksprung, 16 Stems, Recall | A10–A26/RE09–RE11/PackagedHost und S13-Bericht | Automatisierte Testpfade vorhanden; realer Studio-One-8.1.2-Host **NOT RUN** |
+
+### Neuer konkreter Befund S13-08 – verlorene Transienten bei fehlgeschlagener Meter-Antwort
+
+**Ursache:** Beim S13-Ausgangscommit entnahm `Processor::notify("Drumator.MeterRequest")` die MAIN-L/R-Peaks durch `exchange(0)`, *bevor* der Response-Transport erfolgreich sein konnte. Scheiterte danach ein `IAttributeList::setInt` oder `sendMessage` (Fehlerstatus oder C++-Exception), waren beide aus dem Audiothread gemessenen Peaks aus dem Transport-Akkumulator gelöscht. Der alte S13-Test injizierte ausschließlich einen Fehler während des **Controller-Anforderungsaufbaus** und konnte diesen späteren Fehler nicht entdecken.
+
+**Korrektur (dieser Commit):** Die MAIN-Peaks werden zunächst nur atomar gelesen. Erst nach `sendMessage(reply)==kResultOk` werden genau diese Werte durch bedingtes CAS auf null verbraucht; zwischenzeitlich vom Audiothread veröffentlichte **höhere** Werte bleiben für die nächste Anfrage erhalten. Dadurch entsteht weder ein zusätzlicher positiver Schreiber am Audio-Akkumulator noch ein Lock, Heapzugriff oder Hostaufruf in `process()`. CLIP bleibt weiterhin ein separater Sticky-Latch.
+
+**Regression:** `test13MeterTransportAndMultiEditor` injiziert anschließend sequenziell bis zu 32 tatsächliche C++-Allokationsfehler in `Processor::notify` inklusive später SDK-Nachrichtenattribute. Fehlgeschlagene Antworten dürfen keine Peaks entfernen oder Exceptions aus dem Host-Callback entweichen lassen. Der positive Kontrollpfad fordert anschließend nachweislich die korrekte Controller-L/R-Antwort und die einmalige erfolgreiche Konsumtion. Fehlerfälle, bei denen gar keine spätere Allokation erreicht wird, zählen **nicht** als ausreichende Abdeckung. Der unveränderte Mehrfach-Editor-/CLIP-/Decay-Test bleibt aktiv.
+
+**Abnahme:** Die Tests müssen auf Windows für den exakten neuen HEAD ausgeführt und im Job nachgewiesen werden; vor dem Build ist dies **NOT RUN**. `kResultOk` bestätigt nur die lokale Host-Annahme der Nachricht, keine garantierte spätere Zustellung über einen externen IPC-Prozess. Ein echtes Mehrprozess-Host- und Unterbrechungs-/Recovery-Szenario bleibt offen.
+
+## Offene reale Freigabeprüfungen – alle NOT RUN
+
+1. **Studio One 8.1.2 Pro auf Windows 11/ASIO:** Stop/Play, Cycle an/aus, nahtlose Sample-Tails über Loop, Start ab Takt 2, tempo-/blockgrößenabhängiges Timing und 1-/2-Takt-Pattern-Song-Übergänge, unter hörbarer 16-Output-Last.
+2. **Multi-Out:** MAIN und DRUM 2–16 im Host aktivieren, routen und in einem gespeicherten Song erneut laden; Instrument-Zuordnung sowie parallele CLIP-Anzeigen getrennt prüfen.
+3. **Realer Projekt-Recall:** SAVED Kit mit eingebetteten Samples, Song A–H, Misch- und Master-Reglern, Zoom und Audio-Ausgängen; Studio One schließen, neu öffnen und Audio-/Pattern-/GUI-Zustand sowie Sample-Navigation vergleichen.
+4. **Mehrprozess-IPC:** echte getrennte Audio-/Controller-Adressräume, Editor-Mehrfachinstanz, wiederholte Polls, Stop, Reset, Verbindungsabbruch/-aufbau, ungeordnete/verspätete Antworten. Der Registry-Null-Test ersetzt dies ausdrücklich nicht.
+5. **125A Plugin Tester:** gegen das tatsächlich für Windows gebaute `.vst3` aus dem neuen Commit, mit nachvollziehbarem Report und Versions-/Binäridentität. Kein Tester-PASS ohne ausgeführtes Tool.
+6. **Abschlusskontrolle:** den gesamten S13-Bericht gegen Code, Nachweise und noch offene Negativpfade freigeben lassen. Kein automatisiertes PASS setzt eine Owner-/V1-Freigabe voraus.
+
+## Scope und Statusregeln
+
+Nur `OutputMeter.h` (Kommentar-Klarstellung), `DrumatorProcessor.cpp` (gezielter Transport-Fix), `WindowsIntegration.cpp` (Test) und dieser Bericht. Keine DSP-, Sequencer-, GUI-, State-, Parameter-, Lizenz- oder Versionsänderung. **Der Windows-Lauf für diesen neuen Commit ist zunächst NOT RUN und darf erst mit eindeutig zugeordnetem grünen CI-Nachweis auf PASS geändert werden.** GitHub Actions wurden durch einen gebündelten, nicht spekulativen Code-/Testcommit ausgelöst; weitere Runs nur bei konkretem Bedarf.

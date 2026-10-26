@@ -118,6 +118,7 @@ struct IntegrationAccess {
  static const auto& editorLeft(const DrumatorView& view){return view.sampleEditorWave_;}
  static const auto& editorRight(const DrumatorView& view){return view.sampleEditorWaveRight_;}
  static bool editorStereo(const DrumatorView& view){return view.sampleEditorStereo_;}
+ static std::shared_ptr<OutputMeter> processorMeter(const Processor& p){return p.meter_;}
  static void pollMeter(DrumatorView& view){view.pollMeter();}
  static std::array<float,4> meterPaintState(const DrumatorView& v){return {v.mainMeterL_,v.mainMeterR_,v.holdMeterL_,v.holdMeterR_};}
  static std::uint32_t editorFrameCount(const DrumatorView& view){return view.sampleEditorFrames_;}
@@ -1176,6 +1177,50 @@ void test13MeterTransportAndMultiEditor(){
        "S13 CLIP reset allocation failure escaped host callback");
  click(*b,UiCompactLayout::meterResetLeft+2.,80.);
  check(f.c->meterState().clip==0,"S13 GUI IPC clip reset failed");
+ // Inject real C++ allocation failures in the Processor's reply, not
+ // only when the Controller allocates its outgoing MeterRequest. Even an
+ // unsuccessful later setInt/sendMessage must leave both peaks pending.
+ auto* meterQuery=f.c->allocateMessage();
+ check(meterQuery!=nullptr,"S13 fault query allocation");
+ meterQuery->setMessageID("Drumator.MeterRequest");
+ auto processorMeter=IntegrationAccess::processorMeter(*f.p);
+ check(processorMeter!=nullptr,"S13 real Processor meter missing");
+ const auto expectedLeft=OutputMeter::encode(.83f);
+ const auto expectedRight=OutputMeter::encode(.41f);
+ unsigned laterReplyFailures=0;
+ for(long faultIndex=0;faultIndex<32;++faultIndex) {
+   processorMeter->mainL.store(expectedLeft,std::memory_order_release);
+   processorMeter->mainR.store(expectedRight,std::memory_order_release);
+   processorMeter->blockSequence.fetch_add(1,std::memory_order_release);
+   allocationFail=faultIndex;
+   Steinberg::tresult replyStatus=Steinberg::kResultFalse;
+   bool escaped=false;
+   try {replyStatus=f.p->notify(meterQuery);}
+   catch(...) {escaped=true;}
+   const bool injected=allocationFail==-1;
+   allocationFail=-1;
+   check(!escaped,"S13 Processor meter reply fault escaped host notify");
+   if(injected&&replyStatus!=Steinberg::kResultOk) {
+     check(processorMeter->mainL.load(std::memory_order_acquire)>=expectedLeft&&
+           processorMeter->mainR.load(std::memory_order_acquire)>=expectedRight,
+           "S13 failed reply consumed undelivered transients");
+     if(faultIndex>=3)++laterReplyFailures;
+   }
+ }
+ check(laterReplyFailures>0,"S13 later reply allocation fault not exercised");
+ // Positive control: a successful response presents the peaks in the real
+ // controller cache, then consumes them. It must not resend stale levels.
+ processorMeter->mainL.store(expectedLeft,std::memory_order_release);
+ processorMeter->mainR.store(expectedRight,std::memory_order_release);
+ processorMeter->blockSequence.fetch_add(1,std::memory_order_release);
+ check(f.p->notify(meterQuery)==Steinberg::kResultOk&&
+       f.c->meterState().left>=expectedLeft&&
+       f.c->meterState().right>=expectedRight&&
+       processorMeter->mainL.load(std::memory_order_acquire)==0&&
+       processorMeter->mainR.load(std::memory_order_acquire)==0,
+       "S13 successful reply did not deliver and consume the peaks");
+ meterQuery->release();
+ evidence("S13 failed Processor meter reply retains peaks; successful delivery consumes PASS");
  for(int i=0;i<48;++i){IntegrationAccess::pollMeter(*a);IntegrationAccess::pollMeter(*b);}
  check(IntegrationAccess::meterPaintState(*a)[0]<.01f&&
        IntegrationAccess::meterPaintState(*b)[0]<.01f,
