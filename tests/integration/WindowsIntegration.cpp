@@ -2224,14 +2224,14 @@ void testAbsoluteSongStartRest(){
  auto* view=IntegrationAccess::view(*f.c,0);
  click(*view,(UiCompactLayout::songEdit.left+UiCompactLayout::songEdit.right)/2.,
        UiCompactLayout::headerButtonTop+13.);
- click(*view,982.,321.);
+ click(*view,UiSongLayout::startPlusLeft+12.,181.);
  check(f.c->songStartBar()==3,"SONG START + native UI ignored");
- click(*view,952.,321.);
+ click(*view,UiSongLayout::startMinusLeft+12.,181.);
  check(f.c->songStartBar()==2,"SONG START - native UI ignored");
- click(*view,1048.,321.);
- check(f.c->songStartBar()==1,"SONG START BAR 1 reset ignored");
+ click(*view,UiSongLayout::startResetLeft+12.,181.);
+ check(f.c->songStartBar()==1,"SONG START RESET native UI ignored");
  click(*view,UiSongLayout::cellX(0)+20.,UiSongLayout::cellY(0)+15.);
- click(*view,160.,388.);
+ click(*view,UiSongLayout::restLeft+30.,352.);
  check(f.c->songEntry(0).pattern==SongChain::kRest,
        "REST native song editor selection ignored");
  evidence("SONGSTART absolute BAR 2/4, pre-roll boundary, REST audible tail and B continuation, DM17 recall, native GUI PASS");
@@ -2484,7 +2484,7 @@ void testPagedSongEditor(){
  // This page has no existing position: its Pattern/Length controls must
  // neither highlight nor edit a position that is hidden on page one.
  const auto originalHidden=f.c->songEntry(0);
- click(*v,115.+2.*56.+25.,352.);
+ click(*v,UiSongLayout::patternLeft+2.*UiSongLayout::patternPitch+20.,352.);
  click(*v,707.,352.);
  check(f.c->songEntry(0).pattern==originalHidden.pattern&&
        f.c->songEntry(0).steps==originalHidden.steps,
@@ -2494,7 +2494,7 @@ void testPagedSongEditor(){
  check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
        "UX song add slot 17 via its own cell failed");
  captureVstgui(*v,"ux-song-page-2",1.0);
- click(*v,115.+2.*56.+25.,352.); // select Pattern C for entry 17
+ click(*v,UiSongLayout::patternLeft+2.*UiSongLayout::patternPitch+20.,352.); // select Pattern C for entry 17
  check(f.c->songEntry(16).pattern==2,"UX song pattern selector missed selected entry");
  click(*v,707.,352.); // half bar
  check(f.c->songEntry(16).steps==8,"UX song length selector missed selected entry");
@@ -2526,6 +2526,53 @@ void testPagedSongEditor(){
        IntegrationAccess::songSlot(*v)<f.c->songCount(),
        "UX Song page/selection left outside recalled chain");
  evidence("UX paged Song editor selection, no offscreen edits, recall and 64-slot navigation PASS");
+}
+void testSongFinalGuiAlignment(){
+ Fixture f;auto kit=namedKit('X',4);
+ kit.songEnabled=1;kit.songStartBar=2;
+ check(kit.chain.setCount(3)&&kit.chain.configure(0,0,16)&&
+       kit.chain.configure(1,SongChain::kRest,8)&&
+       kit.chain.configure(2,2,32),"GUIFINAL chain fixture");
+ f.kit(kit);f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ click(*v,1077.,114.);
+ check(v->getViewSize().getHeight()==UiCompactLayout::songEditorHeight,
+       "GUIFINAL song editor unexpectedly resized");
+ // Verify gaps and eliminated legacy hitboxes, not just isolated buttons.
+ const auto entryBefore=f.c->songEntry(0);
+ click(*v,UiSongLayout::patternLeft+UiSongLayout::patternWidth+2.,352.);
+ check(f.c->songEntry(0).pattern==entryBefore.pattern,
+       "GUIFINAL pattern gap falsely clickable");
+ click(*v,UiSongLayout::restLeft+30.,352.);
+ check(f.c->songEntry(0).pattern==SongChain::kRest,
+       "GUIFINAL adjoining REST choice ignored");
+ click(*v,160.,388.);
+ check(f.c->songEntry(0).pattern==SongChain::kRest,
+       "GUIFINAL removed standalone REST hotspot still active");
+ click(*v,UiSongLayout::patternLeft+2.*UiSongLayout::patternPitch+15.,352.);
+ check(f.c->songEntry(0).pattern==2,"GUIFINAL pattern C missed after REST");
+ click(*v,UiSongLayout::restLeft+30.,352.);
+ click(*v,UiSongLayout::startPlusLeft+15.,181.);
+ check(f.c->songStartBar()==3,"GUIFINAL header plus missed");
+ click(*v,UiSongLayout::startMinusLeft+15.,181.);
+ check(f.c->songStartBar()==2,"GUIFINAL header minus missed");
+ click(*v,982.,321.); // old + control is gone
+ check(f.c->songStartBar()==2,"GUIFINAL removed start hotspot still active");
+ for(const auto factor:{1.0,1.3}){
+   const std::array<std::uint8_t,5> state{{'D','Z','M','2',
+       static_cast<std::uint8_t>(factor==1.0?0:2)}};
+   drumator::qa::ByteStream stream(const_cast<std::uint8_t*>(state.data()),state.size());
+   check(f.c->setState(&stream)==kResultOk&&v->zoomMatches(factor)&&
+         f.c->songEntry(0).pattern==SongChain::kRest&&f.c->songStartBar()==2,
+         "GUIFINAL actual 100/130 editor zoom changed Song state");
+   captureVstgui(*v,factor==1.0?"song-final-alignment-rest-bar2-100":
+                                    "song-final-alignment-rest-bar2-130",factor);
+ }
+ click(*v,UiSongLayout::startResetLeft+25.,181.);
+ check(f.c->songStartBar()==1,"GUIFINAL RESET missed");
+ click(*v,UiSongLayout::startResetLeft+25.,181.);
+ check(f.c->songStartBar()==1,"GUIFINAL disabled RESET changed state");
+ evidence("GUIFINAL aligned SONG START, adjacent REST, exact gaps and native 100/130 zoom PASS");
 }
 void testSongDesignReview12A(){
  Fixture f;auto kit=namedKit('X',4);
@@ -3150,6 +3197,7 @@ int main(int argc,char** argv){
  run("D11 control signed extreme deltas",testControlExtremeDeltas);
  run("UX compact Song viewport",testSongCompactViewport);
  run("Step 12A native SONG design review at 100/130",testSongDesignReview12A);
+ run("GUIFINAL SONG START/REST layout, 100/130 genuine pixels",testSongFinalGuiAlignment);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);
  run("N12 real WAV sample folder previous/next",testRealSampleFolderStepping);
