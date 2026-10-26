@@ -610,8 +610,8 @@ int main(int argc,char** argv) {
            static_cast<const std::uint8_t*>(fullState.getData()),
            fullState.getCursor(),fullKit),
          "Full kit encoded state failed CRC or WAV validation");
- for(const auto bus:fullKit.output)
-   require(bus==0,"V1FIX freshly built kit must keep every instrument on MAIN");
+ for(const auto assignedBus:fullKit.output)
+   require(assignedBus==0,"V1FIX freshly built kit must keep every instrument on MAIN");
  for(int row=0;row<16;++row)
    require(fullKit.wav[static_cast<std::size_t>(row)]==
             makeWav(32,true,0.10f+static_cast<float>(row)*0.025f),
