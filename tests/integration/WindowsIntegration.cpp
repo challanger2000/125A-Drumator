@@ -1089,8 +1089,12 @@ void test13MeterTransportAndMultiEditor(){
  auto* a=IntegrationAccess::view(*f.c,0);
  auto* b=IntegrationAccess::view(*f.c,1);
  check(f.c->previewSample(0),"S13 meter first preview");
- AuditAudioBlock render;
- check(f.p->process(render.data)==kResultOk,"S13 processor render failed");
+ std::array<float,256> testLeft{},testRight{};
+ float* channels[]{testLeft.data(),testRight.data()};
+ AudioBusBuffers bus{};bus.numChannels=2;bus.channelBuffers32=channels;
+ ProcessData rendered{};rendered.numSamples=256;rendered.numOutputs=1;
+ rendered.outputs=&bus;rendered.symbolicSampleSize=kSample32;
+ check(f.p->process(rendered)==kResultOk,"S13 processor render failed");
  // Force an unavailable process-local meter registry on the Controller
  // while keeping the real two-component VST3 connection intact.
  auto* linkMessage=f.c->allocateMessage();
