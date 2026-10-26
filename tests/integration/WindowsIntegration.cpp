@@ -768,6 +768,68 @@ void testWaveEditor11FFlacAndStatus(){
        "W11F failed FLAC imported audio in empty row");
  evidence("W11F real filesystem WAV + libFLAC stereo import, 1024 frames, 256x2 PCM envelope bins, normal View status and corrupt FLAC rejection PASS");
 }
+void testWaveEditor11FScrollNumeric(){
+ constexpr std::size_t frames=4096;
+ Fixture f;auto kit=namedKit('X',4);
+ auto& bytes=kit.wav[0];bytes.resize(44+frames*8);
+ auto put=[&](std::size_t at,std::uint32_t v,unsigned n){
+   for(unsigned k=0;k<n;++k)bytes[at+k]=static_cast<std::uint8_t>(v>>(8*k));
+ };
+ std::memcpy(bytes.data(),"RIFF",4);put(4,static_cast<std::uint32_t>(bytes.size()-8),4);
+ std::memcpy(bytes.data()+8,"WAVEfmt ",8);
+ put(16,16,4);put(20,3,2);put(22,2,2);put(24,48000,4);
+ put(28,48000*8,4);put(32,8,2);put(34,32,2);
+ std::memcpy(bytes.data()+36,"data",4);put(40,frames*8,4);
+ std::array<float,frames> left{},right{};
+ for(std::size_t i=0;i<frames;++i){
+   // Unique channel- and position-dependent values; extrema are independently
+   // calculated from the PCM source rather than Controller's cached envelopes.
+   left[i]=static_cast<float>((i%223)/223.0-.5);
+   right[i]=static_cast<float>((i%137)/137.0-.65);
+   std::memcpy(bytes.data()+44+i*8,&left[i],4);
+   std::memcpy(bytes.data()+48+i*8,&right[i],4);
+ }
+ f.kit(kit);f.open();auto* view=IntegrationAccess::view(*f.c,0);
+ check(IntegrationAccess::openSampleEditorForCapture(*view,0),"W11F scroll editor open");
+ auto validate=[&](std::uint32_t expectedFirst,std::uint32_t expectedLast){
+   const auto [first,last]=IntegrationAccess::editorViewport(*view);
+   check(first==expectedFirst&&last==expectedLast,
+         "W11F scroll viewport frame boundaries incorrect");
+   for(std::size_t bin=0;bin<256;++bin){
+     const auto a=first+(static_cast<std::uint64_t>(last-first)*bin)/256;
+     const auto b=first+(static_cast<std::uint64_t>(last-first)*(bin+1))/256;
+     float minL=left[a],maxL=left[a],minR=right[a],maxR=right[a];
+     for(std::size_t i=a+1;i<std::max<std::size_t>(a+1,b);++i){
+       minL=std::min(minL,left[i]);maxL=std::max(maxL,left[i]);
+       minR=std::min(minR,right[i]);maxR=std::max(maxR,right[i]);
+     }
+     const auto l=IntegrationAccess::editorLeft(*view)[bin];
+     const auto r=IntegrationAccess::editorRight(*view)[bin];
+     check(std::abs(l.minimum-minL)<1e-6f&&std::abs(l.maximum-maxL)<1e-6f&&
+           std::abs(r.minimum-minR)<1e-6f&&std::abs(r.maximum-maxR)<1e-6f,
+           "W11F scrolled stereo viewport extrema differ from independent source PCM");
+   }
+ };
+ validate(0,4096);
+ click(*view,300,473);
+ validate(1024,3072);
+ auto drag=[&](double from,double to){
+   VSTGUI::CPoint p(from,395.);
+   view->onMouseDown(p,VSTGUI::CButtonState(VSTGUI::kLButton));
+   p.x=to;view->onMouseMoved(p,VSTGUI::CButtonState(VSTGUI::kLButton));
+   view->onMouseUp(p,VSTGUI::CButtonState{});
+ };
+ drag(640,994);
+ validate(2048,4096);
+ drag(850,284);
+ validate(0,2048);
+ click(*view,380,473);
+ validate(0,4096);
+ click(*view,300,473);
+ click(*view,470,473);
+ validate(0,4096);
+ evidence("W11F actual scroll thumb drags: FIT/ZOOM, both rail ends, 256x2 independently computed PCM bin extrema each viewport PASS");
+}
 void testWaveEditor11FStereoFadePcm(){
  Fixture f;auto kit=namedKit('X',2);
  kit.wav[0]=constantStereo(.5f,-.25f);
@@ -2313,6 +2375,7 @@ int main(int argc,char** argv){
  run("W11D native mouse-driven wave editor controls",testWaveEditorRealMouseControls);
  run("W11F real WAV/FLAC imports and status",testWaveEditor11FFlacAndStatus);
  run("W11F independent stereo fade PCM",testWaveEditor11FStereoFadePcm);
+ run("W11F mouse-scroll source PCM numeric oracle",testWaveEditor11FScrollNumeric);
  run("VSTGUI long WAV display full/zoom at 100/130",testWaveEditorLongCaptures);
   run("GUI physical step state/raster toggle",testGuiPhysicalStepsRaster);
  run("UX direct pattern length",testPatternLengthControls);
