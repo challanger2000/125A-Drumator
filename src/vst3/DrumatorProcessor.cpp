@@ -28,10 +28,26 @@ constexpr auto kStateMagicV3Local=kStateMagicV3; // plus visible row count
 
 }
 Processor::Processor() {
+ meter_=std::make_shared<OutputMeter>();
+ meterId_=nextMeterId.fetch_add(1,std::memory_order_relaxed);
+ registerMeter(meterId_,meter_);
  setControllerClass(kControllerCID);
  for(auto& length:patternLengths_)length.store(32,std::memory_order_relaxed);
  for(std::size_t row=0;row<kRows;++row)rowOutput_[row].store(static_cast<std::uint8_t>(row));
  // The initial test pattern is supplied by AtomicPatternBank.
+}
+Processor::~Processor(){unregisterMeter(meterId_);}
+Steinberg::tresult PLUGIN_API Processor::connect(Steinberg::Vst::IConnectionPoint* other){
+ const auto result=AudioEffect::connect(other);
+ if(result!=Steinberg::kResultOk)return result;
+ if(auto* message=allocateMessage()){
+   message->setMessageID("Drumator.OutputMeterLink");
+   auto* attr=message->getAttributes();
+   if(attr&&attr->setInt("MeterId",static_cast<Steinberg::int64>(meterId_))==Steinberg::kResultOk)
+     (void)sendMessage(message);
+   message->release();
+ }
+ return result;
 }
 Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context) {
  const auto result=AudioEffect::initialize(context);
@@ -1383,6 +1399,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  }
  // Conservative: do not claim silence just because a short sound ended within
  // the current block. The host can determine silence independently.
+ meter_->observe(data,activeStemMask_.load(std::memory_order_relaxed));
  output.silenceFlags=0;
  for(Steinberg::int32 bus=1;bus<data.numOutputs;++bus)
    data.outputs[bus].silenceFlags=0;

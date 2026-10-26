@@ -8,6 +8,7 @@
 #include <array>
 #include "core/SequencerCore.h"
 #include "core/SampleEdit.h"
+#include "vstgui/lib/cvstguitimer.h"
 #include <cstdint>
 namespace VSTGUI {class CTextEdit; class CBitmap;}
 namespace drumator {
@@ -46,6 +47,11 @@ public:
  std::size_t visibleRowsForHit() const noexcept;
  bool sampleDropTargetAt(double x,double y) const noexcept;
 private:
+ VSTGUI::SharedPointer<VSTGUI::CVSTGUITimer> meterTimer_{};
+ float mainMeterL_{0.f},mainMeterR_{0.f};
+ float holdMeterL_{0.f},holdMeterR_{0.f};
+ unsigned holdTicksL_{0},holdTicksR_{0};
+ void pollMeter() noexcept;
  Controller& controller_;
  VSTGUI::CBitmap* backgroundBitmap_{nullptr};
  VSTGUI::CBitmap* productLogoBitmap_{nullptr};

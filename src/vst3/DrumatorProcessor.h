@@ -10,6 +10,7 @@
 #include "core/AtomicPatternSelection.h"
 #include "core/PatternEventTimeline.h"
 #include "core/MasterGainRamp.h"
+#include "core/OutputMeter.h"
 #include "core/AtomicRowMix.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include <array>
@@ -68,6 +69,8 @@ public:
 class Processor final:public Steinberg::Vst::AudioEffect {
 public:
  Processor();
+ ~Processor() override;
+ Steinberg::tresult PLUGIN_API connect(Steinberg::Vst::IConnectionPoint*) SMTG_OVERRIDE;
  static Steinberg::FUnknown* createInstance(void*) {
    return static_cast<Steinberg::Vst::IAudioProcessor*>(new Processor());
  }
@@ -86,6 +89,8 @@ public:
  Steinberg::tresult PLUGIN_API setState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::uint32 PLUGIN_API getTailSamples() SMTG_OVERRIDE;
 private:
+ std::uint64_t meterId_{0};
+ std::shared_ptr<OutputMeter> meter_{};
  bool publishRestoredKit(const KitState& state,double rate); // control only
  std::mutex kitMutex_{};
  // Restore barrier: no audio callback may consume a partially installed kit.

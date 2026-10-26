@@ -25,6 +25,18 @@
 #include <vector>
 
 namespace drumator {
+Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* message){
+ if(message&&message->getMessageID()&&
+    std::strcmp(message->getMessageID(),"Drumator.OutputMeterLink")==0){
+    Steinberg::int64 id=0;
+    auto* attr=message->getAttributes();
+    if(!attr||attr->getInt("MeterId",id)!=Steinberg::kResultOk||id<=0)
+      return Steinberg::kResultFalse;
+    meter_=findMeter(static_cast<std::uint64_t>(id));
+    return meter_?Steinberg::kResultOk:Steinberg::kResultFalse;
+ }
+ return EditController::notify(message);
+}
 Controller::~Controller() {
  if(reservedPreviewStop_) {
    reservedPreviewStop_->release();

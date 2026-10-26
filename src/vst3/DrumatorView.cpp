@@ -380,13 +380,12 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
    // 101-frame knob sprite without redundant concentric outlines.
    c->setFrameColor(VSTGUI::CColor{74,113,139,255});
    c->drawEllipse({cx-r+1.,cy-r+1.,cx+r-1.,cy+r-1.},VSTGUI::kDrawStroked);
-   // Restrained functional blue scale ticks on the free left half of the
-   // metal bezel. Right side stays clear for the existing numeric value.
-   // Their brightness follows the real normalized knob value, not decoration.
+   // 270-degree scale follows the real knob sprite's -135..+135 degree
+   // travel. PAN/PITCH midpoint is the top/zero mark.
    constexpr double kPi=3.14159265358979323846;
    const int activeTicks=static_cast<int>(std::lround(fraction*9.));
    for(int tick=0;tick<9;++tick) {
-     const double angle=(-142.+13.*tick)*kPi/180.;
+     const double angle=(-135.+270.*static_cast<double>(tick)/8.)*kPi/180.;
      const double dx=std::sin(angle),dy=-std::cos(angle);
      c->setFrameColor(tick<activeTicks?
          VSTGUI::CColor{53,164,218,255}:VSTGUI::CColor{27,58,77,255});
@@ -403,18 +402,17 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
    c->drawEllipse({cx-27.,cy-27.,cx+27.,cy+27.},VSTGUI::kDrawFilled);
    c->setFrameColor(VSTGUI::CColor{78,117,142,255});
    c->drawEllipse({cx-26.,cy-26.,cx+26.,cy+26.},VSTGUI::kDrawStroked);
-   // The reference uses individual illuminated blue pilot lenses, not
-   // tiny radial strokes. Keep the arc left of the dial: the legend above
-   // and the numeric readout to its right must remain unobstructed.
+   // Keep the reference illuminated lenses, but map them to the full
+   // physical rotary travel rather than the former one-sided 90-degree arc.
    constexpr double kPi=3.14159265358979323846;
    constexpr int kLenses=11;
    const int litLenses=static_cast<int>(std::lround(fraction*kLenses));
    for(int tick=0;tick<kLenses;++tick){
-     const double angle=(-140.+9.*tick)*kPi/180.;
+     const double angle=(-135.+270.*static_cast<double>(tick)/10.)*kPi/180.;
      const double dx=std::sin(angle),dy=-std::cos(angle);
      const double x=cx+dx*32.,y=cy+dy*32.;
      const bool lit=tick<litLenses;
-     const double radius=lit?2.2:1.65;
+     const double radius=lit?1.9:1.5;
      c->setFillColor(lit?VSTGUI::CColor{54,177,238,255}:
                          VSTGUI::CColor{42,99,139,255});
      c->drawEllipse({x-radius,y-radius,x+radius,y+radius},VSTGUI::kDrawFilled);
@@ -461,8 +459,8 @@ void drawRotary(VSTGUI::CDrawContext* c,VSTGUI::CBitmap* sprite,double cx,double
  // and to the right of the dial, rather than competing with its midpoint.
  // Swing 0..50, Humanize 0..100 and Master 0..200 remain unchanged.
  c->drawString(value,rowModule?
-     VSTGUI::CRect{cx+34.,cy-12.,cx+70.,cy+13.}:
-     VSTGUI::CRect{cx+26.,cy+7.,cx+72.,cy+24.},VSTGUI::kLeftText);
+     VSTGUI::CRect{cx+38.,cy-11.,cx+73.,cy+13.}:
+     VSTGUI::CRect{cx+38.,cy+6.,cx+77.,cy+24.},VSTGUI::kLeftText);
 }
 } // anonymous namespace: shared rotary painter and palette
 // VSTGUI 4.12 drag events contain a UTF-8 file path, not sample bytes.
@@ -887,9 +885,29 @@ void DrumatorView::refreshFromHost(bool relayout) {
    invalid();
  }
 }
+void DrumatorView::pollMeter() noexcept {
+ const auto link=controller_.meterLink();
+ if(link){
+   const float observedL=OutputMeter::decode(link->mainL.exchange(0,std::memory_order_acq_rel));
+   const float observedR=OutputMeter::decode(link->mainR.exchange(0,std::memory_order_acq_rel));
+   mainMeterL_=std::max(observedL,mainMeterL_*0.86f);
+   mainMeterR_=std::max(observedR,mainMeterR_*0.86f);
+   if(observedL>=holdMeterL_){holdMeterL_=observedL;holdTicksL_=18;}
+   else if(holdTicksL_>0)--holdTicksL_;
+   else holdMeterL_=std::max(mainMeterL_,holdMeterL_*0.86f);
+   if(observedR>=holdMeterR_){holdMeterR_=observedR;holdTicksR_=18;}
+   else if(holdTicksR_>0)--holdTicksR_;
+   else holdMeterR_=std::max(mainMeterR_,holdMeterR_*0.86f);
+ }
+ invalid();
+}
 bool DrumatorView::attached(VSTGUI::CView* parent) {
  const auto result=CView::attached(parent);
- if(result)adjustEditorHeight();
+ if(result){
+   adjustEditorHeight();
+   meterTimer_=VSTGUI::makeOwned<VSTGUI::CVSTGUITimer>(
+     [this](VSTGUI::CVSTGUITimer*){if(getFrame())pollMeter();},33);
+ }
  return result;
 }
 bool DrumatorView::adjustEditorHeight() {
@@ -989,6 +1007,40 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                 UiCompactLayout::patternButtonWidth);
  groupTitle("TOOLS",UiCompactLayout::patternTools.left,UiCompactLayout::patternTools.right);
  groupTitle("SONG MODE",UiCompactLayout::songToggle.left,UiCompactLayout::songEdit.right);
+ // Meter reads actual post-master Processor output; MAIN L/R and sticky
+ // clipping of all active buses are deliberately independent.
+ const auto meter=controller_.meterLink();
+ const std::uint32_t clipBits=meter?meter->clipMask.load(std::memory_order_acquire):0u;
+ const auto drawMeter=[&](double x,float level,float peak){
+   const auto lit=[&](float a){return a>0.f?20.*std::log10(static_cast<double>(a)):-120.;};
+   const double db=lit(level),peakDb=lit(peak);
+   for(int index=0;index<11;++index){
+      const double threshold=-54.+6.*index;
+      const auto y=146.-index*5.;
+      const auto color=index<7?VSTGUI::CColor{34,177,115,255}:
+          index<9?VSTGUI::CColor{243,192,52,255}:VSTGUI::CColor{237,79,61,255};
+      c->setFillColor(db>=threshold?color:VSTGUI::CColor{24,45,54,255});
+      c->drawRect({x,y,x+7.,y+4.},VSTGUI::kDrawFilled);
+      if(peakDb>=threshold&&peakDb<threshold+6.){
+         c->setFrameColor(VSTGUI::CColor{223,239,248,255});
+         c->drawRect({x,y,x+7.,y+4.},VSTGUI::kDrawStroked);
+      }
+   }
+ };
+ drawMeter(1255.,mainMeterL_,holdMeterL_);
+ drawMeter(1267.,mainMeterR_,holdMeterR_);
+ c->setFont(VSTGUI::kNormalFont,10);
+ c->setFontColor(clipBits?VSTGUI::CColor{255,95,73,255}:
+                      VSTGUI::CColor{120,162,181,255});
+ char clipText[16]="CLIP";
+ if(clipBits){
+   for(unsigned bus=0;bus<16;++bus)
+      if(clipBits&(1u<<bus)){
+         std::snprintf(clipText,sizeof(clipText),bus==0?"MAIN!":"OUT %u!",bus+1);
+         break;
+      }
+ }
+ c->drawString(clipText,{1226.,66.,1279.,85.},VSTGUI::kRightText);
  // MASTER caption moves toward its dial; SWING and HUMANIZE stay put.
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
  drawControl(c,{UiCompactLayout::barOne.left,UiCompactLayout::headerButtonTop,
@@ -1733,7 +1785,10 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  const double x=pos.x,y=pos.y;
  if(!(buttons&VSTGUI::kLButton))return VSTGUI::kMouseEventNotHandled;
  const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
-
+ if(!sampleEditorOpen_&&x>=1248.&&x<=1280.&&y>=66.&&y<=151.){
+   if(auto link=controller_.meterLink())link->clearClips();
+   invalid();return done;
+ }
  if(sampleEditorOpen_) {
    if(UiWaveEditorLayout::scrollbar.hit(x,y)){
      sampleEditorDrag_=3;scrollEditorWave(x);return VSTGUI::kMouseEventHandled;

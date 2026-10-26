@@ -10,6 +10,8 @@
 #include "core/KitEditGeneration.h"
 #include "core/VisibleRows.h"
 #include "core/KitState.h"
+#include "core/OutputMeter.h"
+#include <memory>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -25,6 +27,8 @@ public:
    return static_cast<Steinberg::Vst::IEditController*>(new Controller());
  }
  ~Controller() override;
+ Steinberg::tresult PLUGIN_API notify(Steinberg::Vst::IMessage*) SMTG_OVERRIDE;
+ std::shared_ptr<OutputMeter> meterLink() const noexcept {return meter_;}
  Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream*) SMTG_OVERRIDE;
@@ -132,6 +136,7 @@ public:
    return row<kRows?customNames_[row]:empty;
  }
 private:
+ std::shared_ptr<OutputMeter> meter_{};
  void notifyViews(bool relayout);
  bool processorConfirmsPattern(unsigned requested);
  bool reservePreviewStop() noexcept;
