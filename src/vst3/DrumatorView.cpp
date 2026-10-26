@@ -1348,7 +1348,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      if(index<count){
        const auto entry=controller_.songEntry(index);
        std::snprintf(cell,sizeof(cell),"%02u   %c   %s",
-           static_cast<unsigned>(index+1),static_cast<char>('A'+entry.pattern),
+           static_cast<unsigned>(index+1),static_cast<char>(entry.pattern==SongChain::kRest?'R':'A'+entry.pattern),
            entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS");
      }else std::snprintf(cell,sizeof(cell),"%02u   + ENTRY",
              static_cast<unsigned>(index+1));
@@ -1362,16 +1362,17 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      c->setFontColor(selected?VSTGUI::CColor{245,252,255,255}:letters);
      if(index<count){
        const auto entry=controller_.songEntry(index);
-       char number[8]{},pattern[4]{};
+       char number[8]{},pattern[8]{};
        std::snprintf(number,sizeof(number),"%02u",static_cast<unsigned>(index+1));
-       std::snprintf(pattern,sizeof(pattern),"%c",static_cast<char>('A'+entry.pattern));
+       if(entry.pattern==SongChain::kRest)std::snprintf(pattern,sizeof(pattern),"REST");
+       else std::snprintf(pattern,sizeof(pattern),"%c",static_cast<char>('A'+entry.pattern));
        const char* length=entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS";
        // Fixed insets live strictly within the original 150x45 hitbox.
        c->drawString(number,{sx+9.,sy+3.,sx+35.,sy+41.},VSTGUI::kCenterText);
        // Reuse the existing selected-blue ink for all SONG pattern letters:
        // the darker generic accent loses contrast against the keycap highlight.
        c->setFontColor(VSTGUI::CColor{170,226,253,255});
-       c->drawString(pattern,{sx+38.,sy+3.,sx+63.,sy+41.},VSTGUI::kCenterText);
+       c->drawString(pattern,{sx+34.,sy+3.,sx+69.,sy+41.},VSTGUI::kCenterText);
        c->setFontColor(selected?VSTGUI::CColor{245,252,255,255}:letters);
        c->drawString(length,{sx+69.,sy+3.,sx+143.,sy+41.},VSTGUI::kCenterText);
      }else{
@@ -1384,6 +1385,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      std::snprintf(selectionLabel,sizeof(selectionLabel),"POSITION %02u SELECTED",static_cast<unsigned>(songSlot_+1));
    else std::snprintf(selectionLabel,sizeof(selectionLabel),"ADD OR SELECT AN ENTRY FIRST");
    c->drawString(selectionLabel,{16,308,490,334},VSTGUI::kLeftText);
+   char startLabel[48]{};
+   std::snprintf(startLabel,sizeof(startLabel),"SONG START: BAR %u",
+                 static_cast<unsigned>(controller_.songStartBar()));
+   c->drawString(startLabel,{670,308,933,334},VSTGUI::kRightText);
+   drawControl(c,{941,308,975,334},"-",false,controller_.songStartBar()>1);
+   drawControl(c,{981,308,1015,334},"+",false,controller_.songStartBar()<9999);
+   drawControl(c,{1021,308,1108,334},"BAR 1",controller_.songStartBar()==1);
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
    c->drawString("PATTERN:",VSTGUI::CRect(16,339,120,363),VSTGUI::kLeftText);
    for(std::size_t idx=0;idx<8;++idx) {
@@ -1403,6 +1411,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    }
    drawControl(c,{1012,339,1110,365},"ADD ENTRY",false,count<64);
    drawControl(c,{1118,339,1239,365},"REMOVE LAST",false,count>1);
+   drawControl(c,{115,375,232,401},"REST",selectionVisible&&
+               controller_.songEntry(songSlot_).pattern==SongChain::kRest,selectionVisible);
  }
 
  // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
@@ -2055,6 +2065,15 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          songPage_=UiSongLayout::pageOf(slot);
        }
      }
+   }else if(y>=308&&y<334&&x>=941&&x<1108) {
+     const unsigned previous=controller_.songStartBar();
+     if(x<975&&previous>1)ok=controller_.setSongStartBar(previous-1);
+     else if(x>=981&&x<1015&&previous<9999)ok=controller_.setSongStartBar(previous+1);
+     else if(x>=1021)ok=controller_.setSongStartBar(1);
+   }else if(y>=375&&y<401&&x>=115&&x<232) {
+     const auto selectedSlot=std::min(songSlot_,count-1);
+     ok=controller_.setSongEntry(selectedSlot,SongChain::kRest,
+                                 controller_.songEntry(selectedSlot).steps);
    }else if(y>=339&&y<365) {
      const auto selectedSlot=std::min(songSlot_,count-1);
      const auto current=controller_.songEntry(selectedSlot);

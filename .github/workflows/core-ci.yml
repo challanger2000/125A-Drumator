@@ -67,6 +67,8 @@ jobs:
           Copy-Item 'resource/abstraktes_blaues_metall_mit_sanftem_glanz.png' -Destination (Join-Path $resourceDirectory 'abstraktes_blaues_metall_mit_sanftem_glanz.png')
           Copy-Item 'resource/125A_Drumator_Knob.png' -Destination (Join-Path $resourceDirectory '125A_Drumator_Knob.png')
           Copy-Item 'resource/125A_Drumator_Screw.png' -Destination (Join-Path $resourceDirectory '125A_Drumator_Screw.png')
+          Copy-Item 'resource/125A_Drumator_Faceplate.png' -Destination (Join-Path $resourceDirectory '125A_Drumator_Faceplate.png')
+          Copy-Item 'resource/Metallisches DRUMATOR-Logo.png' -Destination (Join-Path $resourceDirectory 'Metallisches DRUMATOR-Logo.png')
           $moduleInfo = Join-Path $resourceDirectory 'moduleinfo.json'
           & './build/bin/Release/moduleinfotool.exe' -create -version 0.1.0 -path $bundle -output $moduleInfo
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $moduleInfo)) {
@@ -105,11 +107,19 @@ jobs:
             '125A Drumator.vst3/Contents/Resources/abstraktes_blaues_metall_mit_sanftem_glanz.png',
             '125A Drumator.vst3/Contents/Resources/125A_Drumator_Knob.png',
             '125A Drumator.vst3/Contents/Resources/125A_Drumator_Screw.png',
+            '125A Drumator.vst3/Contents/Resources/125A_Drumator_Faceplate.png',
+            '125A Drumator.vst3/Contents/Resources/Metallisches DRUMATOR-Logo.png',
             '125A Drumator.vst3/Contents/Resources/moduleinfo.json'
           ) | Sort-Object
           $actual = @($bundleFiles | ForEach-Object {
             [System.IO.Path]::GetRelativePath($artifactRoot, $_.FullName).Replace('\','/')
           }) | Sort-Object
+          foreach ($requiredImage in @('125A_Drumator_Faceplate.png', 'Metallisches DRUMATOR-Logo.png')) {
+            $imagePath = Join-Path $resourceDirectory $requiredImage
+            if (!(Test-Path -LiteralPath $imagePath) -or (Get-Item -LiteralPath $imagePath).Length -lt 1024) {
+              throw "Missing or empty mandatory visual resource: $requiredImage"
+            }
+          }
           if (@(Compare-Object $expected $actual).Count -ne 0) {
             throw "Wrong VST3 packaging: actual=$($actual -join ', ')"
           }
