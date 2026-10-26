@@ -63,7 +63,27 @@ jobs:
           } finally {
             Get-ChildItem $reports -File -ErrorAction SilentlyContinue | ForEach-Object {
               Write-Output "125A report: $($_.Name), bytes=$($_.Length)"
-              if ($_.Name -match 'QA_Report\\.txt$') { Get-Content $_.FullName | Write-Output }
+              if ($_.Name -match 'QA_Report\.txt) { Get-Content $_.FullName | Write-Output }
+            }
+          }
+          $qa = @(Get-ChildItem $reports -Filter '*_125A_QA_Report.txt' -File)
+          if ($qa.Count -ne 1) { throw "Expected one actual 125A QA report, found $($qa.Count)" }
+          $report = Get-Content $qa[0].FullName -Raw
+          if ($report -notmatch '(?m)^RESULT:\s*\d+ PASS / \d+ WARNING / \d+ FAIL') {
+            throw 'Tester report is missing a complete result summary'
+          }
+          if ($exitCode -ne 0 -or $report -match '(?m)^RELEASE: NOT RECOMMENDED') {
+            throw "125A Plugin Tester reported failure (exit=$exitCode); inspect uploaded report"
+          }
+          Write-Output "125A Plugin Tester completed: exit=$exitCode; see report for PASS/WARNING/FAIL details"
+      - name: Archive independent tester evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 125A-Drumator-Independent-Plugin-Tester-v0.2.10
+          path: 125A-QA-Reports/
+          if-no-files-found: warn
+) { Get-Content $_.FullName | Write-Output }
             }
           }
           $qa = @(Get-ChildItem $reports -Filter '*_125A_QA_Report.txt' -File)
