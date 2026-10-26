@@ -83,7 +83,9 @@ public:
  bool changePattern(std::size_t pattern);
  bool togglePatternLength(std::size_t pattern);
  std::uint8_t patternLength(std::size_t p) const noexcept {return p<kPatterns?patternLengths_[p]:32;}
- bool configureSong(bool enabled,std::size_t count,const SongChain& chain);
+ bool configureSong(bool enabled,std::size_t count,const SongChain& chain,std::uint16_t startBar=0);
+ bool setSongStartBar(unsigned bar);
+ std::uint16_t songStartBar() const noexcept {return songStartBar_;}
  bool toggleSongMode();
  bool editSongEntry(std::size_t slot,int patternDelta,int lengthDelta);
  bool setSongEntry(std::size_t slot,std::uint8_t pattern,std::uint8_t steps);
@@ -210,5 +212,6 @@ private:
  std::array<std::uint8_t,kRows> randomVelocity_{};
  SongChain songChain_{};
  bool songEnabled_{false};
+ std::uint16_t songStartBar_{1};
 };
 }

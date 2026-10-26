@@ -394,6 +394,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
     randomVelocity_=candidate.randomVelocity;
     songEnabled_=candidate.songEnabled!=0;
     songChain_=candidate.chain;
+    songStartBar_=candidate.songStartBar;
     for(std::size_t row=0;row<kRows;++row) {
        muted_[row]=(candidate.muted&(1u<<row))!=0;
        solo_[row]=(RowVisibility::visibleSolo(candidate.solo,candidate.visible)&
@@ -463,7 +464,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  samplePresent_.fill(false);
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
  randomVelocity_.fill(0);masterVolume_=100;
- songEnabled_=false;songChain_=SongChain{};
+ songEnabled_=false;songChain_=SongChain{};songStartBar_=1;
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
  for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
  const auto restoredPattern=hostPatternPending_&&processorConfirmsPattern(patternFromNormalized(hostPatternValue_))
@@ -535,12 +536,14 @@ bool Controller::renameRow(std::size_t row,const std::string& name) {
  if(ok){customNames_[row].swap(prepared);notifyViews(false);}
  return ok;
 }
-bool Controller::configureSong(bool enabled,std::size_t count,const SongChain& chain) {
+bool Controller::configureSong(bool enabled,std::size_t count,const SongChain& chain,std::uint16_t startBar) {
+ if(startBar==0)startBar=songStartBar_;
+ if(startBar<1||startBar>9999)return false;
  if(count==0||count>SongChain::kCapacity||chain.count()!=count)return false;
  std::array<std::uint8_t,2*SongChain::kCapacity> bytes{};
  for(std::size_t i=0;i<count;++i){
    const auto entry=chain.entry(i);
-   if(entry.pattern>=kPatterns||!SongChain::validLength(entry.steps))return false;
+   if(entry.pattern>SongChain::kRest||!SongChain::validLength(entry.steps))return false;
    bytes[2*i]=entry.pattern;bytes[2*i+1]=entry.steps;
  }
  auto* msg=allocateMessage();
@@ -549,13 +552,17 @@ bool Controller::configureSong(bool enabled,std::size_t count,const SongChain& c
  auto* a=msg->getAttributes();
  if(!a||a->setInt("Enabled",enabled?1:0)!=Steinberg::kResultOk||
     a->setInt("Count",static_cast<Steinberg::int64>(count))!=Steinberg::kResultOk||
+    a->setInt("StartBar",startBar)!=Steinberg::kResultOk||
     a->setBinary("Entries",bytes.data(),static_cast<Steinberg::uint32>(count*2))!=Steinberg::kResultOk){
    msg->release();return false;
  }
  const bool ok=sendEditMessage(msg)==Steinberg::kResultOk;
  msg->release();
- if(ok){songEnabled_=enabled;songChain_=chain;notifyViews(false);}
+ if(ok){songEnabled_=enabled;songChain_=chain;songStartBar_=startBar;notifyViews(false);}
  return ok;
+}
+bool Controller::setSongStartBar(unsigned bar){
+ return bar>=1&&bar<=9999&&configureSong(songEnabled_,songChain_.count(),songChain_,static_cast<std::uint16_t>(bar));
 }
 bool Controller::toggleSongMode(){return configureSong(!songEnabled_,songChain_.count(),songChain_);}
 bool Controller::adjustSongCount(int delta){
@@ -568,7 +575,7 @@ bool Controller::adjustSongCount(int delta){
  return configureSong(songEnabled_,candidate.count(),candidate);
 }
 bool Controller::setSongEntry(std::size_t slot,std::uint8_t pattern,std::uint8_t steps){
- if(slot>=songChain_.count()||pattern>=kPatterns||!SongChain::validLength(steps))return false;
+ if(slot>=songChain_.count()||pattern>SongChain::kRest||!SongChain::validLength(steps))return false;
  SongChain candidate=songChain_;
  if(!candidate.configure(slot,pattern,steps))return false;
  return configureSong(songEnabled_,candidate.count(),candidate);
@@ -585,7 +592,7 @@ bool Controller::editSongEntry(std::size_t slot,int patternDelta,int lengthDelta
    return static_cast<std::size_t>(sum<0?sum+count:sum);
  };
  const auto pattern=static_cast<std::uint8_t>(
-     wrap(old.pattern,patternDelta,static_cast<std::int64_t>(kPatterns)));
+     wrap(old.pattern,patternDelta,static_cast<std::int64_t>(kPatterns+1)));
  const std::array<std::uint8_t,3> lengths{8,16,32};
  const std::int64_t index=old.steps==8?0:(old.steps==16?1:2);
  const auto length=lengths[wrap(index,lengthDelta,3)];
