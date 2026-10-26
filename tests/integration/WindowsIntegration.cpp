@@ -1081,6 +1081,43 @@ void testGui49MusicalFourSampleCapture(){
  captureVstgui(*view,"gui49-four-real-samples-musical-130",1.3);
  evidence("GUI49 musical native 130pct: four decoded stereo WAVs, true names, occupied 32-step velocities and attached zoom PASS");
 }
+void test13MeterTransportAndMultiEditor(){
+ Fixture f;auto kit=namedKit('Q',2);
+ kit.wav[0]=constantStereo(.8f,-.3f);kit.masterVolume=200;
+ f.kit(kit);prepareAudio(*f.p);
+ f.open();f.open();
+ auto* a=IntegrationAccess::view(*f.c,0);
+ auto* b=IntegrationAccess::view(*f.c,1);
+ check(f.c->previewSample(0),"S13 meter first preview");
+ AuditAudioBlock render;
+ check(f.p->process(render.data)==kResultOk,"S13 processor render failed");
+ // Force an unavailable process-local meter registry on the Controller
+ // while keeping the real two-component VST3 connection intact.
+ auto* linkMessage=f.c->allocateMessage();
+ check(linkMessage!=nullptr,"S13 meter link message allocation");
+ linkMessage->setMessageID("Drumator.OutputMeterLink");
+ check(linkMessage->getAttributes()->setInt("MeterId",922337)==kResultOk,
+       "S13 invalid link injection");
+ check(f.c->notify(linkMessage)==kResultOk&&f.c->meterLink()==nullptr,
+       "S13 null address-space fallback did not activate");
+ linkMessage->release();
+ IntegrationAccess::pollMeter(*a);
+ IntegrationAccess::pollMeter(*b);
+ const auto first=IntegrationAccess::meterPaintState(*a);
+ const auto second=IntegrationAccess::meterPaintState(*b);
+ check(first[0]>.5f&&second[0]>.5f&&
+       std::abs(first[0]-second[0])<.001f&&
+       std::abs(first[1]-second[1])<.001f,
+       "S13 both editors must display same real MAIN L/R without shared pointer");
+ check((f.c->meterState().clip&1u)!=0,"S13 cross-process-compatible CLIP missing");
+ click(*b,UiCompactLayout::meterResetLeft+2.,80.);
+ check(f.c->meterState().clip==0,"S13 GUI IPC clip reset failed");
+ for(int i=0;i<48;++i){IntegrationAccess::pollMeter(*a);IntegrationAccess::pollMeter(*b);}
+ check(IntegrationAccess::meterPaintState(*a)[0]<.01f&&
+       IntegrationAccess::meterPaintState(*b)[0]<.01f,
+       "S13 stop with no callback must decay both GUI meters");
+ evidence("S13 UI meter IPC without local registry, independent two-view peaks, sticky CLIP/clear, stop decay PASS");
+}
 void test11IMeterStereoAndStems(){
  // Independent exact buffer oracle: MAIN channel asymmetry, 0dBFS versus
  // true over-range, stem-only clipping and disabled stem guard.
@@ -2712,6 +2749,7 @@ int main(int argc,char** argv){
  run("GUI49 musical four-sample native 130pct capture",testGui49MusicalFourSampleCapture);
  run("GUI 11I centered PATTERN and meter header geometry",test11IHeaderPatternCentered);
  run("M11I actual MAIN and stem meter, GUI capture and clip reset",test11IMeterStereoAndStems);
+ run("S13 IPC meter with absent registry and two native editors",test13MeterTransportAndMultiEditor);
  run("M11I normal 16bit mono FLAC import",test11IMonoFlacImport);
  run("M11I six rotary Min Center Max and double-click defaults",test11IRotaryMinCenterMax);
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);

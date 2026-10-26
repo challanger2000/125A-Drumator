@@ -28,7 +28,11 @@ public:
  }
  ~Controller() override;
  Steinberg::tresult PLUGIN_API notify(Steinberg::Vst::IMessage*) SMTG_OVERRIDE;
- std::shared_ptr<OutputMeter> meterLink() const noexcept {return meter_;}
+ std::shared_ptr<OutputMeter> meterLink() const noexcept {return meter_;} // legacy same-process QA only
+ struct MeterState {std::uint64_t sequence=0;std::uint32_t left=0,right=0,clip=0,full=0,reset=0;};
+ MeterState meterState() const noexcept {return meterState_;}
+ void requestMeterSnapshot();
+ bool clearMeterClips();
  Steinberg::tresult PLUGIN_API initialize(Steinberg::FUnknown*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API setComponentState(Steinberg::IBStream*) SMTG_OVERRIDE;
  Steinberg::tresult PLUGIN_API getState(Steinberg::IBStream*) SMTG_OVERRIDE;
@@ -136,7 +140,9 @@ public:
    return row<kRows?customNames_[row]:empty;
  }
 private:
- std::shared_ptr<OutputMeter> meter_{};
+ std::shared_ptr<OutputMeter> meter_{}; // QA compatibility; not used by shipping GUI
+ MeterState meterState_{};
+ std::uint32_t lastClearEpoch_{0};
  void notifyViews(bool relayout);
  bool processorConfirmsPattern(unsigned requested);
  bool reservePreviewStop() noexcept;

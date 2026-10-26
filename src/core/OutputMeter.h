@@ -17,6 +17,10 @@ public:
  static constexpr unsigned kBuses=16;
  std::atomic<std::uint32_t> mainL{0},mainR{0};
  std::atomic<std::uint32_t> clipMask{0},fullScaleMask{0};
+ // One coherent L/R block snapshot for control-thread IPC, independent of
+ // destructive legacy test probes and of the number of editor windows.
+ std::atomic<std::uint64_t> lastPair{0},blockSequence{0};
+ std::atomic<std::uint32_t> clipResetEpoch{0};
  static std::uint32_t encode(float peak) noexcept {
    return static_cast<std::uint32_t>(std::clamp(static_cast<double>(peak),0.,4.)*16383.75+0.5);
  }
@@ -30,6 +34,7 @@ public:
  }
  void observe(const Steinberg::Vst::ProcessData& data,std::uint32_t activeStems) noexcept {
    if(data.numSamples<=0||!data.outputs)return;
+   std::uint32_t encodedL=0,encodedR=0;
    for(Steinberg::int32 b=0;b<data.numOutputs&&b<16;++b){
      if(b>0&&(activeStems&(1u<<b))==0)continue;
      const auto& bus=data.outputs[b];
@@ -45,14 +50,23 @@ public:
        clip|=(l>1.f||r>1.f);
        full|=(l>=1.f||r>=1.f);
      }
-     if(b==0){accumulate(mainL,encode(peakL));accumulate(mainR,encode(peakR));}
+     if(b==0){
+       encodedL=encode(peakL);encodedR=encode(peakR);
+       // Single audio writer; no UI reader ever writes to these in production.
+       mainL.store(encodedL,std::memory_order_relaxed);
+       mainR.store(encodedR,std::memory_order_relaxed);
+     }
      if(clip)clipMask.fetch_or(1u<<b,std::memory_order_relaxed);
      if(full)fullScaleMask.fetch_or(1u<<b,std::memory_order_relaxed);
    }
+   lastPair.store((static_cast<std::uint64_t>(encodedL)<<32)|encodedR,
+                  std::memory_order_release);
+   blockSequence.fetch_add(1,std::memory_order_release);
  }
  void clearClips() noexcept {
    clipMask.exchange(0,std::memory_order_acq_rel);
    fullScaleMask.exchange(0,std::memory_order_acq_rel);
+   clipResetEpoch.fetch_add(1,std::memory_order_release);
  }
 };
 inline std::atomic<std::uint64_t> nextMeterId{1};

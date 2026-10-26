@@ -886,19 +886,22 @@ void DrumatorView::refreshFromHost(bool relayout) {
  }
 }
 void DrumatorView::pollMeter() noexcept {
- const auto link=controller_.meterLink();
- if(link){
-   const float observedL=OutputMeter::decode(link->mainL.exchange(0,std::memory_order_acq_rel));
-   const float observedR=OutputMeter::decode(link->mainR.exchange(0,std::memory_order_acq_rel));
-   mainMeterL_=std::max(observedL,mainMeterL_*0.86f);
-   mainMeterR_=std::max(observedR,mainMeterR_*0.86f);
-   if(observedL>=holdMeterL_){holdMeterL_=observedL;holdTicksL_=18;}
-   else if(holdTicksL_>0)--holdTicksL_;
-   else holdMeterL_=std::max(mainMeterL_,holdMeterL_*0.86f);
-   if(observedR>=holdMeterR_){holdMeterR_=observedR;holdTicksR_=18;}
-   else if(holdTicksR_>0)--holdTicksR_;
-   else holdMeterR_=std::max(mainMeterR_,holdMeterR_*0.86f);
- }
+ // Each View reads the same controller cache. No destructive exchange by
+ // individual GUI windows; generation ensures host Stop/no callbacks decays.
+ controller_.requestMeterSnapshot();
+ const auto state=controller_.meterState();
+ const bool fresh=state.sequence!=meterSequenceSeen_;
+ meterSequenceSeen_=state.sequence;
+ const float observedL=fresh?OutputMeter::decode(state.left):0.f;
+ const float observedR=fresh?OutputMeter::decode(state.right):0.f;
+ mainMeterL_=std::max(observedL,mainMeterL_*0.86f);
+ mainMeterR_=std::max(observedR,mainMeterR_*0.86f);
+ if(observedL>0.f&&observedL>=holdMeterL_){holdMeterL_=observedL;holdTicksL_=18;}
+ else if(holdTicksL_>0)--holdTicksL_;
+ else holdMeterL_=std::max(mainMeterL_,holdMeterL_*0.86f);
+ if(observedR>0.f&&observedR>=holdMeterR_){holdMeterR_=observedR;holdTicksR_=18;}
+ else if(holdTicksR_>0)--holdTicksR_;
+ else holdMeterR_=std::max(mainMeterR_,holdMeterR_*0.86f);
  invalid();
 }
 bool DrumatorView::attached(VSTGUI::CView* parent) {
@@ -1009,8 +1012,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  groupTitle("SONG MODE",UiCompactLayout::songToggle.left,UiCompactLayout::songEdit.right);
  // Meter reads actual post-master Processor output; MAIN L/R and sticky
  // clipping of all active buses are deliberately independent.
- const auto meter=controller_.meterLink();
- const std::uint32_t clipBits=meter?meter->clipMask.load(std::memory_order_acquire):0u;
+ const std::uint32_t clipBits=controller_.meterState().clip;
  const auto drawMeter=[&](double x,float level,float peak){
    const auto lit=[&](float a){return a>0.f?20.*std::log10(static_cast<double>(a)):-120.;};
    const double db=lit(level),peakDb=lit(peak);
@@ -1811,7 +1813,7 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
  const auto done=VSTGUI::kMouseDownEventHandledButDontNeedMovedOrUpEvents;
  if(!sampleEditorOpen_&&x>=UiCompactLayout::meterResetLeft&&
     x<=UiCompactLayout::meterResetRight&&y>=66.&&y<=151.){
-   if(auto link=controller_.meterLink())link->clearClips();
+   (void)controller_.clearMeterClips();
    invalid();return done;
  }
  if(sampleEditorOpen_) {

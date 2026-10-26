@@ -138,6 +138,41 @@ Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
 Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  if(!msg||!msg->getMessageID())return AudioEffect::notify(msg);
  const auto* id=msg->getMessageID();
+ // All meter messages run on the control actor. The process callback only
+ // publishes two atomic peak samples, a generation, and sticky clip bits.
+ // IConnectionPoint transports these values across HOST process boundaries.
+ if(std::strcmp(id,"Drumator.MeterRequest")==0){
+   auto* reply=allocateMessage();
+   if(!reply)return Steinberg::kOutOfMemory;
+   reply->setMessageID("Drumator.MeterSnapshot");
+   auto* attrs=reply->getAttributes();
+   if(!attrs){reply->release();return Steinberg::kResultFalse;}
+   // Control actor may retry a bounded number of times to obtain a coherent
+   // L/R+generation pair while the audio writer advances.
+   std::uint64_t seq=0,pair=0;
+   for(int attempt=0;attempt<4;++attempt){
+     const auto before=meter_->blockSequence.load(std::memory_order_acquire);
+     pair=meter_->lastPair.load(std::memory_order_acquire);
+     const auto after=meter_->blockSequence.load(std::memory_order_acquire);
+     seq=after;
+     if(before==after)break;
+   }
+   Steinberg::tresult status=Steinberg::kResultFalse;
+   try{
+     if(attrs->setInt("Sequence",static_cast<Steinberg::int64>(seq))==Steinberg::kResultOk&&
+        attrs->setInt("Left",static_cast<Steinberg::int64>(pair>>32))==Steinberg::kResultOk&&
+        attrs->setInt("Right",static_cast<Steinberg::int64>(pair&0xffffffffu))==Steinberg::kResultOk&&
+        attrs->setInt("Clip",meter_->clipMask.load(std::memory_order_acquire))==Steinberg::kResultOk&&
+        attrs->setInt("Full",meter_->fullScaleMask.load(std::memory_order_acquire))==Steinberg::kResultOk&&
+        attrs->setInt("Reset",meter_->clipResetEpoch.load(std::memory_order_acquire))==Steinberg::kResultOk)
+       status=sendMessage(reply);
+   }catch(const std::bad_alloc&){status=Steinberg::kOutOfMemory;}
+   reply->release();return status;
+ }
+ if(std::strcmp(id,"Drumator.MeterClear")==0){
+   meter_->clearClips();
+   return Steinberg::kResultOk;
+ }
  // Control-thread-only state query. The audio selection is atomic; no
  // callback lock, heap work or mutation is required.
  if(std::strcmp(id,"Drumator.QueryPattern")==0) {

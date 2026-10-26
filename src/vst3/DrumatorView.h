@@ -51,6 +51,7 @@ private:
  float mainMeterL_{0.f},mainMeterR_{0.f};
  float holdMeterL_{0.f},holdMeterR_{0.f};
  unsigned holdTicksL_{0},holdTicksR_{0};
+ std::uint64_t meterSequenceSeen_{0};
  void pollMeter() noexcept;
  Controller& controller_;
  VSTGUI::CBitmap* backgroundBitmap_{nullptr};

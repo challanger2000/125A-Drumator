@@ -25,7 +25,50 @@
 #include <vector>
 
 namespace drumator {
+void Controller::requestMeterSnapshot(){
+ auto* request=allocateMessage();
+ if(!request)return;
+ request->setMessageID("Drumator.MeterRequest");
+ (void)sendMessage(request); // UI actor only; no project-dirty notification
+ request->release();
+}
+bool Controller::clearMeterClips(){
+ auto* clear=allocateMessage();
+ if(!clear)return false;
+ clear->setMessageID("Drumator.MeterClear");
+ const bool accepted=sendMessage(clear)==Steinberg::kResultOk;
+ clear->release();
+ if(accepted){
+   meterState_.clip=0;meterState_.full=0;
+   ++lastClearEpoch_;
+ }
+ return accepted;
+}
 Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* message){
+ if(message&&message->getMessageID()&&
+    std::strcmp(message->getMessageID(),"Drumator.MeterSnapshot")==0){
+   auto* attrs=message->getAttributes();
+   Steinberg::int64 seq=-1,l=-1,r=-1,clip=-1,full=-1,reset=-1;
+   if(!attrs||attrs->getInt("Sequence",seq)!=Steinberg::kResultOk||
+      attrs->getInt("Left",l)!=Steinberg::kResultOk||
+      attrs->getInt("Right",r)!=Steinberg::kResultOk||
+      attrs->getInt("Clip",clip)!=Steinberg::kResultOk||
+      attrs->getInt("Full",full)!=Steinberg::kResultOk||
+      attrs->getInt("Reset",reset)!=Steinberg::kResultOk||
+      seq<0||l<0||r<0||l>65535||r>65535||
+      clip<0||full<0||clip>65535||full>65535||
+      reset<0||static_cast<std::uint64_t>(reset)<lastClearEpoch_)
+     return Steinberg::kResultFalse;
+   const auto index=static_cast<std::uint64_t>(seq);
+   if(index>=meterState_.sequence){
+     meterState_={index,static_cast<std::uint32_t>(l),static_cast<std::uint32_t>(r),
+                  static_cast<std::uint32_t>(clip),static_cast<std::uint32_t>(full),
+                  static_cast<std::uint32_t>(reset)};
+     lastClearEpoch_=std::max(lastClearEpoch_,meterState_.reset);
+   }
+   return Steinberg::kResultOk;
+ }
+
  if(message&&message->getMessageID()&&
     std::strcmp(message->getMessageID(),"Drumator.OutputMeterLink")==0){
     Steinberg::int64 id=0;
@@ -33,7 +76,9 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
     if(!attr||attr->getInt("MeterId",id)!=Steinberg::kResultOk||id<=0)
       return Steinberg::kResultFalse;
     meter_=findMeter(static_cast<std::uint64_t>(id));
-    return meter_?Steinberg::kResultOk:Steinberg::kResultFalse;
+    // The registry is deliberately optional: distinct host processes have
+    // separate address spaces and receive levels via MeterRequest/Snapshot.
+    return Steinberg::kResultOk;
  }
  return EditController::notify(message);
 }
