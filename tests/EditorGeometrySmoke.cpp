@@ -14,6 +14,10 @@
 #include <filesystem>
 #include <iostream>
 #include <system_error>
+#include <fstream>
+#include <vector>
+#include <array>
+#include <cstdint>
 
 namespace {
 [[noreturn]] void fail(const char* reason) {
@@ -40,6 +44,23 @@ int main(int argc,char** argv) {
     if(argc!=2)fail("Expected one VST3 binary path");
     CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     const auto modulePath=drumator::pathFromUtf8(argv[1]);
+    // Verify packaged GUI assets from the installable VST3, not source-tree paths.
+    const auto resourceDir=modulePath.parent_path().parent_path()/L"Resources";
+    for(const auto* required:{L"Metallisches DRUMATOR-Logo.png",L"125A_Drumator_Faceplate.png"}) {
+      const auto file=resourceDir/required;
+      std::ifstream in(file,std::ios::binary);
+      std::array<unsigned char,24> png{};
+      if(!in.read(reinterpret_cast<char*>(png.data()),static_cast<std::streamsize>(png.size()))||
+         png[0]!=137||png[1]!=80||png[2]!=78||png[3]!=71||
+         png[12]!='I'||png[13]!='H'||png[14]!='D'||png[15]!='R')
+         fail("Mandatory logo/faceplate PNG absent or corrupted in packaged VST3");
+      const auto be32=[&](unsigned at){return (std::uint32_t(png[at])<<24)|
+         (std::uint32_t(png[at+1])<<16)|(std::uint32_t(png[at+2])<<8)|png[at+3];};
+      if(be32(16)<100||be32(20)<50)
+         fail("Mandatory packaged logo/faceplate PNG has invalid dimensions");
+      std::cout<<"Packaged PNG resource verified: "<<file.filename().string()<<
+                 " "<<be32(16)<<"x"<<be32(20)<<"\\n";
+    }
     auto* module=LoadLibraryW(modulePath.c_str());
     if(!module) {
         std::cerr<<"LoadLibraryW Windows error: "<<GetLastError()<<'\n';
@@ -107,6 +128,41 @@ int main(int argc,char** argv) {
       if(restoreZoom(large)!=Steinberg::kResultOk||editor->getSize(&after)!=Steinberg::kResultOk||
          after.getWidth()!=(large?1920:1280))fail("Z02 packaged accepted zoom geometry");
     }
+    // Genuine HWND screen capture *after* final-bundle VSTGUI attach and paint.
+    // This is the pixel output of the packaged plugin, never a mockup.
+    if(!RedrawWindow(parent,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN))
+      fail("Packaged native editor repaint failed");
+    Sleep(80);
+    constexpr int width=1280,height=300;
+    HDC windowDc=GetDC(parent);
+    if(!windowDc)fail("Packaged screenshot could not get window DC");
+    HDC memoryDc=CreateCompatibleDC(windowDc);
+    HBITMAP bitmap=memoryDc?CreateCompatibleBitmap(windowDc,width,height):nullptr;
+    if(!memoryDc||!bitmap)fail("Packaged screenshot could not allocate GDI bitmap");
+    auto previous=SelectObject(memoryDc,bitmap);
+    if(!BitBlt(memoryDc,0,0,width,height,windowDc,0,0,SRCCOPY|CAPTUREBLT))
+      fail("Packaged native HWND screenshot BitBlt failed");
+    BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth=width;info.bmiHeader.biHeight=-height;
+    info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
+    info.bmiHeader.biCompression=BI_RGB;
+    std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width)*height*4);
+    if(GetDIBits(memoryDc,bitmap,0,height,pixels.data(),&info,DIB_RGB_COLORS)!=height)
+      fail("Packaged native HWND screenshot readback failed");
+    std::filesystem::create_directories("build/gui-shots");
+    const auto screenshot=std::filesystem::path("build/gui-shots/packaged-silver-drumator-100.bmp");
+    std::ofstream bmp(screenshot,std::ios::binary);
+    BITMAPFILEHEADER header{};header.bfType=0x4d42;
+    header.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
+    header.bfSize=header.bfOffBits+static_cast<DWORD>(pixels.size());
+    bmp.write(reinterpret_cast<const char*>(&header),sizeof(header));
+    bmp.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof(info.bmiHeader));
+    bmp.write(reinterpret_cast<const char*>(pixels.data()),
+              static_cast<std::streamsize>(pixels.size()));
+    if(!bmp)fail("Packaged native screenshot write failed");
+    bmp.close();SelectObject(memoryDc,previous);DeleteObject(bitmap);
+    DeleteDC(memoryDc);ReleaseDC(parent,windowDc);
+    std::cout<<"Packaged VST3 native silver-logo screenshot: "<<screenshot.string()<<"\\n";
     if(editor->removed()!=Steinberg::kResultOk)fail("Z02 packaged native remove failed");
     editor->setFrame(nullptr);DestroyWindow(parent);
     drumator::qa::result("Z02 packaged DLL PASS: native HWND attach, controller zoom 100/150 and resize rejection");
