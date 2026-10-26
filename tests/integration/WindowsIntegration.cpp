@@ -715,7 +715,7 @@ void testWaveEditorRealMouseControls(){
  Fixture f;auto kit=namedKit('X',4);
  kit.wav[0]=constantStereo(.5f,-.25f);
  kit.sampleEdits[0]=SampleEdit{90,940,110,140,1.25f};
- f.kit(kit);f.open();
+ f.kit(kit);prepareAudio(*f.p);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
  check(IntegrationAccess::openSampleEditorForCapture(*v,0),"W11D open native editor");
  auto draft=[&]{return IntegrationAccess::sampleEditorDraft(*v);};
