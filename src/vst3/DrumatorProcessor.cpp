@@ -455,7 +455,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.SongConfig")==0) {
-   Steinberg::int64 enabled=-1,count=-1;
+   Steinberg::int64 enabled=-1,count=-1,startBar=1;
    if(attrs->getInt("Enabled",enabled)!=Steinberg::kResultOk||
       attrs->getInt("Count",count)!=Steinberg::kResultOk||
       (enabled!=0&&enabled!=1)||count<1||
@@ -463,6 +463,9 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
       return Steinberg::kInvalidArgument;
    const void* bytes=nullptr;
    Steinberg::uint32 size=0;
+   // Older clients without the field use BAR 1.
+   (void)attrs->getInt("StartBar",startBar);
+   if(startBar<1||startBar>9999)return Steinberg::kInvalidArgument;
    if(attrs->getBinary("Entries",bytes,size)!=Steinberg::kResultOk||
       !bytes||size!=static_cast<Steinberg::uint32>(count*2))
       return Steinberg::kInvalidArgument;
@@ -475,7 +478,8 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    std::lock_guard<std::mutex> guard(kitMutex_);
    kit_.songEnabled=static_cast<std::uint8_t>(enabled);
    kit_.chain=candidate;
-   songMailbox_.publish(candidate,enabled!=0);
+   kit_.songStartBar=static_cast<std::uint16_t>(startBar);
+   songMailbox_.publish(candidate,enabled!=0,kit_.songStartBar);
    return Steinberg::kResultOk;
  }
  if(std::strcmp(id,"Drumator.MasterVolume")==0) {
@@ -903,7 +907,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      // retain the last coherent chain instead of failing process().
      // Refresh the song state every block, even when no MIDI events arrive.
      // Otherwise a transport-only gap retains an outdated song snapshot.
-     (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_);
+     (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_,&audioSongStartBar_);
      if(data.inputEvents&&!audioSongEnabled_)
        for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
          Steinberg::Vst::Event event{};
@@ -1069,7 +1073,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  triggers_.clear();
  // Collect MIDI A-H and host automation before scheduling. Fixed storage
  // avoids allocations in the audio callback; equal-offset host wins.
- (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_);
+ (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_,&audioSongStartBar_);
  if(!patternTimeline_.reset(static_cast<std::size_t>(data.numSamples)))
    return Steinberg::kInvalidArgument;
  auto addPattern=[&](Steinberg::int32 offset,unsigned pattern,bool host) {
@@ -1115,7 +1119,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  bool velocityCycleValid=false;
  if(playing&&validHostClock) {
    const auto initialPpq=context->projectTimeMusic;
-   // A new transport run or a locate/loop jump starts at pattern step 1.
+   // PATTERN-mode phase may follow transport; SONG uses an absolute BAR origin.
    // Normal continuous blocks keep the same origin; switching A-H does not reset it.
    const double rateForClock=processSetup.sampleRate;
    const double expectedTolerance=std::max(1e-7,4.0*context->tempo/(60.0*rateForClock));
@@ -1300,17 +1304,22 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
        const std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns>& values;
        const SongChain& chain;
        const std::array<std::uint8_t,kPatterns>& lengths;
+       std::int64_t songOriginStep;
        std::uint8_t selected() const noexcept {return 0;}
        SongChain::Position mapStep(std::int64_t step,std::int64_t origin) const noexcept {
-         auto result=chain.at(step,origin);
-         result.step=static_cast<std::uint8_t>(result.step%lengths[result.pattern]);
+         (void)origin; // SONG position is absolute, not transport-relative.
+         if(step<songOriginStep)return {SongChain::kRest,0,0};
+         auto result=chain.at(step,songOriginStep);
+         if(result.pattern<kPatterns)
+           result.step=static_cast<std::uint8_t>(result.step%lengths[result.pattern]);
          return result;
        }
        std::uint8_t get(std::size_t program,std::size_t row,std::size_t step) const noexcept {
          return program<kPatterns&&row<kRows&&step<kSteps?
             values[program][row*kSteps+step]:0;
        }
-     } songRead{songPrograms,audioSongChain_,lengths};
+     } songRead{songPrograms,audioSongChain_,lengths,
+               static_cast<std::int64_t>(audioSongStartBar_-1)*16};
      auto emitTrigger=[&](Trigger hit){
        hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
        triggers_.appendStep(hit);
@@ -1577,13 +1586,14 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     for(auto& revision:editorRevisions_)++revision;
     for(std::size_t i=0;i<kPatterns;++i)
       patternLengths_[i].store(kit_.patternLengths[i],std::memory_order_relaxed);
-    songMailbox_.publish(kit_.chain,kit_.songEnabled!=0);
+    songMailbox_.publish(kit_.chain,kit_.songEnabled!=0,kit_.songStartBar);
     // Seed the fallback with THIS kit before audio can re-enter. If a later
     // SongConfig publication overlaps the first block, its rejected snapshot
     // must not fall back to the previous kit's chain/mode. Gate-denied audio
     // handles selections without reading these non-atomic cache fields.
     audioSongChain_=kit_.chain;
     audioSongEnabled_=kit_.songEnabled!=0;
+    audioSongStartBar_=kit_.songStartBar;
     // Publish restored rhythms per complete pattern generation. A live
     // scheduler must never observe a half-restored pattern.
     for(std::size_t p=0;p<kPatterns;++p)

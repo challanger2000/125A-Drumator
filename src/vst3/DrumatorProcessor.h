@@ -28,6 +28,7 @@ class SongMailbox final {
  std::atomic<std::uint8_t> count_{8};
  std::array<std::atomic<std::uint8_t>,SongChain::kCapacity> pattern_{};
  std::array<std::atomic<std::uint8_t>,SongChain::kCapacity> length_{};
+ std::atomic<std::uint16_t> startBar_{1};
 public:
  SongMailbox() noexcept {
   for(std::size_t i=0;i<SongChain::kCapacity;++i){
@@ -35,9 +36,10 @@ public:
    length_[i].store(32);
   }
  }
- void publish(const SongChain& chain,bool enabled) noexcept {
+ void publish(const SongChain& chain,bool enabled,std::uint16_t startBar=1) noexcept {
   sequence_.fetch_add(1,std::memory_order_acq_rel);
   enabled_.store(enabled?1:0,std::memory_order_relaxed);
+  startBar_.store(startBar,std::memory_order_relaxed);
   count_.store(static_cast<std::uint8_t>(chain.count()),std::memory_order_relaxed);
   for(std::size_t i=0;i<SongChain::kCapacity;++i){
    const auto e=chain.entry(i);
@@ -46,19 +48,22 @@ public:
   }
   sequence_.fetch_add(1,std::memory_order_release);
  }
- bool snapshot(SongChain& chain,bool& enabled) const noexcept {
+ bool snapshot(SongChain& chain,bool& enabled,std::uint16_t* startBar=nullptr) const noexcept {
   const auto first=sequence_.load(std::memory_order_acquire);
   if(first&1u)return false;
   const auto count=count_.load(std::memory_order_relaxed);
   const auto state=enabled_.load(std::memory_order_relaxed);
+  const auto bar=startBar_.load(std::memory_order_relaxed);
   SongChain candidate;
-  if(!candidate.setCount(count)||state>1)return false;
+  if(!candidate.setCount(count)||state>1||bar<1||bar>9999)return false;
   for(std::size_t i=0;i<count;++i)
    if(!candidate.configure(i,pattern_[i].load(std::memory_order_relaxed),
                               length_[i].load(std::memory_order_relaxed)))return false;
   const auto last=sequence_.load(std::memory_order_acquire);
   if(first!=last||last&1u)return false;
-  chain=candidate;enabled=state!=0;return true;
+  chain=candidate;enabled=state!=0;
+  if(startBar)*startBar=bar;
+  return true;
  }
  // Gate-denied callbacks must not read the non-atomic audio cache while
  // the control actor installs a kit. MIDI eligibility needs only this bit.
@@ -105,6 +110,7 @@ private:
  SongMailbox songMailbox_{};
  SongChain audioSongChain_{};
  bool audioSongEnabled_{false};
+ std::uint16_t audioSongStartBar_{1};
  AtomicPatternBank patterns_;
  // Last coherent patterns, read/written only in the audio callback.
  std::array<std::array<std::uint8_t,kRows*kSteps>,kPatterns> audioPatternCache_{};
