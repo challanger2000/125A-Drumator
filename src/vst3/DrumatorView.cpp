@@ -1016,7 +1016,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const double db=lit(level),peakDb=lit(peak);
    for(int index=0;index<11;++index){
       const double threshold=-54.+6.*index;
-      const auto y=146.-index*5.;
+      const auto y=140.-index*5.;
       const auto color=index<7?VSTGUI::CColor{34,177,115,255}:
           index<9?VSTGUI::CColor{243,192,52,255}:VSTGUI::CColor{237,79,61,255};
       c->setFillColor(db>=threshold?color:VSTGUI::CColor{24,45,54,255});
