@@ -9,6 +9,7 @@ namespace drumator {
 class SongChain final {
 public:
  static constexpr std::size_t kCapacity=64;
+ static constexpr std::uint8_t kRest=static_cast<std::uint8_t>(kPatterns); // REST is not a ninth musical pattern.
  struct Entry {std::uint8_t pattern{0},steps{32};};
  struct Position {std::uint8_t pattern{0},step{0};std::size_t entry{0};};
  constexpr SongChain() noexcept {
@@ -20,7 +21,7 @@ public:
   count_=count;return true;
  }
  constexpr bool configure(std::size_t index,std::uint8_t pattern,std::uint8_t steps) noexcept {
-  if(index>=count_||pattern>=kPatterns||!validLength(steps))return false;
+  if(index>=count_||pattern>kRest||!validLength(steps))return false;
   entries_[index]={pattern,steps};return true;
  }
  static constexpr bool validLength(std::uint8_t steps) noexcept {

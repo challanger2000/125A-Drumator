@@ -28,13 +28,14 @@ constexpr std::uint32_t kKitMagicV12=0x32314d44u; // DM12
 constexpr std::uint32_t kKitMagicV13=0x33314d44u; // DM13
 constexpr std::uint32_t kKitMagicV14=0x34314d44u; // DM14
 constexpr std::uint32_t kKitMagicV15=0x35314d44u; // DM15
-constexpr std::uint32_t kKitMagic=0x36314d44u; // DM16
+constexpr std::uint32_t kKitMagicV16=0x36314d44u; // DM16
+constexpr std::uint32_t kKitMagic=0x37314d44u; // DM17
 constexpr std::size_t kMaxSingleWav=16u*1024u*1024u;
 constexpr std::size_t kMaxKitWavs=64u*1024u*1024u;
 constexpr std::size_t kMaxKitName=512;
 constexpr std::size_t kMaxRowLabel=64;
 constexpr std::size_t kSampleEditBytes=20u;
-constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u+1u+kMaxRowLabel+kSampleEditBytes)+kCells+20u+5u*kRows+2u+130u+kRows+1u+kPatterns;
+constexpr std::size_t kMaxKitBytes=kMaxKitWavs+kRows*(kMaxKitName+6u+1u+kMaxRowLabel+kSampleEditBytes)+kCells+20u+5u*kRows+2u+130u+kRows+1u+kPatterns+2u;
 // Display labels are not filesystem paths. Reject controls and malformed UTF-8.
 inline bool validRowLabel(const std::string& value) noexcept {
  if(value.size()>kMaxRowLabel)return false;
@@ -62,6 +63,7 @@ struct KitState {
  std::uint8_t swing{0};
  std::uint8_t humanize{0};
  std::uint8_t songEnabled{0};
+ std::uint16_t songStartBar{1}; // 1..9999, independent of the transport start.
  std::uint8_t masterVolume{100};
  std::array<std::uint8_t,kPatterns> patternLengths{}; // 16=1 bar, 32=2 bars
  std::array<std::uint8_t,kRows> randomVelocity{};
@@ -111,8 +113,9 @@ struct KitCodec {
    if(src.swing>50||src.humanize>100||src.masterVolume>200)return false;
    for(const auto length:src.patternLengths)if(length!=16&&length!=32)return false;
     for(const auto v:src.randomVelocity)if(v>100)return false;
-   if(src.songEnabled>1||src.chain.count()<1||src.chain.count()>SongChain::kCapacity)return false;
-   for(std::size_t i=0;i<src.chain.count();++i){const auto e=src.chain.entry(i);if(e.pattern>=kPatterns||!SongChain::validLength(e.steps))return false;}
+   if(src.songEnabled>1||src.songStartBar<1||src.songStartBar>9999||
+      src.chain.count()<1||src.chain.count()>SongChain::kCapacity)return false;
+   for(std::size_t i=0;i<src.chain.count();++i){const auto e=src.chain.entry(i);if(e.pattern>SongChain::kRest||!SongChain::validLength(e.steps))return false;}
    for(const auto v:src.grid)if(v>127)return false;
    for(auto x:src.gain)if(x>200)return false;
    for(auto x:src.pan)if(x>200)return false;
@@ -149,7 +152,7 @@ struct KitCodec {
    if(!valid(state,false))return false;
    try {
      std::vector<std::uint8_t> value;
-     std::size_t size=8+2+4+5*kRows+2+130+kRows+1+kCells+kPatterns+kRows*kSampleEditBytes+4; // header, selected/count, cells, checksum
+     std::size_t size=8+2+4+5*kRows+2+130+kRows+1+kCells+kPatterns+kRows*kSampleEditBytes+2+4; // header, selected/count, cells, checksum
      for(std::size_t r=0;r<kRows;++r)
          size+=7+state.names[r].size()+state.wav[r].size()+state.displayNames[r].size();
      if(size>kMaxKitBytes||size-8>std::numeric_limits<std::uint32_t>::max())
@@ -192,6 +195,7 @@ struct KitCodec {
        std::uint32_t gainBits=0;static_assert(sizeof(gainBits)==sizeof(edit.gain));
        std::memcpy(&gainBits,&edit.gain,sizeof(gainBits));put32(value,gainBits);
      }
+     put16(value,state.songStartBar); // DM17-only trailing field, before CRC.
      put32(value,hash(value.data()+8,value.size()-8));
      if(value.size()!=size)return false;
      out=std::move(value);
@@ -201,9 +205,10 @@ struct KitCodec {
  static bool decode(const std::uint8_t* data,std::size_t size,KitState& out,
                     bool validateWav=true) {
    if(!data||size<8+2+kCells+6*kRows+4||size>kMaxKitBytes ||
-      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV15&&u32(data)!=kKitMagicV14&&u32(data)!=kKitMagicV13&&u32(data)!=kKitMagicV12&&u32(data)!=kKitMagicV11&&u32(data)!=kKitMagicV10&&u32(data)!=kKitMagicV9&&u32(data)!=kKitMagicV8&&u32(data)!=kKitMagicV7&&u32(data)!=kKitMagicV6&&u32(data)!=kKitMagicV5&&u32(data)!=kKitMagicV4)||
+      (u32(data)!=kKitMagic&&u32(data)!=kKitMagicV16&&u32(data)!=kKitMagicV15&&u32(data)!=kKitMagicV14&&u32(data)!=kKitMagicV13&&u32(data)!=kKitMagicV12&&u32(data)!=kKitMagicV11&&u32(data)!=kKitMagicV10&&u32(data)!=kKitMagicV9&&u32(data)!=kKitMagicV8&&u32(data)!=kKitMagicV7&&u32(data)!=kKitMagicV6&&u32(data)!=kKitMagicV5&&u32(data)!=kKitMagicV4)||
       u32(data+4)!=size-8)return false;
-   const bool v16=u32(data)==kKitMagic;
+   const bool v17=u32(data)==kKitMagic;
+   const bool v16=v17||u32(data)==kKitMagicV16;
    const bool v15=v16||u32(data)==kKitMagicV15;
    const bool v14=v15||u32(data)==kKitMagicV14;
    const bool v13=v14||u32(data)==kKitMagicV13;
@@ -227,6 +232,7 @@ struct KitCodec {
    if(v14&&size<8+2+4+5*kRows+2+130+kRows+1+kCells+7*kRows+4)return false;
    if(v15&&size<8+2+4+5*kRows+2+130+kRows+1+kCells+7*kRows+kPatterns+4)return false;
    if(v16&&size<8+2+4+5*kRows+2+130+kRows+1+kCells+7*kRows+kPatterns+kRows*kSampleEditBytes+4)return false;
+   if(v17&&size<8+2+4+5*kRows+2+130+kRows+1+kCells+7*kRows+kPatterns+kRows*kSampleEditBytes+2+4)return false;
    if(u32(data+size-4)!=hash(data+8,size-12))return false;
    try {
       KitState candidate;
@@ -250,7 +256,8 @@ struct KitCodec {
         if(candidate.songEnabled>1||!candidate.chain.setCount(count))return false;
         for(std::size_t i=0;i<SongChain::kCapacity;++i){
           const auto pattern=data[pos++],steps=data[pos++];
-          if(i<count&&!candidate.chain.configure(i,pattern,steps))return false;
+          if(i<count&&((!v17&&pattern==SongChain::kRest)||
+                       !candidate.chain.configure(i,pattern,steps)))return false;
         }
       }
       if(v13){
@@ -296,6 +303,10 @@ struct KitCodec {
            const auto bits=u32(data+pos);pos+=4;
            std::memcpy(&edit.gain,&bits,sizeof(bits));
          }
+      }
+      if(v17){
+        if(end-pos<2)return false;
+        candidate.songStartBar=u16(data+pos);pos+=2;
       }
       if(pos!=end||!valid(candidate,validateWav))return false;
       out=std::move(candidate);
