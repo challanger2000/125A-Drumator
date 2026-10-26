@@ -1051,7 +1051,7 @@ void testGui49MusicalFourSampleCapture(){
  f.kit(kit);f.open();
  auto* view=IntegrationAccess::view(*f.c,0);
  for(std::size_t row=0;row<4;++row){
-   check(f.c->hasSample(row)&&f.c->label(row)==names[row],
+   check(f.c->hasSample(row)&&f.c->label(row)==labels[row],
          "GUI49 musical capture must contain four actual loaded stereo samples");
  }
  for(std::size_t row=0;row<4;++row)
