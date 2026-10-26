@@ -3159,6 +3159,7 @@ void testA01SerializedAsyncIPC() {
          f.c->sampleEditorRequestPending(0)&&toProcessor.copied>0&&toController.copied>0,
          "A01 editor assumed synchronous mutated request");
    toController.flush();
+   check(toProcessor.copied==1,"A01 delayed reply triggered recursive extra query");
    check(IntegrationAccess::sampleEditorOpen(*view)&&
          IntegrationAccess::editorStereo(*view)&&
          std::abs(IntegrationAccess::editorLeft(*view)[0].minimum-.25f)<.001f&&

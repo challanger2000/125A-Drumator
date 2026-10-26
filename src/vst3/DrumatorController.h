@@ -193,7 +193,7 @@ private:
  Steinberg::Vst::IMessage* waveReply_{nullptr};
  std::size_t waveRequestRow_{kRows};
  std::uint64_t nextRequestId_{0},waveRequestId_{0};
- bool waveRequestPending_{false};
+ bool waveRequestPending_{false},waveReplyFresh_{false};
  std::uint64_t patternRequestId_{0};
  unsigned patternReplyRequested_{0};
  double patternReplyHostValue_{0.},patternFallback_{0.};

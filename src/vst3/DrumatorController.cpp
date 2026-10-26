@@ -135,7 +135,7 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
    }
    message->addRef();
    if(waveReply_)waveReply_->release();
-   waveReply_=message;waveRequestPending_=false;
+   waveReply_=message;waveRequestPending_=false;waveReplyFresh_=true;
    try{
      for(auto* view:views_)if(view)view->onSampleEditorReady(static_cast<std::size_t>(row),status==1);
    }catch(...){return Steinberg::kOutOfMemory;}
@@ -268,7 +268,7 @@ bool Controller::processorConfirmsPattern(unsigned requested,double fallback) {
  }
 }
 void Controller::invalidateWaveQuery() noexcept {
- waveRequestPending_=false;waveRequestRow_=kRows;
+ waveRequestPending_=false;waveReplyFresh_=false;waveRequestRow_=kRows;
  if(waveReply_){waveReply_->release();waveReply_=nullptr;}
  editorWaveRow_=kRows;
 }
@@ -1027,7 +1027,7 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
                                       std::array<WaveformRange,256>* rightEnvelope,
                                       bool* stereo) {
  if(row>=kRows)return false;
- if(!waveRequestPending_){
+ if(!waveRequestPending_&&!(waveReplyFresh_&&waveReply_&&waveRequestRow_==row)){
      if(waveRequestRow_!=row)invalidateWaveQuery();
      if(waveReply_){waveReply_->release();waveReply_=nullptr;}
      Steinberg::Vst::IMessage* msg=nullptr;
@@ -1047,6 +1047,7 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
      }catch(...){if(msg)msg->release();waveRequestPending_=false;return false;}
  }
  if(!waveReply_)return false;
+ waveReplyFresh_=false; // consume once; next snapshot refreshes revision
  try{
    auto* a=waveReply_->getAttributes();Steinberg::int64 response=-1;
    if(!a||a->getInt("Status",response)!=Steinberg::kResultOk||response!=1)return false;
