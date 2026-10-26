@@ -136,7 +136,7 @@ int main() {
     check(copy.output==preservedRouting.output&&copy.grid==preservedRouting.grid,
           "rejected bus changed previously loaded kit");
     // First strip the DM16 WAV-edit extension to recreate an actual DM15.
-    auto old15=encoded;
+    auto old15=beforeDM16; // DM16 layout, without the appended DM17 start bar.
     old15.erase(old15.end()-static_cast<std::ptrdiff_t>(4+kRows*kSampleEditBytes),old15.end()-4);
     for(int i=0;i<4;++i)
       old15[static_cast<std::size_t>(i)]=static_cast<std::uint8_t>(kKitMagicV15>>(8*i));
