@@ -1246,10 +1246,16 @@ void test11IRotaryMinCenterMax(){
  for(std::size_t i=0;i<3;++i)
    click(*v,UiCompactLayout::rowKnobCenters[i],rowY,
          VSTGUI::kLButton|VSTGUI::kDoubleClick);
+ const auto resetDiagnostic=std::string("SWING=")+std::to_string(f.c->swingPercent())+
+   " HUMANIZE="+std::to_string(f.c->humanizePercent())+
+   " MASTER="+std::to_string(f.c->masterVolume())+
+   " VOL="+std::to_string(f.c->rowGain(0))+
+   " PAN="+std::to_string(f.c->rowPan(0))+
+   " PITCH="+std::to_string(f.c->rowPitch(0));
  check(f.c->swingPercent()==0&&f.c->humanizePercent()==0&&
        f.c->masterVolume()==100&&f.c->rowGain(0)==100&&
        f.c->rowPan(0)==0&&f.c->rowPitch(0)==0,
-       "M11I double-click reset regressed across six rotary types");
+       std::string("M11I double-click reset values: ")+resetDiagnostic);
  evidence("M11I six rotary types min/center/max, exact numeric state, real native 100/130 screenshots, six double-click defaults PASS");
 }
 void test11IMonoFlacImport(){
