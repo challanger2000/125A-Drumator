@@ -26,4 +26,38 @@
 
 Die Reparaturen werden auf einem **einzigen kohärenten Produktcommit** gebündelt. Der Core-Workflow muss mit dessen exakter SHA folgende Ausgaben belegen: alle CTests, 47/47 Steinberg Validator, paketierter DLL-Audio-/Editorhost, verifizierte Ressourcen. Der nachgelagerte Tester-Job muss die aktuelle DLL-SHA256 und den aktuellen Source-Commit zusammen mit seinem eigenen Ergebnis archivieren. Tester-Status und reale Action-ID werden **erst nach tatsächlich abgeschlossener Ausführung** eingetragen; ein geplanter Test ist kein PASS.
 
-**QA-Status zum Erstellen dieses Dokuments:** neuer Windows-Build **NOT RUN**; neuer 125A Plugin Tester **NOT RUN**; Studio One/ASIO **NOT RUN**. Vorherige Runs sind historische Ausgangsnachweise und gelten nicht als Abschluss der neuen Änderungen. V1-FINAL ausdrücklich nicht erteilt.
+**QA-Abschlussstand (26.10.2026):** Technische Windows-Prüfung für **exakt `7da6d5a4fd42a76fd8a561b9637ee8ebdd810c13`** bestanden; Studio One/ASIO und native Abnahme im tatsächlichen Anwenderhost **NOT RUN**. V1-FINAL ausdrücklich **NICHT** erteilt.
+
+## 26.10.2026 — tatsächliche Windows- und unabhängige QA-Evidenz
+
+### Diagnose des ersten Reparaturlaufs (FAIL, nicht unterdrückt)
+
+- Reparaturstand `41f58dbfbf46ab742bcd7bffe49543799fa790a0`, [Actions #40409623269](https://github.com/challanger2000/125A-Drumator/actions/runs/40409623269): Kompilation und SDK-Prüfung PASS; **22/23 CTests**, ein Integrationstest FAIL: `A01 independent copied and delayed Processor/Controller IPC` mit `A01 separate delayed Wave reply did not open real stereo editor`. Der A03-Processor-Überlauftest bei 2200 MIDI-Hits PASS. Validator, Paket-Hosttest und unabhängiger Tester SKIPPED, daher keine irreführenden PASS-Behauptungen.
+- Root-Cause-Fix in `7da6d5a`: Die bereits eingetroffene SampleEditorReply wird exakt einmal als gültige ausstehende Antwort verarbeitet (`waveReplyFresh_`), bevor die nächste Metadaten-/Revision-Abfrage erlaubt wird. Ohne diese Trennung verdrängte eine synchron zugestellte Reply beim verschachtelten Öffnen des Editors die noch nicht konsumierte Wellenform. Der Proxy-Regressionstest erzwingt **genau eine** kopierte Abfrage und überprüft erst danach die getrennt zugestellte Antwort. Keine Audio-/DSP-Änderung im Nachkorrekturcommit.
+  
+### Verifizierter Abschlusslauf
+
+**[GitHub Actions #40410436596](https://github.com/challanger2000/125A-Drumator/actions/runs/40410436596), vollständiger Jobstatus SUCCESS, Commit `7da6d5a4fd42a76fd8a561b9637ee8ebdd810c13`.**
+
+| Prüfschritt | Tatsächliches Ergebnis | Evidenz |
+| --- | --- | --- |
+| Windows x64 MSVC Release + gepinnter SDK-Checkout | PASS | Job `windows`, SDK-Hauptrevision `3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96`, rekursive Submodule, CMake dr_flac SHA256-Gate |
+| Deterministische CTests | **23/23 PASS**, 0 FAIL | `windows` Joblog, `100% tests passed, 0 tests failed out of 23` |
+| A01 kopierender IPC-Proxy | **PASS** | `A01 independent copied and delayed Processor/Controller IPC PASS`; abgedeckt: verzögerte Editor-/Pattern-Replies, andere Anfrageobjekte, Projekt-Recall/Stale-Replies, Hostautomations-Priorität |
+| A03 echter Processor-MIDI-Overflow | **PASS** | `A03 actual processor 2200-event bounded overflow PASS`; 2048 akzeptiert/152 nachvollziehbare Drops, ungültige Events ausgenommen; Meter-IPC-Gegenprüfung |
+| Steinberg Validator | **47/47 PASS** | `Result: 47 tests passed, 0 tests failed` |
+| Paketierter Editorhost/GUI-Ressourcen | **PASS** | reale DLL via `LoadLibraryW`, nativ angeschlossenes HWND, 100/130-%-Renderings, metallisches Logo und Faceplate |
+| Paketierter Audio-/MIDI-/State-Host | **PASS** | reale VST3-DLL, 16 Stereo-Busse, Main-/Stem-Routing, MIDI, Zeitposition/SONG, FLAC/WAV, DM16/DM17, unterbrochene/unzulässige Zustände, Sample-Audio |
+| Unabhängiger 125A Plugin Tester **v0.3.2** | **58 PASS / 0 WARNING / 0 FAIL**, Exitcode 0, JSON `status=PASS` | `independent-plugin-tester / tester` Job im selben Run, nach `windows`; Detailberichte TXT/JSON und Provenienz im separaten Artifact |
+| Studio One 8.1.2 Pro / Windows 11 ASIO / reale Bedienoberfläche | **NOT RUN** | getrennte Anwenderabnahme; kein simuliertes PASS |
+
+**Nachvollziehbare Zuordnung der geprüften Binärdatei:**
+- Source-Commit: `7da6d5a4fd42a76fd8a561b9637ee8ebdd810c13`
+- Build/Test-Run: `40410436596`
+- Windows-VST3-Paket: Artifact ID **`12692093334`**, `125A-Drumator-M11-Full-Kit-Stress-QA`; Archiv-Digest `sha256:41e5886c6997a8e969c639c3f76903863448e59c08345b92926f6bcc33025760`.
+- **Exakter SHA256 der geprüften DLL** `Contents/x86_64-win/125A Drumator.vst3`: `8e1b8d1815d2529a35ccc6417d15416637c488933469bfba91a4f82c9f17e89a`.
+- Unabhängige 125A-Tester-Evidenz: Artifact ID **`12692158314`**, `125A-Drumator-Independent-Plugin-Tester-v0.3.2`; Archiv-Digest `sha256:4ffdb8c06da1cdcab076192de75cee2c5354a31f785b5d4dd52a6f7ce6bd770e`.
+- Native VSTGUI-Pixel-Evidenz: Artifact ID **`12693875894`**, `125A-Drumator-VSTGUI-Native-Renderings`.
+
+**Release-Restbedingungen:** A07/A08 sind nicht erledigt: reales Studio One/ASIO-Langzeitverhalten, Transport-Cycle/Stop/Start, gleichzeitige Multi-Out-Ausgabe, Bedienung des Sample-Editors, tatsächliche Host-Fensterdarstellung bei 100/130 % sowie vollständiges DAW-Projekt-Speichern/Neuladen werden separat auf dem Anwenderrechner geprüft. Ein echter separater Hostprozess ist trotz kopierendem Proxy-Test als **nicht praktisch bestätigt** ausgewiesen. Keine eigenmächtige V1-FINAL-Freigabe, keine Versionsanhebung, kein Merge nach `main`.
+
