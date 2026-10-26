@@ -1353,8 +1353,29 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
            entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS");
      }else std::snprintf(cell,sizeof(cell),"%02u   + ENTRY",
              static_cast<unsigned>(index+1));
-     drawControl(c,{sx,sy,sx+UiSongLayout::cellWidth,sy+UiSongLayout::cellHeight},
-                 cell,index==songSlot_&&index<count);
+     const VSTGUI::CRect chainRect{sx,sy,sx+UiSongLayout::cellWidth,
+                                   sy+UiSongLayout::cellHeight};
+     // Use the same machined button, selected-blue rim and lighting as every
+     // other Drumator control. Only the content layout is SONG-specific.
+     drawControl(c,chainRect,"",index==songSlot_&&index<count);
+     c->setFont(VSTGUI::kNormalFont,12);
+     const bool selected=index==songSlot_&&index<count;
+     c->setFontColor(selected?VSTGUI::CColor{245,252,255,255}:letters);
+     if(index<count){
+       const auto entry=controller_.songEntry(index);
+       char number[8]{},pattern[4]{};
+       std::snprintf(number,sizeof(number),"%02u",static_cast<unsigned>(index+1));
+       std::snprintf(pattern,sizeof(pattern),"%c",static_cast<char>('A'+entry.pattern));
+       const char* length=entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS";
+       // Fixed insets live strictly within the original 150x45 hitbox.
+       c->drawString(number,{sx+9.,sy+3.,sx+35.,sy+41.},VSTGUI::kCenterText);
+       c->setFontColor(selected?VSTGUI::CColor{170,226,253,255}:accent);
+       c->drawString(pattern,{sx+38.,sy+3.,sx+63.,sy+41.},VSTGUI::kCenterText);
+       c->setFontColor(selected?VSTGUI::CColor{245,252,255,255}:letters);
+       c->drawString(length,{sx+69.,sy+3.,sx+143.,sy+41.},VSTGUI::kCenterText);
+     }else{
+       c->drawString(cell,{sx+6.,sy+3.,sx+144.,sy+41.},VSTGUI::kCenterText);
+     }
    }
    c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
    char selectionLabel[80]{};
