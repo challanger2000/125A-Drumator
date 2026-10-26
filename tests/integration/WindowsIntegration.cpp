@@ -1237,7 +1237,7 @@ void test11IRotaryMinCenterMax(){
  Fixture f;auto kit=namedKit('X',4);
  kit.swing=40;kit.humanize=80;kit.masterVolume=175;
  kit.gain[0]=180;kit.pan[0]=170;kit.pitch[0]=41;
- f.kit(kit);f.open();auto* v=IntegrationAccess::view(*f.c,0);
+ f.kit(kit);prepareAudio(*f.p);f.open();auto* v=IntegrationAccess::view(*f.c,0);
  for(const auto x:{UiCompactLayout::globalKnobCenters[0],
                     UiCompactLayout::globalKnobCenters[1],
                     UiCompactLayout::globalKnobCenters[2]})
@@ -1255,7 +1255,7 @@ void test11IRotaryMinCenterMax(){
  check(f.c->swingPercent()==0&&f.c->humanizePercent()==0&&
        f.c->masterVolume()==100&&f.c->rowGain(0)==100&&
        f.c->rowPan(0)==0&&f.c->rowPitch(0)==0,
-       std::string("M11I double-click reset values: ")+resetDiagnostic);
+       (std::string("M11I double-click reset values: ")+resetDiagnostic).c_str());
  evidence("M11I six rotary types min/center/max, exact numeric state, real native 100/130 screenshots, six double-click defaults PASS");
 }
 void test11IMonoFlacImport(){
