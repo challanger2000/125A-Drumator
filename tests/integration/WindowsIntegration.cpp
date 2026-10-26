@@ -740,8 +740,9 @@ void testWaveEditor11FFlacAndStatus(){
  auto* view=IntegrationAccess::view(*f.c,0);
  // Use actual View loadPath -> Controller::loadWav -> Processor, not kit recall.
  for(const auto& imported:{wav,path}){
-   check(IntegrationAccess::importPathViaView(*view,0,pathToUtf8(imported)),
-         "W11F normal View sample import rejected");
+   if(!IntegrationAccess::importPathViaView(*view,0,pathToUtf8(imported)))
+     throw std::runtime_error(std::string("W11F real import rejected: ")+
+       imported.filename().string()+" / "+IntegrationAccess::sampleEditorStatus(*view));
    check(IntegrationAccess::sampleEditorStatus(*view).find("SAMPLE LOADED")!=std::string::npos,
          "W11F normal import status missing");
    check(IntegrationAccess::openSampleEditorForCapture(*view,0),
