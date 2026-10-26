@@ -149,19 +149,17 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
    if(!attrs){reply->release();return Steinberg::kResultFalse;}
    // Control actor may retry a bounded number of times to obtain a coherent
    // L/R+generation pair while the audio writer advances.
-   std::uint64_t seq=0,pair=0;
-   for(int attempt=0;attempt<4;++attempt){
-     const auto before=meter_->blockSequence.load(std::memory_order_acquire);
-     pair=meter_->lastPair.load(std::memory_order_acquire);
-     const auto after=meter_->blockSequence.load(std::memory_order_acquire);
-     seq=after;
-     if(before==after)break;
-   }
+   // The control actor consumes one MAX peak of each channel across all
+   // blocks since its last request. Multiple Views read the Controller
+   // cache; none of them exchanges atomic PCM peaks.
+   const auto peakL=meter_->mainL.exchange(0,std::memory_order_acq_rel);
+   const auto peakR=meter_->mainR.exchange(0,std::memory_order_acq_rel);
+   const auto seq=meter_->blockSequence.load(std::memory_order_acquire);
    Steinberg::tresult status=Steinberg::kResultFalse;
    try{
      if(attrs->setInt("Sequence",static_cast<Steinberg::int64>(seq))==Steinberg::kResultOk&&
-        attrs->setInt("Left",static_cast<Steinberg::int64>(pair>>32))==Steinberg::kResultOk&&
-        attrs->setInt("Right",static_cast<Steinberg::int64>(pair&0xffffffffu))==Steinberg::kResultOk&&
+        attrs->setInt("Left",static_cast<Steinberg::int64>(peakL))==Steinberg::kResultOk&&
+        attrs->setInt("Right",static_cast<Steinberg::int64>(peakR))==Steinberg::kResultOk&&
         attrs->setInt("Clip",meter_->clipMask.load(std::memory_order_acquire))==Steinberg::kResultOk&&
         attrs->setInt("Full",meter_->fullScaleMask.load(std::memory_order_acquire))==Steinberg::kResultOk&&
         attrs->setInt("Reset",meter_->clipResetEpoch.load(std::memory_order_acquire))==Steinberg::kResultOk)

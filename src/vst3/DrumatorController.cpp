@@ -60,7 +60,8 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
       reset<0||static_cast<std::uint64_t>(reset)<lastClearEpoch_)
      return Steinberg::kResultFalse;
    const auto index=static_cast<std::uint64_t>(seq);
-   if(index>=meterState_.sequence){
+   // Later UI polls for the same audio generation must not erase peaks.
+   if(index>meterState_.sequence){
      meterState_={index,static_cast<std::uint32_t>(l),static_cast<std::uint32_t>(r),
                   static_cast<std::uint32_t>(clip),static_cast<std::uint32_t>(full),
                   static_cast<std::uint32_t>(reset)};

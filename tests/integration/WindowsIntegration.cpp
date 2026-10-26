@@ -1082,6 +1082,23 @@ void testGui49MusicalFourSampleCapture(){
  evidence("GUI49 musical native 130pct: four decoded stereo WAVs, true names, occupied 32-step velocities and attached zoom PASS");
 }
 void test13MeterTransportAndMultiEditor(){
+ // A transient between UI polls must survive a subsequent silent block.
+ OutputMeter accumulator;
+ std::array<float,8> transientL{{.9f,.6f,0.f,0.f,0.f,0.f,0.f,0.f}};
+ std::array<float,8> transientR{{.25f,0.f,0.f,0.f,0.f,0.f,0.f,0.f}};
+ std::array<float,8> silenceL{},silenceR{};
+ float* hotBuffers[]{transientL.data(),transientR.data()};
+ float* quietBuffers[]{silenceL.data(),silenceR.data()};
+ AudioBusBuffers meterBus{};meterBus.numChannels=2;meterBus.channelBuffers32=hotBuffers;
+ ProcessData meterData{};meterData.numSamples=8;meterData.numOutputs=1;
+ meterData.outputs=&meterBus;
+ accumulator.observe(meterData,0);
+ meterBus.channelBuffers32=quietBuffers;
+ accumulator.observe(meterData,0);
+ check(OutputMeter::decode(accumulator.mainL.exchange(0))>.89f&&
+       OutputMeter::decode(accumulator.mainR.exchange(0))>.24f&&
+       accumulator.blockSequence.load()==2,
+       "S13 short real peak lost between UI polls after silent block");
  Fixture f;auto kit=namedKit('Q',2);
  kit.wav[0]=constantStereo(.8f,-.3f);kit.masterVolume=200;
  f.kit(kit);prepareAudio(*f.p);

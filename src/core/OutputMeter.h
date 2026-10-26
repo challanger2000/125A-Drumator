@@ -19,7 +19,7 @@ public:
  std::atomic<std::uint32_t> clipMask{0},fullScaleMask{0};
  // One coherent L/R block snapshot for control-thread IPC, independent of
  // destructive legacy test probes and of the number of editor windows.
- std::atomic<std::uint64_t> lastPair{0},blockSequence{0};
+ std::atomic<std::uint64_t> blockSequence{0};
  std::atomic<std::uint32_t> clipResetEpoch{0};
  static std::uint32_t encode(float peak) noexcept {
    return static_cast<std::uint32_t>(std::clamp(static_cast<double>(peak),0.,4.)*16383.75+0.5);
@@ -29,8 +29,12 @@ public:
  }
  static void accumulate(std::atomic<std::uint32_t>& slot,std::uint32_t value) noexcept {
    auto old=slot.load(std::memory_order_relaxed);
-   while(old<value&&!slot.compare_exchange_weak(
-       old,value,std::memory_order_relaxed,std::memory_order_relaxed)){}
+   // The audio callback is the sole writer. UI can only consume via
+   // exchange(0), so two attempts plus fallback are strictly bounded.
+   for(int attempt=0;attempt<2&&old<value;++attempt)
+     if(slot.compare_exchange_weak(old,value,
+          std::memory_order_relaxed,std::memory_order_relaxed))return;
+   if(old<value)slot.store(value,std::memory_order_relaxed);
  }
  void observe(const Steinberg::Vst::ProcessData& data,std::uint32_t activeStems) noexcept {
    if(data.numSamples<=0||!data.outputs)return;
@@ -53,14 +57,12 @@ public:
      if(b==0){
        encodedL=encode(peakL);encodedR=encode(peakR);
        // Single audio writer; no UI reader ever writes to these in production.
-       mainL.store(encodedL,std::memory_order_relaxed);
-       mainR.store(encodedR,std::memory_order_relaxed);
+       accumulate(mainL,encodedL);
+       accumulate(mainR,encodedR);
      }
      if(clip)clipMask.fetch_or(1u<<b,std::memory_order_relaxed);
      if(full)fullScaleMask.fetch_or(1u<<b,std::memory_order_relaxed);
    }
-   lastPair.store((static_cast<std::uint64_t>(encodedL)<<32)|encodedR,
-                  std::memory_order_release);
    blockSequence.fetch_add(1,std::memory_order_release);
  }
  void clearClips() noexcept {
