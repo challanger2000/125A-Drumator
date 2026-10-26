@@ -2140,6 +2140,36 @@ void testPagedSongEditor(){
        "UX Song page/selection left outside recalled chain");
  evidence("UX paged Song editor selection, no offscreen edits, recall and 64-slot navigation PASS");
 }
+void testSongDesignReview12A(){
+ Fixture f;auto kit=namedKit('X',4);
+ check(kit.chain.setCount(21),"12A chain capacity");
+ for(std::size_t i=0;i<21;++i)
+   check(kit.chain.configure(i,static_cast<std::uint8_t>((i*3)%8),
+                             static_cast<std::uint8_t>(i%3==0?8:i%3==1?16:32)),
+         "12A deliberately varied pattern and length");
+ kit.songEnabled=1;
+ f.kit(kit);f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ click(*v,1077.,114.); 
+ check(v->getViewSize().getHeight()==432.&&f.c->songCount()==21,
+       "12A actual SONG panel, populated kit and 21 chain entries");
+ for(const auto factor:{1.,1.3}){
+   const std::array<std::uint8_t,5> state{{'D','Z','M','2',
+       static_cast<std::uint8_t>(factor==1.?0:2)}};
+   drumator::qa::ByteStream input(const_cast<std::uint8_t*>(state.data()),state.size());
+   check(f.c->setState(&input)==kResultOk&&v->zoomMatches(factor),
+         "12A real editor 100/130 zoom missing");
+   captureVstgui(*v,factor==1.?"song-12a-varied-chain-100":
+                            "song-12a-varied-chain-130",factor);
+ }
+ click(*v,391.,226.);
+ check(IntegrationAccess::songSlot(*v)==2,"12A selection mismatch");
+ captureVstgui(*v,"song-12a-selected-pattern-length-130",1.3);
+ click(*v,1172.,181.);
+ check(IntegrationAccess::songPage(*v)==1,"12A second chain page navigation failed");
+ captureVstgui(*v,"song-12a-page2-130",1.3);
+ evidence("12A actual native SONG editor 100/130, 21 varied chain slots, selection and page 2 PASS");
+}
 void testSongCompactViewport(){
  Fixture f;f.kit(namedKit('X',4));f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
@@ -2713,6 +2743,7 @@ int main(int argc,char** argv){
  run("S10 Song count signed extreme edit deltas",testSongCountExtremeDelta);
  run("D11 control signed extreme deltas",testControlExtremeDeltas);
  run("UX compact Song viewport",testSongCompactViewport);
+ run("Step 12A native SONG design review at 100/130",testSongDesignReview12A);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);
  run("N12 real WAV sample folder previous/next",testRealSampleFolderStepping);
