@@ -11,6 +11,7 @@
 #include "ResultLog.h"
 #include "core/PatternQuantization.h"
 #include "core/Utf8Path.h"
+#include "core/FlacImport.h"
 #include "vst3/DrumatorController.h"
 #include "vst3/DrumatorView.h"
 #include "core/UiDetailGeometry.h"
