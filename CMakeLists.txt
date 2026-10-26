@@ -218,6 +218,7 @@ if(DRUMATOR_BUILD_VST3)
   file(DOWNLOAD
     "https://raw.githubusercontent.com/mackron/dr_libs/dfe8377631000664666519fdb83da193fd8037f4/dr_flac.h"
     "${_drflac_dir}/dr_flac.h"
+    EXPECTED_HASH SHA256=111144e778f55738db6851cb226015c419e00d04b916a09506d4856d9cff945c
     STATUS _drflac_status TLS_VERIFY ON)
   list(GET _drflac_status 0 _drflac_code)
   if(NOT _drflac_code EQUAL 0)

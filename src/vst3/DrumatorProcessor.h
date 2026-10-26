@@ -156,6 +156,8 @@ private:
  std::atomic<std::uint8_t> humanizePercent_{0};
  std::array<std::atomic<std::uint8_t>,kRows> randomVelocity_{};
  std::array<std::atomic<std::uint8_t>,kPatterns> patternLengths_{};
+ // Monotonic, lock-free diagnostics; never logs or allocates in process().
+ std::atomic<std::uint64_t> droppedTriggers_{0};
  std::atomic<std::uint8_t> masterVolume_{100};
  MasterGainRamp masterRamp_{}; // reset only at setup/guarded recall
  std::atomic<std::uint32_t> activeStemMask_{0};

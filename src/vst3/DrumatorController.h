@@ -29,7 +29,7 @@ public:
  ~Controller() override;
  Steinberg::tresult PLUGIN_API notify(Steinberg::Vst::IMessage*) SMTG_OVERRIDE;
  std::shared_ptr<OutputMeter> meterLink() const noexcept {return meter_;} // legacy same-process QA only
- struct MeterState {std::uint64_t sequence=0;std::uint32_t left=0,right=0,clip=0,full=0,reset=0;};
+ struct MeterState {std::uint64_t sequence=0;std::uint32_t left=0,right=0,clip=0,full=0,reset=0;std::uint64_t triggerDrops=0;};
  MeterState meterState() const noexcept {return meterState_;}
  void requestMeterSnapshot();
  bool clearMeterClips();
@@ -58,6 +58,10 @@ public:
                            std::uint32_t* revision=nullptr,
                            std::array<WaveformRange,256>* rightEnvelope=nullptr,
                            bool* stereo=nullptr);
+ void cancelSampleEditorRequest(std::size_t row) noexcept {
+   if(waveRequestPending_&&waveRequestRow_==row)invalidateWaveQuery();
+ }
+ bool sampleEditorRequestPending(std::size_t row) const noexcept {return waveRequestPending_&&waveRequestRow_==row;}
  std::uint32_t editorWaveSampleRate() const noexcept {return editorWaveCache_.sampleRate;}
  bool commitSampleEdit(std::size_t row,const SampleEdit& edit,
                        std::uint32_t revision=UINT32_MAX);
@@ -149,7 +153,8 @@ private:
  MeterState meterState_{};
  std::uint32_t lastClearEpoch_{0};
  void notifyViews(bool relayout);
- bool processorConfirmsPattern(unsigned requested);
+ bool processorConfirmsPattern(unsigned requested,double fallback);
+ void invalidateWaveQuery() noexcept;
  bool reservePreviewStop() noexcept;
  void invalidateTransientEditsForRecall() noexcept;
  // Reusable STOP command is reserved before any audition can start.
@@ -185,6 +190,15 @@ private:
  WaveformExtremaIndex editorWaveIndexLeft_{},editorWaveIndexRight_{};
  std::size_t editorWaveRow_{kRows};
  std::uint32_t editorWaveRevision_{0};
+ Steinberg::Vst::IMessage* waveReply_{nullptr};
+ std::size_t waveRequestRow_{kRows};
+ std::uint64_t nextRequestId_{0},waveRequestId_{0};
+ bool waveRequestPending_{false};
+ std::uint64_t patternRequestId_{0};
+ unsigned patternReplyRequested_{0};
+ double patternReplyHostValue_{0.},patternFallback_{0.};
+ bool patternRequestPending_{false},patternReplyReceived_{false};
+ bool patternReplyMatched_{false},patternRecallApplying_{false};
  std::array<std::uint64_t,kRows> originIdentity_{};
  std::array<bool,kRows> originIdentityValid_{};
  // Last rejected per-row origin paths, held only on the controller thread.

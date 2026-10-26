@@ -14,9 +14,10 @@ class TriggerBatch final {
 public:
     static constexpr std::size_t kCapacity=kRows*StepScheduler::maxBoundariesPerBlock;
     bool appendStep(const Trigger& trigger) noexcept {
-        if(size_>=kCapacity||trigger.row>=kRows||trigger.step>=kSteps||
+        if(trigger.row>=kRows||trigger.step>=kSteps||
            trigger.pattern>=kPatterns||trigger.velocity==0||trigger.velocity>127)
             return false;
+        if(size_>=kCapacity){++droppedCapacity_;return false;}
         events_[size_]=trigger;
         events_[size_].arrival=static_cast<std::uint32_t>(size_);
         ++size_;
@@ -28,8 +29,8 @@ public:
                       std::uint32_t frames) noexcept {
         if(pitch<36||pitch>=36+static_cast<std::int32_t>(kRows)||
            offset<0||static_cast<std::uint32_t>(offset)>=frames||
-           !std::isfinite(velocity)||velocity<=0.f||velocity>1.f||
-           size_>=kCapacity)return false;
+           !std::isfinite(velocity)||velocity<=0.f||velocity>1.f)return false;
+        if(size_>=kCapacity){++droppedCapacity_;return false;}
         const auto mapped=std::clamp(static_cast<int>(std::lround(
             static_cast<double>(velocity)*127.0)),1,127);
         events_[size_]={static_cast<std::uint32_t>(offset),
@@ -97,9 +98,11 @@ public:
     }
     const Trigger* data() const noexcept{return events_.data();}
     std::size_t size() const noexcept{return size_;}
-    void clear() noexcept{size_=0;}
+    std::uint32_t droppedCapacity() const noexcept {return droppedCapacity_;}
+    void clear() noexcept{size_=0;droppedCapacity_=0;}
 private:
     std::array<Trigger,kCapacity> events_{};
     std::size_t size_{0};
+    std::uint32_t droppedCapacity_{0};
 };
 }

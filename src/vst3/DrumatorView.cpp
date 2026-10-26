@@ -813,6 +813,7 @@ void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
 void DrumatorView::discardTransientEditsForRecall() noexcept {
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
  sampleEditorOpen_=false;sampleEditorRow_=kRows;sampleEditorDrag_=0;
+ pendingEditorRow_=kRows;
  // Nothrow logical invalidation before the new kit commit. Do not call
  // VSTGUI/Win32 here: closing an EDIT HWND may invoke allocating callbacks.
  laneDragActive_=false;
@@ -889,6 +890,13 @@ void DrumatorView::refreshFromHost(bool relayout) {
 void DrumatorView::pollMeter() noexcept {
  // Each View reads the same controller cache. No destructive exchange by
  // individual GUI windows; generation ensures host Stop/no callbacks decays.
+ if(pendingEditorRow_<kRows &&
+    std::chrono::steady_clock::now()-pendingEditorSince_>std::chrono::seconds(3)){
+   controller_.cancelSampleEditorRequest(pendingEditorRow_);
+   pendingEditorRow_=kRows;
+   status_="SAMPLE EDITOR: REPLY TIMEOUT";
+   invalid();
+ }
  controller_.requestMeterSnapshot();
  const auto state=controller_.meterState();
  const bool fresh=state.sequence!=meterSequenceSeen_;
@@ -1707,6 +1715,12 @@ void DrumatorView::load(std::size_t row) {
  invalid();
 }
 
+void DrumatorView::onSampleEditorReady(std::size_t row,bool ok) {
+ if(pendingEditorRow_!=row)return;
+ pendingEditorRow_=kRows;
+ if(ok)(void)openSampleEditor(row);
+ else {status_="SAMPLE EDITOR: SOURCE UNAVAILABLE";invalid();}
+}
 bool DrumatorView::openSampleEditor(std::size_t row) {
  SampleEdit edit;std::uint32_t frames=0;
  std::array<WaveformRange,256> wave{};
@@ -1715,7 +1729,11 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  if(!controller_.sampleEditorSnapshot(row,edit,frames,wave,0,0,
                                       &sampleEditorRevision_,&sampleEditorWaveRight_,
                                       &sampleEditorStereo_)||frames==0){
-   status_="NO SAMPLE TO EDIT";
+   if(controller_.sampleEditorRequestPending(row)){
+     pendingEditorRow_=row;pendingEditorSince_=std::chrono::steady_clock::now();
+     status_="SAMPLE EDITOR: LOADING";
+   }
+   else status_="NO SAMPLE TO EDIT";
    invalid();return false;
  }
  const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
@@ -1728,6 +1746,7 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
    if(auto* parent=getParentView())parent->setViewSize({0,0,1280,editorHeight});
    setViewSize({0,0,1280,editorHeight});
  }
+ pendingEditorRow_=kRows;
  sampleEditorEdit_=edit;sampleEditorFrames_=frames;
  sampleEditorRate_=controller_.editorWaveSampleRate();sampleEditorWave_=wave;
  sampleEditorRow_=row;sampleEditorFirst_=0;sampleEditorLast_=frames;

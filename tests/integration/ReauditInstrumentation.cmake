@@ -3,12 +3,12 @@
 function(reaudit_instrument name variable)
   set(_code "${${variable}}")
   if(name STREQUAL "DrumatorProcessor")
-    qa_replace(_code "try {return (sameWaveRevision||"
-      "if(!sameWaveRevision)++drumator::qa::auditWaveFullReplies;\n   try {return (sameWaveRevision||")
+    qa_replace(_code "const auto status=attrs->setInt(\"Status\",prepared?1:0);"
+      "if(prepared&&!(knownRevision>=0&&knownRevision==static_cast<Steinberg::int64>(editorRevisions_[static_cast<std::size_t>(index)])))++drumator::qa::auditWaveFullReplies;\n     const auto status=attrs->setInt(\"Status\",prepared?1:0);")
     qa_replace(_code "if(!explicitStop&&!hasClock(suppliedContext)&&wasPlaying_&&"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::suppressMissingContextCarry&&\n    !explicitStop&&!hasClock(suppliedContext)&&wasPlaying_&&")
-    qa_replace(_code "return attributes->setInt(\"Selected\","
-      "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::patternReplyOOM)throw std::bad_alloc{};\n     return attributes->setInt(\"Selected\",")
+    qa_replace(_code "reply->setMessageID(\"Drumator.PatternReply\");"
+      "if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::patternReplyOOM)throw std::bad_alloc{};\n     reply->setMessageID(\"Drumator.PatternReply\");")
     qa_replace(_code "if(std::strcmp(id,\"Drumator.EditorPreviewStop\")==0){"
       "if(std::strcmp(id,\"Drumator.EditorPreviewStop\")==0){\n   if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::rejectPreviewStop)\n     return Steinberg::kResultFalse;\n   if(drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::rejectPreviewStopOnce){\n     drumator::qa::auditMutation.store(drumator::qa::AuditMutation::none);\n     return Steinberg::kResultFalse;\n   }")
     qa_replace(_code "auditionStart_.store(true,std::memory_order_release);"
@@ -59,8 +59,8 @@ function(reaudit_instrument name variable)
   elseif(name STREQUAL "DrumatorController")
     qa_replace(_code "auto bounds=indexedLeft.range(wave->left.data(),wave->left.size(),"
       "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::bypassWaveRangeIndex)++drumator::qa::auditWaveIndexedCalls;\n     auto bounds=drumator::qa::auditMutation.load()==drumator::qa::AuditMutation::bypassWaveRangeIndex?waveformRange(wave->left.data(),wave->left.size(),binFirst,std::max(binFirst+std::size_t{1},binLast)):indexedLeft.range(wave->left.data(),wave->left.size(),")
-    qa_replace(_code "if(editorWaveRow_==row&&"
-      "if(drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::disableWaveCache&&editorWaveRow_==row&&")
+    qa_replace(_code "const bool hit=editorWaveRow_==row&&"
+      "const bool hit=drumator::qa::auditMutation.load()!=drumator::qa::AuditMutation::disableWaveCache&&editorWaveRow_==row&&")
     qa_replace(_code "if(!hit) {\n     const void* bytes=nullptr;"
       "if(!hit) {\n     ++drumator::qa::auditWaveDecodeMisses;\n     const void* bytes=nullptr;")
     qa_replace(_code "view->refreshFromHost(relayout);"

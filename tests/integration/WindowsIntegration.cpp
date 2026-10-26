@@ -148,6 +148,8 @@ struct IntegrationAccess {
  static std::uint32_t activeAudioVoices(const Processor& p) {
    return p.voices_.active();
  }
+ static std::uint64_t overflowEvents(const Processor& p){return p.droppedTriggers_.load(std::memory_order_acquire);}
+ static void setProcessorPattern(Processor& p,unsigned n){p.selected_.hostSubmit(n);}
  static auto snapshot(Controller& c) {
    std::array<PatternSteps,kPatterns> undo{};
    std::array<bool,kPatterns> available{};
@@ -3078,6 +3080,192 @@ void testTransportJumpRetiresOldVoices(){
 }
 #include "ReauditCases.inl"
 #include "FinalAudit20261023.inl"
+
+struct A01SerializedConnection final:Steinberg::Vst::IConnectionPoint {
+ IConnectionPoint* target;
+ bool holdReplies=false;
+ std::size_t copied=0;
+ std::vector<Steinberg::Vst::HostMessage*> delayed;
+ explicit A01SerializedConnection(IConnectionPoint* p):target(p){}
+ ~A01SerializedConnection() {for(auto* m:delayed)m->release();}
+ tresult PLUGIN_API queryInterface(const TUID id,void** out) override {
+   if(!out)return kInvalidArgument;
+   if(FUnknownPrivate::iidEqual(id,IConnectionPoint::iid)||
+      FUnknownPrivate::iidEqual(id,FUnknown::iid)){
+     *out=static_cast<IConnectionPoint*>(this);addRef();return kResultOk;
+   }*out=nullptr;return kNoInterface;
+ }
+ uint32 PLUGIN_API addRef() override{return 1;}
+ uint32 PLUGIN_API release() override{return 1;}
+ tresult PLUGIN_API connect(IConnectionPoint*) override {return kResultOk;}
+ tresult PLUGIN_API disconnect(IConnectionPoint*) override {return kResultOk;}
+ tresult PLUGIN_API notify(IMessage* original) override {
+   if(!original||!original->getMessageID())return kInvalidArgument;
+   const std::string id=original->getMessageID();
+   const bool copiedType=id=="Drumator.QueryPattern"||
+     id=="Drumator.PatternReply"||id=="Drumator.SampleEditorQuery"||
+     id=="Drumator.SampleEditorReply";
+   if(!copiedType)return target->notify(original);
+   HostMessage* clone=nullptr;
+   try{
+     clone=new HostMessage();
+     clone->setMessageID(id.c_str());
+     auto* input=original->getAttributes();
+     auto* output=clone->getAttributes();
+     check(input&&output,"A01 proxy source attributes");
+     for(const auto* field:{"RequestId","Row","Status","Selected","Revision",
+                             "Start","End","FadeIn","FadeOut","GainBits","KnownRevision"}){
+       Steinberg::int64 value=0;
+       if(input->getInt(field,value)==kResultOk)
+         check(output->setInt(field,value)==kResultOk,"A01 proxy int serialization");
+     }
+     const void* sample=nullptr;Steinberg::uint32 length=0;
+     if(input->getBinary("Wave",sample,length)==kResultOk)
+       check(output->setBinary("Wave",sample,length)==kResultOk,
+             "A01 proxy WAV serialization");
+     ++copied;
+     const bool reply=id=="Drumator.PatternReply"||id=="Drumator.SampleEditorReply";
+     if(reply&&holdReplies){delayed.push_back(clone);return kResultOk;}
+     const auto result=target->notify(clone);
+     clone->release();return result;
+   }catch(...){if(clone)clone->release();return kResultFalse;}
+ }
+ void flush() {
+   auto pending=std::move(delayed);
+   delayed.clear();
+   for(auto* msg:pending){
+     const auto result=target->notify(msg);
+     msg->release();
+     check(result==kResultOk,"A01 copied delayed reply rejected");
+   }
+ }
+};
+void testA01SerializedAsyncIPC() {
+ // The intermediate host copies messages. Mutations of the original request
+ // can never reach the caller; replies are separate and may arrive later.
+ {
+   Fixture f;KitState kit;kit.grid.fill(0);
+   kit.names[0]="proxy.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+   f.kit(kit);f.open();
+   check(f.c->disconnect(f.p)==kResultOk&&f.p->disconnect(f.c)==kResultOk,
+         "A01 disconnect direct host");
+   A01SerializedConnection toProcessor(f.p),toController(f.c);
+   toController.holdReplies=true;
+   check(f.c->connect(&toProcessor)==kResultOk&&f.p->connect(&toController)==kResultOk,
+         "A01 connect serializing host");
+   auto* view=IntegrationAccess::view(*f.c,0);
+   click(*view,240.,UiCompactLayout::header+20.);
+   check(!IntegrationAccess::sampleEditorOpen(*view)&&
+         f.c->sampleEditorRequestPending(0)&&toProcessor.copied>0&&toController.copied>0,
+         "A01 editor assumed synchronous mutated request");
+   toController.flush();
+   check(IntegrationAccess::sampleEditorOpen(*view)&&
+         IntegrationAccess::editorStereo(*view)&&
+         std::abs(IntegrationAccess::editorLeft(*view)[0].minimum-.25f)<.001f&&
+         std::abs(IntegrationAccess::editorRight(*view)[0].maximum+.5f)<.001f,
+         "A01 separate delayed Wave reply did not open real stereo editor");
+   check(f.c->disconnect(&toProcessor)==kResultOk&&
+         f.p->disconnect(&toController)==kResultOk,
+         "A01 proxy disconnect");
+   check(f.c->connect(f.p)==kResultOk&&f.p->connect(f.c)==kResultOk,
+         "A01 restore original connection");
+ }
+ {
+   Fixture f;KitState kit;kit.grid.fill(0);
+   kit.names[0]="stale.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+   f.kit(kit);f.open();
+   check(f.c->disconnect(f.p)==kResultOk&&f.p->disconnect(f.c)==kResultOk,
+         "A01 stale Wave disconnect");
+   A01SerializedConnection toProcessor(f.p),toController(f.c);
+   toController.holdReplies=true;
+   check(f.c->connect(&toProcessor)==kResultOk&&f.p->connect(&toController)==kResultOk,
+         "A01 stale Wave proxy");
+   auto* view=IntegrationAccess::view(*f.c,0);
+   click(*view,240.,UiCompactLayout::header+20.);
+   check(f.c->sampleEditorRequestPending(0),"A01 Wave response not delayed");
+   check(f.recall(Fixture::encode(kit))==kResultOk,"A01 recall during pending Wave");
+   toController.flush();
+   check(!f.c->sampleEditorRequestPending(0)&&
+         !IntegrationAccess::sampleEditorOpen(*view),
+         "A01 old Wave reply reopened discarded project editor");
+   check(f.c->disconnect(&toProcessor)==kResultOk&&
+         f.p->disconnect(&toController)==kResultOk,"A01 stale Wave proxy disconnect");
+   check(f.c->connect(f.p)==kResultOk&&f.p->connect(f.c)==kResultOk,
+         "A01 stale Wave restore direct");
+ }
+ {
+   Fixture f;KitState kit;kit.grid.fill(0);kit.selected=0;f.kit(kit);
+   check(f.c->disconnect(f.p)==kResultOk&&f.p->disconnect(f.c)==kResultOk,
+         "A01 pattern fixture disconnect");
+   A01SerializedConnection toProcessor(f.p),toController(f.c);
+   toController.holdReplies=true;
+   check(f.c->connect(&toProcessor)==kResultOk&&f.p->connect(&toController)==kResultOk,
+         "A01 pattern proxy connect");
+   IntegrationAccess::setProcessorPattern(*f.p,1);
+   check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk,
+         "A01 host pattern fixture");
+   const auto state=Fixture::encode(kit);
+   check(f.recall(state)==kResultOk&&f.c->getParamNormalized(kPatternParam)<.001,
+         "A01 pattern recall must not wait for reply");
+   toController.flush();
+   check(std::abs(f.c->getParamNormalized(kPatternParam)-1./7.)<.0001,
+         "A01 host pattern not reconciled on delayed independent reply");
+   check(f.c->disconnect(&toProcessor)==kResultOk&&
+         f.p->disconnect(&toController)==kResultOk,"A01 pattern proxy disconnect");
+   check(f.c->connect(f.p)==kResultOk&&f.p->connect(f.c)==kResultOk,
+         "A01 pattern restore direct connection");
+ }
+ {
+   // An old reply must lose to subsequent host automation, even if it was
+   // serialized correctly and delivered after a successful Component recall.
+   Fixture f;KitState kit;kit.grid.fill(0);kit.selected=0;f.kit(kit);
+   check(f.c->disconnect(f.p)==kResultOk&&f.p->disconnect(f.c)==kResultOk,"A01 stale disconnect");
+   A01SerializedConnection toProcessor(f.p),toController(f.c);
+   toController.holdReplies=true;
+   check(f.c->connect(&toProcessor)==kResultOk&&f.p->connect(&toController)==kResultOk,
+         "A01 stale copied IPC");
+   IntegrationAccess::setProcessorPattern(*f.p,1);
+   check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk,"A01 stale request host");
+   check(f.recall(Fixture::encode(kit))==kResultOk,"A01 stale recall");
+   check(f.c->setParamNormalized(kPatternParam,2./7.)==kResultOk,"A01 later host wins");
+   toController.flush();
+   check(std::abs(f.c->getParamNormalized(kPatternParam)-2./7.)<.0001,
+         "A01 stale delayed pattern response overwrote newer automation");
+   check(f.c->disconnect(&toProcessor)==kResultOk&&f.p->disconnect(&toController)==kResultOk,
+         "A01 stale proxy disconnect");
+   check(f.c->connect(f.p)==kResultOk&&f.p->connect(f.c)==kResultOk,
+         "A01 stale restore connection");
+ }
+ evidence("A01 copied IConnectionPoint request/reply, delayed editor and pattern reconciliation PASS");
+}
+void testA03ProcessorMidiOverflow() {
+ Fixture f;KitState kit;kit.grid.fill(0);f.kit(kit);
+ prepareAudio(*f.p);
+ AuditAudioBlock block;
+ EventList events(2300);
+ Event event{};
+ event.type=Event::kNoteOnEvent;event.noteOn.pitch=36;event.noteOn.velocity=1.f;
+ event.sampleOffset=0;
+ for(int i=0;i<2048;++i)check(events.addEvent(event)==kResultOk,"A03 fill MIDI fixture");
+ block.data.inputEvents=&events;
+ check(f.p->process(block.data)==kResultOk&&
+       IntegrationAccess::overflowEvents(*f.p)==0,
+       "A03 exactly 2048 events wrongly dropped");
+ events.clear();
+ for(int i=0;i<2200;++i)check(events.addEvent(event)==kResultOk,"A03 overflow MIDI fixture");
+ check(f.p->process(block.data)==kResultOk&&
+       IntegrationAccess::overflowEvents(*f.p)==152,
+       "A03 2200 events must deterministically report 152 overflow hits");
+ f.c->requestMeterSnapshot();
+ check(f.c->meterState().triggerDrops==152,"A03 overflow not observable through host-safe meter IPC");
+ events.clear();
+ event.noteOn.pitch=60;
+ for(int i=0;i<2200;++i)check(events.addEvent(event)==kResultOk,"A03 invalid pitch fixture");
+ check(f.p->process(block.data)==kResultOk&&
+       IntegrationAccess::overflowEvents(*f.p)==152,
+       "A03 invalid pitch counted as overflow");
+ evidence("A03 real processor 2048/2200 MIDI density, deterministic overflow and invalid-event exclusion PASS");
+}
 }
 int main(int argc,char** argv){
  std::cout<<std::unitbuf;
@@ -3198,6 +3386,8 @@ int main(int argc,char** argv){
  run("UX compact Song viewport",testSongCompactViewport);
  run("Step 12A native SONG design review at 100/130",testSongDesignReview12A);
  run("GUIFINAL SONG START/REST layout, 100/130 genuine pixels",testSongFinalGuiAlignment);
+ run("A01 independent copied and delayed Processor/Controller IPC",testA01SerializedAsyncIPC);
+ run("A03 actual processor 2200-event bounded overflow",testA03ProcessorMidiOverflow);
  run("N10 processor rename OOM",testHostNameAllocationRollback);
  run("N11 controller metadata transactional commit",testControllerMetadataCommit);
  run("N12 real WAV sample folder previous/next",testRealSampleFolderStepping);

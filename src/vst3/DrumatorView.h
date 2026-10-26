@@ -10,6 +10,7 @@
 #include "core/SampleEdit.h"
 #include "vstgui/lib/cvstguitimer.h"
 #include <cstdint>
+#include <chrono>
 namespace VSTGUI {class CTextEdit; class CBitmap;}
 namespace drumator {
 class Controller;
@@ -18,6 +19,7 @@ class DrumatorView final : public VSTGUI::CView, public VSTGUI::IDropTarget,
 public:
  ~DrumatorView() override;
  void refreshFromHost(bool relayout);
+ void onSampleEditorReady(std::size_t row,bool ok);
  void discardTransientEditsForRecall() noexcept;
  void finishTransientEditsAfterRecall();
  double currentZoom() const;
@@ -76,6 +78,8 @@ private:
  int popup_{0};
  bool sampleEditorOpen_{false};
  std::size_t sampleEditorRow_{kRows};
+ std::size_t pendingEditorRow_{kRows};
+ std::chrono::steady_clock::time_point pendingEditorSince_{};
  SampleEdit sampleEditorEdit_{};
  std::uint32_t sampleEditorRevision_{0};
  std::uint32_t sampleEditorFrames_{0};

@@ -1,10 +1,7 @@
 name: Drumator 125A Plugin Tester - verified Windows artifact
 
 on:
-  push:
-    branches: [gui/ppg-blue-background-20261024]
-    paths:
-      - '.github/workflows/125a-plugin-tester-qa.yml'
+  workflow_call:
 
 permissions:
   contents: read
@@ -15,26 +12,29 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - name: Validate source-to-artifact provenance
+      - name: Verify current successful build and exact artifact
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'X-GitHub-Api-Version' = '2022-11-28' }
-          $run = Invoke-RestMethod -Uri 'https://api.github.com/repos/challanger2000/125A-Drumator/actions/runs/40394744591' -Headers $headers
-          if ($run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
-              $run.head_sha -cne '989f454e9ed00ef175b1a2c1c25927d56c0aa134') {
-            throw "Unverified source artifact: $($run.head_sha), status $($run.conclusion)"
+          $runId = $env:GITHUB_RUN_ID
+          $sha = $env:GITHUB_SHA
+          $run = Invoke-RestMethod -Uri "https://api.github.com/repos/challanger2000/125A-Drumator/actions/runs/$runId" -Headers $headers
+          if ($run.head_sha -cne $sha -or $run.status -ne 'in_progress') {
+            throw "Unexpected caller run/source: $($run.head_sha), status $($run.status)"
           }
-          Write-Output "Verified Windows source: $($run.head_sha)"
-
-      - name: Download the already validated Drumator bundle
+          $artifacts = Invoke-RestMethod -Uri "https://api.github.com/repos/challanger2000/125A-Drumator/actions/runs/$runId/artifacts" -Headers $headers
+          $matching = @($artifacts.artifacts | Where-Object { $_.name -ceq '125A-Drumator-M11-Full-Kit-Stress-QA' -and -not $_.expired })
+          if ($matching.Count -ne 1 -or $matching[0].workflow_run.head_sha -cne $sha) {
+            throw "No unique current Windows artifact for $sha"
+          }
+          Write-Output "Source=$sha; run=$runId; artifact=$($matching[0].id); archive digest=$($matching[0].digest)"
+      - name: Download the current job's packaged VST3
         uses: actions/download-artifact@v4
         with:
           name: 125A-Drumator-M11-Full-Kit-Stress-QA
-          run-id: 40394744591
-          github-token: ${{ github.token }}
           path: artifact
 
       - name: Download exact pinned 125A Plugin Tester v0.3.2
@@ -82,9 +82,12 @@ jobs:
           if ($info.Classes[0].Name -cne '125A Drumator') { throw 'Unexpected plugin identity' }
           $tester = Join-Path $PWD 'tester-bin/125A_Plugin_Tester_v0.3.2.exe'
           $dllHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($dllHash -cne '9a8b11bce220109e663c0b75c1967ad9f7c6eced1f82c3a1ae0939755a99ed91') {
-            throw "Wrong Drumator 989f454 DLL: $dllHash"
+          $testerHash = (Get-FileHash -LiteralPath $tester -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($testerHash -cne 'a091ae1b46a7983b5b498ed021d19dd2f744c2667bedaf3da9bb3d665f3f4e9c') {
+            throw 'Unexpected tester hash during execution'
           }
+          if ($dllHash.Length -ne 64) { throw 'Invalid candidate DLL SHA256' }
+          Write-Output "CURRENT VST3 source=$env:GITHUB_SHA run=$env:GITHUB_RUN_ID SHA256=$dllHash"
           $reports = Join-Path $PWD '125A-QA-Reports'
           New-Item -ItemType Directory -Force -Path $reports | Out-Null
           [Environment]::SetEnvironmentVariable('125A_PLUGIN_TESTER_REPORT_DIR', $reports, 'Process')
@@ -119,7 +122,9 @@ jobs:
           if ($exitCode -ne 0 -or $failCount -gt 0 -or $warnCount -gt 0 -or $json.status -ne 'PASS') {
             throw '125A Plugin Tester is not a clean PASS; inspect the archived detailed report'
           }
-          Write-Output '[PASS] 125A Plugin Tester v0.3.2 on Drumator 989f454'
+          $metadata = [ordered]@{ candidateCommit=$env:GITHUB_SHA; buildRun=$env:GITHUB_RUN_ID; candidateDllSha256=$dllHash; testerVersion='0.3.2'; testerExeSha256=$testerHash; pass=$passCount; warning=$warnCount; fail=$failCount; exitCode=$exitCode }
+          ($metadata | ConvertTo-Json) | Set-Content -LiteralPath (Join-Path $reports 'candidate-provenance.json') -Encoding utf8
+          Write-Output "[PASS] 125A Plugin Tester v0.3.2 on current $env:GITHUB_SHA, DLL $dllHash"
 
       - name: Archive independent tester evidence (also on failure)
         if: always()

@@ -143,7 +143,8 @@ void testFa23AuditionDeactivate(){
 }
 void testFa23QueryOOM(){
  Fixture f;fa23Kit(f);HostMessage query;query.setMessageID("Drumator.SampleEditorQuery");
- check(query.getAttributes()->setInt("Row",0)==kResultOk,"FA23 query fixture");
+ check(query.getAttributes()->setInt("Row",0)==kResultOk&&
+       query.getAttributes()->setInt("RequestId",1)==kResultOk,"FA23 query fixture");
  allocationFail=0;bool escaped=false;tresult result=kResultFalse;
  try {result=f.p->notify(&query);}catch(const std::bad_alloc&){escaped=true;}
  allocationFail=-1;

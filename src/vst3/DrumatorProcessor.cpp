@@ -178,7 +178,10 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
         attrs->setInt("Right",static_cast<Steinberg::int64>(peakR))==Steinberg::kResultOk&&
         attrs->setInt("Clip",meter_->clipMask.load(std::memory_order_acquire))==Steinberg::kResultOk&&
         attrs->setInt("Full",meter_->fullScaleMask.load(std::memory_order_acquire))==Steinberg::kResultOk&&
-        attrs->setInt("Reset",meter_->clipResetEpoch.load(std::memory_order_acquire))==Steinberg::kResultOk)
+        attrs->setInt("Reset",meter_->clipResetEpoch.load(std::memory_order_acquire))==Steinberg::kResultOk&&
+        attrs->setInt("TriggerDrops",static_cast<Steinberg::int64>(
+          std::min<std::uint64_t>(droppedTriggers_.load(std::memory_order_acquire),
+             static_cast<std::uint64_t>(INT64_MAX))))==Steinberg::kResultOk)
        status=sendMessage(reply);
    }catch(...){status=Steinberg::kOutOfMemory;}
    if(status==Steinberg::kResultOk) {
@@ -199,50 +202,77 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  // Control-thread-only state query. The audio selection is atomic; no
  // callback lock, heap work or mutation is required.
  if(std::strcmp(id,"Drumator.QueryPattern")==0) {
-   auto* attributes=msg->getAttributes();
-   if(!attributes)return Steinberg::kResultFalse;
-   // SDK message attribute insertion may allocate: never escape notify().
+   Steinberg::int64 requestId=0;
+   auto* source=msg->getAttributes();
+   if(!source||source->getInt("RequestId",requestId)!=Steinberg::kResultOk||
+      requestId<=0)return Steinberg::kInvalidArgument;
+   Steinberg::Vst::IMessage* reply=nullptr;
    try {
-     return attributes->setInt("Selected",
-         static_cast<Steinberg::int64>(selected_.load(std::memory_order_acquire)))==Steinberg::kResultOk
-         ? Steinberg::kResultOk : Steinberg::kResultFalse;
-   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+     reply=allocateMessage();
+     if(!reply)return Steinberg::kOutOfMemory;
+     reply->setMessageID("Drumator.PatternReply");
+     auto* attrs=reply->getAttributes();
+     const auto result=attrs&&
+       attrs->setInt("RequestId",requestId)==Steinberg::kResultOk&&
+       attrs->setInt("Selected",selected_.load(std::memory_order_acquire))==Steinberg::kResultOk
+       ?sendMessage(reply):Steinberg::kResultFalse;
+     reply->release();
+     return result;
+   }catch(...) {if(reply)reply->release();return Steinberg::kOutOfMemory;}
  }
-
 
  // UI/control-thread-only query: read the *embedded* sample so the editor
  // works after project recall even without the original filesystem path.
  if(std::strcmp(id,"Drumator.SampleEditorQuery")==0) {
-   auto* attrs=msg->getAttributes();
-   Steinberg::int64 index=-1;
-   if(!attrs||attrs->getInt("Row",index)!=Steinberg::kResultOk||
-      index<0||index>=static_cast<Steinberg::int64>(kRows))
+   auto* request=msg->getAttributes();
+   Steinberg::int64 index=-1,requestId=0,knownRevision=-1;
+   if(request)(void)request->getInt("KnownRevision",knownRevision);
+   if(!request||request->getInt("Row",index)!=Steinberg::kResultOk||
+      request->getInt("RequestId",requestId)!=Steinberg::kResultOk||
+      requestId<=0||index<0||index>=static_cast<Steinberg::int64>(kRows))
      return Steinberg::kInvalidArgument;
-   std::lock_guard<std::mutex> guard(kitMutex_);
-   const auto row=static_cast<std::size_t>(index);
-   const auto& wav=kit_.wav[row];
-   if(wav.empty()||wav.size()>kMaxSingleWav)return Steinberg::kResultFalse;
-   const auto& edit=kit_.sampleEdits[row];
-   const auto revision=editorRevisions_[row];
-   Steinberg::uint32 gainBits=0;
-   static_assert(sizeof(gainBits)==sizeof(edit.gain));
-   std::memcpy(&gainBits,&edit.gain,sizeof(gainBits));
-   // Legacy callers receive Wave unconditionally. A matching cached
-   // revision omits only the large binary, never the authoritative edit.
-   Steinberg::int64 known=-1;
-   const bool sameWaveRevision=
-       attrs->getInt("KnownRevision",known)==Steinberg::kResultOk&&
-       known>=0&&known==static_cast<Steinberg::int64>(revision);
-   try {return (sameWaveRevision||
-                 attrs->setBinary("Wave",wav.data(),static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk)&&
-          attrs->setInt("Start",edit.start)==Steinberg::kResultOk&&
-          attrs->setInt("End",edit.end)==Steinberg::kResultOk&&
-          attrs->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
-          attrs->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
-          attrs->setInt("GainBits",gainBits)==Steinberg::kResultOk&&
-          attrs->setInt("Revision",revision)==Steinberg::kResultOk
-          ?Steinberg::kResultOk:Steinberg::kResultFalse;
-   }catch(const std::bad_alloc&){return Steinberg::kOutOfMemory;}
+   Steinberg::Vst::IMessage* reply=nullptr;
+   try {
+     reply=allocateMessage();
+     if(!reply)return Steinberg::kOutOfMemory;
+     reply->setMessageID("Drumator.SampleEditorReply");
+     auto* attrs=reply->getAttributes();
+     if(!attrs||attrs->setInt("RequestId",requestId)!=Steinberg::kResultOk||
+        attrs->setInt("Row",index)!=Steinberg::kResultOk) {
+       reply->release();return Steinberg::kResultFalse;
+     }
+     // Serialize a self-contained reply while holding the control-side kit
+     // lock. Send AFTER releasing it: a host may deliver reply reentrantly.
+     bool prepared=false;
+     {
+       std::lock_guard<std::mutex> guard(kitMutex_);
+       const auto row=static_cast<std::size_t>(index);
+       const auto& wav=kit_.wav[row];
+       const auto& edit=kit_.sampleEdits[row];
+       std::uint32_t bits=0;
+       std::memcpy(&bits,&edit.gain,sizeof(bits));
+       if(!wav.empty()&&wav.size()<=kMaxSingleWav) {
+         const bool sameWaveRevision=knownRevision>=0&&
+           knownRevision==static_cast<Steinberg::int64>(editorRevisions_[row]);
+         if(!sameWaveRevision)
+           prepared=attrs->setBinary("Wave",wav.data(),
+                       static_cast<Steinberg::uint32>(wav.size()))==Steinberg::kResultOk;
+         else prepared=true;
+         prepared=prepared&&
+           attrs->setInt("Revision",editorRevisions_[row])==Steinberg::kResultOk&&
+           attrs->setInt("Start",edit.start)==Steinberg::kResultOk&&
+           attrs->setInt("End",edit.end)==Steinberg::kResultOk&&
+           attrs->setInt("FadeIn",edit.fadeIn)==Steinberg::kResultOk&&
+           attrs->setInt("FadeOut",edit.fadeOut)==Steinberg::kResultOk&&
+           attrs->setInt("GainBits",bits)==Steinberg::kResultOk;
+       }
+     }
+     const auto status=attrs->setInt("Status",prepared?1:0);
+     const auto result=status==Steinberg::kResultOk?
+        sendMessage(reply):Steinberg::kResultFalse;
+     reply->release();
+     return result;
+   }catch(...) {if(reply)reply->release();return Steinberg::kOutOfMemory;}
  }
  // The commit is prepared off the audio thread. Active voices retain the
  // old immutable PreparedSample via SampleExchange retirement.
@@ -1322,7 +1352,7 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                static_cast<std::int64_t>(audioSongStartBar_-1)*16};
      auto emitTrigger=[&](Trigger hit){
        hit.sampleOffset+=static_cast<std::uint32_t>(cursor);
-       triggers_.appendStep(hit);
+       (void)triggers_.appendStep(hit);
      };
      const auto scheduled=audioSongEnabled_?
            StepScheduler::run(songRead,clock,emitTrigger):
@@ -1402,6 +1432,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
                         validTiming?context->tempo:120.0,
                         processSetup.sampleRate,velocityCycleStart,
                         velocityCycleEnd,velocityCycleValid);
+ const auto rejected=triggers_.droppedCapacity();
+ if(rejected)droppedTriggers_.fetch_add(rejected,std::memory_order_relaxed);
  triggers_.sort();
  std::array<float*,kRows> stemsL{},stemsR{};
  for(Steinberg::int32 bus=1;bus<data.numOutputs&&

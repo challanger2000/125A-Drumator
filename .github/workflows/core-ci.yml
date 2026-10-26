@@ -25,7 +25,7 @@ jobs:
           }
           $status = git -C sdk submodule status --recursive
           $status | Write-Output
-          if (@($status | Where-Object { $_ -match '^[-+U]' }).Count -gt 0) {
+          if (@($status).Count -eq 0 -or @($status | Where-Object { $_ -notmatch '^ [0-9a-f]{40} ' }).Count -gt 0) {
             throw "SDK has missing or modified submodules"
           }
       - name: Configure Windows x64 VST3 and standalone QA
@@ -177,3 +177,10 @@ jobs:
           # upload-artifact strips the supplied root from stored paths.
           path: artifact/
           if-no-files-found: error
+
+  independent-plugin-tester:
+    needs: windows
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/125a-plugin-tester-qa.yml

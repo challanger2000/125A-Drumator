@@ -64,6 +64,14 @@ int main(){
   for(std::size_t i=0;i<TriggerBatch::kCapacity;++i)
     need(batch.appendNoteOn(36,1.0f,0,64),"premature capacity");
   need(!batch.appendNoteOn(36,1.0f,0,64),"capacity overflow");
+  need(!batch.appendStep({0,0,0,127,0}),"step overflow");
+  need(batch.droppedCapacity()==2,"overflow telemetry must count only valid dropped events");
+  need(!batch.appendNoteOn(12,1.0f,0,64)&&batch.droppedCapacity()==2,
+       "invalid input must not be counted as capacity loss");
+  batch.clear();
+  need(batch.droppedCapacity()==0&&batch.size()==0,"overflow counter must reset per block");
+  for(std::size_t i=0;i<TriggerBatch::kCapacity;++i)
+    need(batch.appendNoteOn(36,1.0f,0,64),"refill for capacity sort");
   batch.sort();
   need(batch.size()==TriggerBatch::kCapacity,"lost buffered entries");
   std::cout<<"Drumator MIDI trigger batch PASS\n";
