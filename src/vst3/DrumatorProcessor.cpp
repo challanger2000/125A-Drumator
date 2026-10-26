@@ -155,7 +155,11 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
      return Steinberg::kOutOfMemory;
    }
    if(!reply)return Steinberg::kOutOfMemory;
-   auto* attrs=reply->getAttributes();
+   // Some host/SDK IMessage implementations construct attributes lazily.
+   // This getter is part of the allocation boundary, not an infallible read.
+   Steinberg::Vst::IAttributeList* attrs=nullptr;
+   try {attrs=reply->getAttributes();}
+   catch(...){reply->release();return Steinberg::kOutOfMemory;}
    if(!attrs){reply->release();return Steinberg::kResultFalse;}
    // Control actor may retry a bounded number of times to obtain a coherent
    // L/R+generation pair while the audio writer advances.

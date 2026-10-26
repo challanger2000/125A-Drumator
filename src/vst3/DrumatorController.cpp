@@ -58,6 +58,9 @@ bool Controller::clearMeterClips(){
 Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* message){
  if(message&&message->getMessageID()&&
     std::strcmp(message->getMessageID(),"Drumator.MeterSnapshot")==0){
+   // The host may deliver IMessage across a process boundary. Treat getter
+   // and attribute decoding as a non-throwing VST3 callback boundary.
+   try {
    auto* attrs=message->getAttributes();
    Steinberg::int64 seq=-1,l=-1,r=-1,clip=-1,full=-1,reset=-1;
    if(!attrs||attrs->getInt("Sequence",seq)!=Steinberg::kResultOk||
@@ -79,6 +82,7 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
      lastClearEpoch_=std::max(lastClearEpoch_,meterState_.reset);
    }
    return Steinberg::kResultOk;
+   }catch(...) {return Steinberg::kOutOfMemory;}
  }
 
  if(message&&message->getMessageID()&&

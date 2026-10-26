@@ -43,3 +43,10 @@
 ## Scope und Statusregeln
 
 Nur `OutputMeter.h` (Kommentar-Klarstellung), `DrumatorProcessor.cpp` (gezielter Transport-Fix), `WindowsIntegration.cpp` (Test) und dieser Bericht. Keine DSP-, Sequencer-, GUI-, State-, Parameter-, Lizenz- oder Versionsänderung. **Der Windows-Lauf für diesen neuen Commit ist zunächst NOT RUN und darf erst mit eindeutig zugeordnetem grünen CI-Nachweis auf PASS geändert werden.** GitHub Actions wurden durch einen gebündelten, nicht spekulativen Code-/Testcommit ausgelöst; weitere Runs nur bei konkretem Bedarf.
+
+## Windows-QA-Nachlauf 1 – bewiesene noch offene Exception-Lücke
+
+- [Actions #40368521712](https://github.com/challanger2000/125A-Drumator/actions/runs/40368521712), Commit `6c2a0755bb226d61bdce39058b82f1862ffba965`: **FAIL**. MSVC-Build SUCCESS, **22/23 CTests**, `drumator_integration_tests` FAIL: `S13 Processor meter reply fault escaped host notify`. Validator/Packaged-Bundle wegen fehlgeschlagener CTests **SKIPPED**.
+- **Konkrete Folgerung:** Der erste korrigierte Reply-Verbrauch war quelllogisch ausreichend gegen spätere `setInt`-/Send-Fehler, aber die ältere Ausnahmegrenze erfasste noch nicht den potentiell allokierenden `reply->getAttributes()`-Aufruf unmittelbar nach dem Nachrichtenaufbau. Dadurch konnte eine injizierte `std::bad_alloc` aus `Processor::notify` entweichen.
+- **Nachbesserung:** Die Attribute-Getter-Grenze erhält ein eigenes C++-Exception-Guard mit dokumentiertem Rückgabefehler. Auch `Controller::notify(MeterSnapshot)` schützt jetzt das Attribut-Decoding als extern aufrufbare VST3-Hostgrenze. Die bestehende Test-Injektion bleibt strikt, und die Fehlermeldung nennt bei einem erneuten Testversagen den jeweiligen Allokationsindex.
+- Der Nachlauf für den exakten Nachbesserungs-Commit ist **NOT RUN**, bis eine neue Windows-Actions-Run-ID mit belastbarem Ergebnis vorliegt. Keine Umbenennung des fehlgeschlagenen Vorlaufs in PASS.

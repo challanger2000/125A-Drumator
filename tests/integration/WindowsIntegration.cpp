@@ -1199,7 +1199,9 @@ void test13MeterTransportAndMultiEditor(){
    catch(...) {escaped=true;}
    const bool injected=allocationFail==-1;
    allocationFail=-1;
-   check(!escaped,"S13 Processor meter reply fault escaped host notify");
+   if(escaped)
+     throw std::runtime_error("S13 Processor meter reply fault escaped host notify at allocation index "+
+                              std::to_string(faultIndex));
    if(injected&&replyStatus!=Steinberg::kResultOk) {
      check(processorMeter->mainL.load(std::memory_order_acquire)>=expectedLeft&&
            processorMeter->mainR.load(std::memory_order_acquire)>=expectedRight,
