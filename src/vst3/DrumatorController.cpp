@@ -592,7 +592,7 @@ bool Controller::editSongEntry(std::size_t slot,int patternDelta,int lengthDelta
    return static_cast<std::size_t>(sum<0?sum+count:sum);
  };
  const auto pattern=static_cast<std::uint8_t>(
-     wrap(old.pattern,patternDelta,static_cast<std::int64_t>(kPatterns+1)));
+     wrap(old.pattern==SongChain::kRest?0:old.pattern,patternDelta,static_cast<std::int64_t>(kPatterns)));
  const std::array<std::uint8_t,3> lengths{8,16,32};
  const std::int64_t index=old.steps==8?0:(old.steps==16?1:2);
  const auto length=lengths[wrap(index,lengthDelta,3)];

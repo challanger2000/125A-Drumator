@@ -2102,6 +2102,77 @@ void testPatternDuplicateMenu(){
  evidence("P18 native DUPLIZIEREN menu, whole-grid copy, Undo, full bank and empty source PASS");
 }
 
+void testAbsoluteSongStartRest(){
+ constexpr auto flags=ProcessContext::kPlaying|
+       ProcessContext::kTempoValid|ProcessContext::kProjectTimeMusicValid;
+ Fixture f;KitState kit;kit.visible=2;kit.grid.fill(0);
+ kit.songEnabled=1;kit.songStartBar=2;
+ check(kit.chain.setCount(3)&&kit.chain.configure(0,0,8)&&
+       kit.chain.configure(1,SongChain::kRest,8)&&
+       kit.chain.configure(2,1,8),"SONGSTART REST fixture");
+ kit.grid[0]=127;kit.grid[(kRows+1)*kSteps]=127;
+ kit.names[0]="song-A.wav";kit.wav[0]=constantStereo(.125f,-.25f);
+ kit.names[1]="song-B.wav";kit.wav[1]=constantStereo(.375f,-.125f);
+ f.kit(kit);prepareAudio(*f.p);
+ AuditAudioBlock audio;audio.clock.tempo=6000.;
+ audio.clock.state=flags;
+ auto render=[&](double ppq) {
+   audio.clock.projectTimeMusic=ppq;
+   check(f.p->process(audio.data)==kResultOk,"SONGSTART processor render");
+ };
+ // The host starts before BAR 2 and crosses its first boundary mid-buffer:
+ // no pre-roll events are permitted, onset must land at sample 96.
+ render(3.8);
+ for(unsigned i=0;i<96;++i)check(audio.left[i]==0.f,"SONGSTART pre-start trigger");
+ check(audio.left[120]==.125f&&audio.right[120]==-.25f,
+       "SONGSTART BAR 2 onset missing/wrong channel");
+ // Restart directly at BAR 4: offset = 32 steps from BAR 2, and
+ // 32 mod 24 = 8 => REST, never chain position 01.
+ check(f.p->setProcessing(false)==kResultOk&&
+       f.p->setProcessing(true)==kResultOk,"SONGSTART restart lifecycle");
+ render(12.0);
+ for(const auto value:audio.left)check(value==0.f,
+       "SONGSTART BAR 4 incorrectly restarted first pattern");
+ // Playback from start, with an existing A tail across REST.
+ check(f.p->setProcessing(false)==kResultOk&&
+       f.p->setProcessing(true)==kResultOk,"SONGSTART reset before REST");
+ for(unsigned block=0;block<9;++block){
+   const double ppq=4.0+static_cast<double>(block)*256.0/480.0;
+   render(ppq);
+   if(block==0)check(audio.left[80]==.125f,"SONGSTART A absent");
+   if(block==3)check(audio.left[240]==.125f,
+       "REST truncated previously sounding A sample");
+   if(block==5)for(const auto value:audio.left)
+       check(value==0.f,"REST retriggered drums after A tail");
+   if(block==8)check(audio.left[80]==.375f&&audio.right[80]==-.125f,
+       "REST lost exact subsequent B onset");
+ }
+ // Restore actual serialized kit via the normal Processor/Controller path.
+ const auto persisted=auditReturnedKit(*f.p);
+ check(persisted.songStartBar==2&&persisted.chain.entry(1).pattern==SongChain::kRest,
+       "SONGSTART Processor did not save DM17");
+ const auto bytes=Fixture::encode(persisted);
+ check(f.recall(bytes)==kResultOk&&f.c->songStartBar()==2&&
+       f.c->songEntry(1).pattern==SongChain::kRest,
+       "SONGSTART Controller DM17 recall mismatch");
+ // Real SONG GUI hitboxes, including REST and BAR controls.
+ f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ click(*view,(UiCompactLayout::songEdit.left+UiCompactLayout::songEdit.right)/2.,
+       UiCompactLayout::headerButtonTop+13.);
+ click(*view,982.,321.);
+ check(f.c->songStartBar()==3,"SONG START + native UI ignored");
+ click(*view,952.,321.);
+ check(f.c->songStartBar()==2,"SONG START - native UI ignored");
+ click(*view,1048.,321.);
+ check(f.c->songStartBar()==1,"SONG START BAR 1 reset ignored");
+ click(*view,UiSongLayout::cellX(0)+20.,UiSongLayout::cellY(0)+15.);
+ click(*view,160.,388.);
+ check(f.c->songEntry(0).pattern==SongChain::kRest,
+       "REST native song editor selection ignored");
+ evidence("SONGSTART absolute BAR 2/4, pre-roll boundary, REST audible tail and B continuation, DM17 recall, native GUI PASS");
+}
+
 void testV1FourFinalCorrections(){
  Fixture f;
  auto stored=[&]{
@@ -2923,6 +2994,7 @@ int main(int argc,char** argv){
      const auto line=name+" FAIL: "+ex.what();evidence(line);qaCaseSummary+=line+'\n';}
  };
  run("V1FIX factory, row COPY/PASTE, DUPLICATE/UNDO, routing",testV1FourFinalCorrections);
+ run("SONGSTART absolute timeline REST, tail, state and GUI",testAbsoluteSongStartRest);
  run("RE01 original deterministic VFA02",testReauditPatternLength);
  run("RE02 original fresh DZM3 matrix",testFinalAuditDzm3);
  run("RE03 paired duration fallback in Pattern and Song",testReauditDurationFallback);
