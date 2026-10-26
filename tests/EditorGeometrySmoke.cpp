@@ -147,6 +147,8 @@ int main(int argc,char** argv) {
     info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
     info.bmiHeader.biCompression=BI_RGB;
     std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width)*height*4);
+    // GDI requires the bitmap to be deselected before GetDIBits.
+    SelectObject(memoryDc,previous);
     if(GetDIBits(memoryDc,bitmap,0,height,pixels.data(),&info,DIB_RGB_COLORS)!=height)
       fail("Packaged native HWND screenshot readback failed");
     std::filesystem::create_directories("build/gui-shots");
@@ -160,7 +162,7 @@ int main(int argc,char** argv) {
     bmp.write(reinterpret_cast<const char*>(pixels.data()),
               static_cast<std::streamsize>(pixels.size()));
     if(!bmp)fail("Packaged native screenshot write failed");
-    bmp.close();SelectObject(memoryDc,previous);DeleteObject(bitmap);
+    bmp.close();DeleteObject(bitmap);
     DeleteDC(memoryDc);ReleaseDC(parent,windowDc);
     std::cout<<"Packaged VST3 native silver-logo screenshot: "<<screenshot.string()<<"\\n";
     if(editor->removed()!=Steinberg::kResultOk)fail("Z02 packaged native remove failed");

@@ -85,11 +85,11 @@ int main() {
     // DM16 stored no SONG START and could not contain REST. Reproduce
     // authentic predecessor layout by stripping DM17's trailing uint16,
     // adjusting version/length/CRC, then verify backward read compatibility.
-    auto previous=original;
-    previous.songStartBar=1;
-    check(previous.chain.configure(1,1,8),"DM16 fixture pattern");
+    auto legacy16Source=original;
+    legacy16Source.songStartBar=1;
+    check(legacy16Source.chain.configure(1,1,8),"DM16 fixture pattern");
     std::vector<std::uint8_t> beforeDM16;
-    check(KitCodec::encode(previous,beforeDM16),"DM17 migration fixture");
+    check(KitCodec::encode(legacy16Source,beforeDM16),"DM17 migration fixture");
     beforeDM16.erase(beforeDM16.end()-6,beforeDM16.end()-4);
     for(unsigned i=0;i<4;++i){
        beforeDM16[i]=static_cast<std::uint8_t>(kKitMagicV16>>(i*8));
@@ -98,10 +98,10 @@ int main() {
     const auto previousHash=KitCodec::hash(beforeDM16.data()+8,beforeDM16.size()-12);
     for(unsigned i=0;i<4;++i)
        beforeDM16[beforeDM16.size()-4+i]=static_cast<std::uint8_t>(previousHash>>(i*8));
-    KitState migrated;
-    check(KitCodec::decode(beforeDM16.data(),beforeDM16.size(),migrated)&&
-          migrated.songStartBar==1&&migrated.chain.entry(1).pattern==1&&
-          migrated.grid==previous.grid&&migrated.output==previous.output,
+    KitState migrated16;
+    check(KitCodec::decode(beforeDM16.data(),beforeDM16.size(),migrated16)&&
+          migrated16.songStartBar==1&&migrated16.chain.entry(1).pattern==1&&
+          migrated16.grid==legacy16Source.grid&&migrated16.output==legacy16Source.output,
           "DM16 backward migration to BAR 1 failed");
     auto invalidLength=original;
     invalidLength.patternLengths[1]=8;

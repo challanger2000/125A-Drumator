@@ -2114,7 +2114,17 @@ void testAbsoluteSongStartRest(){
  kit.names[0]="song-A.wav";kit.wav[0]=constantStereo(.125f,-.25f);
  kit.names[1]="song-B.wav";kit.wav[1]=constantStereo(.375f,-.125f);
  f.kit(kit);prepareAudio(*f.p);
- AuditAudioBlock audio;audio.clock.tempo=6000.;
+ struct SongAudioBlock {
+   std::array<float,256> left{},right{};
+   float* channels[2]{left.data(),right.data()};
+   AudioBusBuffers out{};ProcessContext clock{};ProcessData data{};
+   SongAudioBlock(){
+     out.numChannels=2;out.channelBuffers32=channels;
+     data.numSamples=256;data.symbolicSampleSize=kSample32;
+     data.numOutputs=1;data.outputs=&out;data.processContext=&clock;
+   }
+ } audio;
+ audio.clock.tempo=6000.;
  audio.clock.state=flags;
  auto render=[&](double ppq) {
    audio.clock.projectTimeMusic=ppq;
@@ -2148,7 +2158,11 @@ void testAbsoluteSongStartRest(){
        "REST lost exact subsequent B onset");
  }
  // Restore actual serialized kit via the normal Processor/Controller path.
- const auto persisted=auditReturnedKit(*f.p);
+ ResizableMemoryIBStream savedSong;KitState persisted;
+ check(f.p->getState(&savedSong)==kResultOk&&
+       KitCodec::decode(static_cast<const std::uint8_t*>(savedSong.getData()),
+                        static_cast<std::size_t>(savedSong.getCursor()),persisted),
+       "SONGSTART actual Processor state export");
  check(persisted.songStartBar==2&&persisted.chain.entry(1).pattern==SongChain::kRest,
        "SONGSTART Processor did not save DM17");
  const auto bytes=Fixture::encode(persisted);
