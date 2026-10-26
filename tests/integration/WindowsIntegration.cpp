@@ -1048,8 +1048,22 @@ void testGui49MusicalFourSampleCapture(){
  for(unsigned step=0;step<32;step+=2)set(2,step,(step%8==6)?72:98);
  for(auto step:{14u,30u})set(3,step,86);
  kit.patternLengths[0]=32;
- f.kit(kit);f.open();
+ f.kit(kit);prepareAudio(*f.p);f.open();
  auto* view=IntegrationAccess::view(*f.c,0);
+ const auto folder=std::filesystem::current_path()/"125A-GUI49-real-import-capture";
+ std::filesystem::create_directories(folder);
+ for(std::size_t row=0;row<4;++row){
+   const auto file=folder/names[row];
+   std::ofstream stream(file,std::ios::binary|std::ios::trunc);
+   stream.write(reinterpret_cast<const char*>(kit.wav[row].data()),
+                static_cast<std::streamsize>(kit.wav[row].size()));
+   check(stream.good(),"GUI49 fixture WAV could not be written");
+   stream.close();
+   check(IntegrationAccess::importPathViaView(*view,row,pathToUtf8(file)),
+         "GUI49 sample not accepted through normal WAV import");
+ }
+ check(IntegrationAccess::sampleEditorStatus(*view).find("SAMPLE LOADED")!=std::string::npos,
+       "GUI49 screenshot must show the authentic loaded-sample status");
  for(std::size_t row=0;row<4;++row){
    check(f.c->hasSample(row)&&f.c->label(row)==labels[row],
          "GUI49 musical capture must contain four actual loaded stereo samples");
