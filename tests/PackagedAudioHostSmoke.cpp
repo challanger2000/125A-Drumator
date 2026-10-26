@@ -610,6 +610,8 @@ int main(int argc,char** argv) {
            static_cast<const std::uint8_t*>(fullState.getData()),
            fullState.getCursor(),fullKit),
          "Full kit encoded state failed CRC or WAV validation");
+ for(const auto bus:fullKit.output)
+   require(bus==0,"V1FIX freshly built kit must keep every instrument on MAIN");
  for(int row=0;row<16;++row)
    require(fullKit.wav[static_cast<std::size_t>(row)]==
             makeWav(32,true,0.10f+static_cast<float>(row)*0.025f),
@@ -659,9 +661,10 @@ int main(int argc,char** argv) {
  require(kitCopy->terminate()==kResultOk,"Full-kit terminate");
  kitAudio->release();kitCopy->release();
  std::cout<<"M12 fresh-instance all-16-sample audio recall PASS\\n";
- // M27: activate stereo stem for row 2 and verify output isolation.
+ // M27: merely enabling a stem must NOT reroute freshly created rows:
+ // all instruments remain on MAIN until the user explicitly selects OUT.
  require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,
-         "Activate row 2 stereo stem");
+         "Activate OUT 2 stereo stem");
  std::array<float,256> stemLeft{},stemRight{};
  float* stemChannels[2]{stemLeft.data(),stemRight.data()};
  AudioBusBuffers stemBus{};
@@ -671,6 +674,25 @@ int main(int argc,char** argv) {
  for(int n=0;n<6;++n)run(-1);
  run(37);
  double mainSum=0,stemSum=0;
+ for(int n=50;n<190;++n){mainSum+=left[n];stemSum+=stemLeft[n];}
+ require(std::abs(mainSum/140.-.125)<.02&&std::abs(stemSum)<.01,
+         "V1FIX activating OUT 2 changed untouched MAIN default");
+ // The previous M27/M30 fixture assumed row N was automatically assigned
+ // to OUT N. Under the new product contract explicitly perform the same
+ // manual assignments via the REAL packaged processor message API.
+ auto setOutput=[&](int row,int selectedBus)->tresult {
+   HostMessage msg;msg.setMessageID("Drumator.RowOutput");
+   auto* attrs=msg.getAttributes();
+   require(attrs&&attrs->setInt("Row",row)==kResultOk&&
+           attrs->setInt("Bus",selectedBus)==kResultOk,
+           "V1FIX manual output-select message attributes");
+   return processorPoint->notify(&msg);
+ };
+ require(setOutput(1,1)==kResultOk&&setOutput(2,2)==kResultOk,
+         "V1FIX manual OUT 2/3 assignment rejected");
+ for(int n=0;n<6;++n)run(-1);
+ run(37);
+ mainSum=0;stemSum=0;
  for(int n=50;n<190;++n) {
     mainSum+=left[n];stemSum+=stemLeft[n];
  }
