@@ -154,6 +154,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'Final VST3 packaged Resources native silver-logo render FAILED'
           }
+          # The packaged render runs from the repository workspace (unlike
+          # CTest, which runs in build/). Archive its real verified pixels,
+          # never silently omit the only packaged-resource screenshot.
+          $packagedRender = Join-Path $PWD 'gui-shots/packaged-vst3-resources-silver-100.bmp'
+          if (!(Test-Path -LiteralPath $packagedRender)) {
+            throw 'Packaged Resources GUI screenshot file missing'
+          }
+          Copy-Item -LiteralPath $packagedRender -Destination 'build/gui-shots/packaged-vst3-resources-silver-100.bmp' -Force
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - name: Archive native VSTGUI pixel renderings
         uses: actions/upload-artifact@v4
