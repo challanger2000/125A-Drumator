@@ -71,6 +71,9 @@ void auditZeroChannelMain(IComponent* component,IAudioProcessor* audio,double ra
  Steinberg::ResizableMemoryIBStream priorState;
  require(component->getState(&priorState)==kResultOk,"T29 retain original kit");
  drumator::KitState fixture;fixture.visible=2;fixture.grid.fill(0);
+ // T29 intentionally tests a manually routed AUX with zero-channel MAIN.
+ // An unconfigured NEW kit now routes every row to MAIN by design.
+ fixture.output[1]=1;
  fixture.names[1]="T29-stereo-signature.wav";fixture.wav[1]=makeStereoWav(.2f,-.4f);
  require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,"T29 activate real AUX1");
  const auto matchesCode=[](const auto& leftCode,const auto& rightCode) {
