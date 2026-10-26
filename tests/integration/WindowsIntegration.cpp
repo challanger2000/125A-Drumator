@@ -2101,6 +2101,110 @@ void testPatternDuplicateMenu(){
  check(getGrid()==empty.grid,"P18 empty source duplicated unexpectedly");
  evidence("P18 native DUPLIZIEREN menu, whole-grid copy, Undo, full bank and empty source PASS");
 }
+
+void testV1FourFinalCorrections(){
+ Fixture f;
+ auto stored=[&]{
+   ResizableMemoryIBStream stream;
+   KitState kit;
+   check(f.p->getState(&stream)==kResultOk&&
+         KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+           static_cast<std::size_t>(stream.getCursor()),kit),
+         "V1FIX decode real Processor state");
+   return kit;
+ };
+ // Full factory check, not merely the visible first bar.
+ const auto factory=stored();
+ for(std::size_t p=0;p<kPatterns;++p)
+   for(std::size_t row=0;row<kRows;++row)
+     for(std::size_t step=0;step<kSteps;++step){
+       const auto expected=p==0&&row==0&&step%4==0?
+          static_cast<unsigned>(step%8==0?127:90):0u;
+       check(factory.grid[AtomicPatternBank::index(p,row,step)]==expected&&
+             f.c->velocity(p,row,step)==expected,
+             "V1FIX factory Controller/Processor mismatch incl hidden steps");
+     }
+ for(std::size_t row=0;row<kRows;++row)
+   check(factory.output[row]==0&&f.c->rowOutput(row)==0,
+         "V1FIX fresh instance output not MAIN");
+ check(f.c->canDuplicateCurrentPattern()&&f.c->duplicateCurrentPattern(),
+       "V1FIX fresh DUPLICATE A -> B failed");
+ auto duplicate=stored();
+ for(std::size_t i=0;i<kRows*kSteps;++i)
+   check(duplicate.grid[kRows*kSteps+i]==factory.grid[i],
+         "V1FIX factory duplicate omitted a step");
+ check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk&&
+       f.c->canUndoCurrentPattern()&&f.c->undoCurrentPattern(),
+       "V1FIX DUPLICATE not undoable");
+ check(stored().grid==factory.grid&&!f.c->canUndoCurrentPattern(),
+       "V1FIX duplicate UNDO left B occupied");
+
+ // Cross-pattern/row clipboard, native FILL context menu, 1-bar hidden notes.
+ KitState kit;
+ kit.visible=4;kit.grid.fill(0);
+ kit.patternLengths[0]=16;kit.patternLengths[1]=16;
+ kit.grid[AtomicPatternBank::index(0,1,0)]=113;
+ kit.grid[AtomicPatternBank::index(0,1,15)]=64;
+ kit.grid[AtomicPatternBank::index(0,1,31)]=27;
+ kit.grid[AtomicPatternBank::index(1,2,0)]=55;
+ kit.grid[AtomicPatternBank::index(1,3,31)]=81;
+ kit.output[1]=3;kit.output[2]=6;
+ kit.gain[2]=71;kit.pan[2]=120;kit.pitch[2]=33;
+ kit.displayNames[2]="SNARE";kit.names[2]="SNARE.wav";
+ f.kit(kit);f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk,"V1FIX select A");
+ check(!f.c->canPasteRow()&&!f.c->pasteRow(2),
+       "V1FIX empty row clipboard accepted");
+ // Open existing row FILL menu; item 9 is COPY ROW.
+ const double srcTop=IntegrationAccess::rowTop(*view,1);
+ click(*view,425.,srcTop+19.);
+ const double srcPopup=UiCompactLayout::popupTop(srcTop,view->getViewSize().getHeight(),280.);
+ click(*view,435.,srcPopup+9*25.+12.);
+ check(f.c->canPasteRow(),"V1FIX native COPY ROW did not capture");
+ check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk,"V1FIX select B");
+ // Item 10 is PASTE ROW; another target row of B is selected.
+ const double dstTop=IntegrationAccess::rowTop(*view,2);
+ click(*view,425.,dstTop+19.);
+ const double dstPopup=UiCompactLayout::popupTop(dstTop,view->getViewSize().getHeight(),280.);
+ click(*view,435.,dstPopup+10*25.+12.);
+ const auto pasted=stored();
+ for(std::size_t p=0;p<kPatterns;++p)
+   for(std::size_t row=0;row<kRows;++row)
+     for(std::size_t step=0;step<kSteps;++step){
+       const auto idx=AtomicPatternBank::index(p,row,step);
+       const auto expected=p==1&&row==2?
+          kit.grid[AtomicPatternBank::index(0,1,step)]:kit.grid[idx];
+       check(pasted.grid[idx]==expected,"V1FIX PASTE ROW changed other pattern or row");
+     }
+ check(pasted.patternLengths==kit.patternLengths&&pasted.output==kit.output&&
+       pasted.gain==kit.gain&&pasted.pan==kit.pan&&pasted.pitch==kit.pitch&&
+       pasted.names==kit.names&&pasted.displayNames==kit.displayNames&&
+       pasted.wav==kit.wav,"V1FIX row paste modified nonsequencer state");
+ check(f.c->canUndoCurrentPattern()&&f.c->undoCurrentPattern(),
+       "V1FIX row PASTE did not create UNDO");
+ check(stored().grid==kit.grid&&!f.c->canUndoCurrentPattern(),
+       "V1FIX row PASTE undo failed to restore target row only");
+ // Existing full-pattern clipboard remains independent.
+ check(f.c->copyCurrentPattern()&&
+       f.c->setParamNormalized(kPatternParam,2./7.)==kResultOk&&
+       f.c->pasteCurrentPattern(),"V1FIX full-pattern clipboard broken");
+ // A successful project recall invalidates session clipboards, not saved data.
+ f.kit(kit);
+ check(!f.c->canPasteRow()&&!f.c->pasteRow(1),
+       "V1FIX old row clipboard survived project recall");
+ check(stored().output==kit.output,"V1FIX saved output assignments mutated");
+ // Filled bank still disallows overwriting occupied destinations.
+ KitState all=kit;
+ for(std::size_t p=0;p<kPatterns;++p)
+   all.grid[AtomicPatternBank::index(p,0,0)]=static_cast<std::uint8_t>(p+5);
+ f.kit(all);
+ check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk&&
+       !f.c->canDuplicateCurrentPattern()&&
+       !f.c->duplicateCurrentPattern()&&stored().grid==all.grid,
+       "V1FIX DUPLICATE overwrote occupied bank");
+ evidence("V1FIX full factory/MAIN; duplicate+UNDO; native 32-step cross-row COPY/PASTE+UNDO; recall and protected occupied slots PASS");
+}
 void testPatternLengthControls(){
  Fixture f;
  auto kit=namedKit('X');
@@ -2818,6 +2922,7 @@ int main(int argc,char** argv){
    catch(const std::exception& ex){allocationFail=-1;releaseProbe();++failures;
      const auto line=name+" FAIL: "+ex.what();evidence(line);qaCaseSummary+=line+'\n';}
  };
+ run("V1FIX factory, row COPY/PASTE, DUPLICATE/UNDO, routing",testV1FourFinalCorrections);
  run("RE01 original deterministic VFA02",testReauditPatternLength);
  run("RE02 original fresh DZM3 matrix",testFinalAuditDzm3);
  run("RE03 paired duration fallback in Pattern and Song",testReauditDurationFallback);

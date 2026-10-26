@@ -4,6 +4,7 @@
 #include "core/RowFill.h"
 #include "core/RowMixControl.h"
 #include "core/PatternOperations.h"
+#include "core/ClipWarning.h"
 #include <array>
 #include <atomic>
 #include <iostream>
@@ -67,8 +68,25 @@ int main(){
         nextStepVelocity(127)==0,"velocity cycle sequence");
   check(nextStepVelocity(20)==32&&nextStepVelocity(80)==96&&
         nextStepVelocity(115)==127,"velocity cycle from loaded projects");
-  check(bank.get(0,0,0)==127&&bank.get(7,0,4)==90,
-        "old factory fixture default changed");
+  check(bank.get(0,0,0)==127&&bank.get(0,0,4)==90,
+        "factory A kick changed");
+  for(std::size_t p=1;p<kPatterns;++p)
+    for(std::size_t row=0;row<kRows;++row)
+      for(std::size_t step=0;step<kSteps;++step)
+        check(bank.get(p,row,step)==0,"B-H must be completely empty");
+  check(nextEmptyPattern(0,[&](std::size_t p){
+    PatternSteps value{};
+    for(std::size_t row=0;row<kRows;++row)
+      for(std::size_t step=0;step<kSteps;++step)
+        value[row*kSteps+step]=bank.get(p,row,step);
+    return value;
+  })==1,"factory DUPLICATE cannot find B");
+  check(clipWarningText(0)[0]=='\0'&&
+        clipWarningText(1)==std::array<char,16>{'C','L','I','P',' ','M','A','I','N'}&&
+        clipWarningText(1u<<4)==std::array<char,16>{'C','L','I','P',' ','5'}&&
+        clipWarningText(1u<<15)==std::array<char,16>{'C','L','I','P',' ','1','6'}&&
+        clipWarningText((1u<<15)|1u)==clipWarningText(1),
+        "CLIP warning idle, red-label source or bus priority broken");
   check(bank.get(7,15,31)==0,"last step not silent");
   check(bank.set(7,15,31,127),"write last cell");
   check(bank.get(7,15,31)==127,"last cell not readable");

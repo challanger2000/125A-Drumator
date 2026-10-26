@@ -317,13 +317,12 @@ Steinberg::tresult PLUGIN_API Controller::initialize(Steinberg::FUnknown* contex
  patterns->appendString(STR16("E"));patterns->appendString(STR16("F"));
  patterns->appendString(STR16("G"));patterns->appendString(STR16("H"));
  parameters.addParameter(patterns);
- // Provisional processor factory rhythm on row one for integration tests.
- for(std::size_t p=0;p<kPatterns;++p)
-   for(std::size_t step=0;step<kSteps;step+=4)
-     grid_[(p*kRows)*kSteps+step]=(step%8==0)?127:90;
+ // Factory A alone receives the kick; B-H remain entirely blank.
+ for(std::size_t step=0;step<kSteps;step+=4)
+   grid_[step]=(step%8==0)?127:90;
  for(auto& name:labels_)name="EMPTY - LOAD WAV";
  gain_.fill(100);pan_.fill(100);pitch_.fill(24);choke_.fill(0);
- for(std::size_t row=0;row<kRows;++row)output_[row]=static_cast<std::uint8_t>(row);
+ output_.fill(0);
  return Steinberg::kResultOk;
 }
 Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream* state) {
@@ -360,6 +359,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
       samplePresent_[row]=!candidate.wav[row].empty();
     undo_.reset();
     clipboardValid_=false;
+    rowClipboardValid_=false;
     // Component-only recall MUST NOT inherit a stale same-named sample origin.
     // Paired Controller-before-Component recall is explicitly allowed once;
     // otherwise only an identical previously observed asset can retain origin.
@@ -458,6 +458,7 @@ Steinberg::tresult PLUGIN_API Controller::setComponentState(Steinberg::IBStream*
  undo_.reset();
  // Successful legacy state already invalidated all pending edits.
  clipboardValid_=false;
+ rowClipboardValid_=false;
  for(auto& path:samplePaths_)path.clear();
  samplePresent_.fill(false);
  muted_.fill(false);solo_.fill(false);swingPercent_=0;humanizePercent_=0;
@@ -653,6 +654,23 @@ bool Controller::copyCurrentPattern() {
 }
 bool Controller::pasteCurrentPattern(){
  return clipboardValid_&&replacePattern(currentPattern(),clipboard_,true,clipboardLength_);
+}
+bool Controller::copyRow(std::size_t row) noexcept {
+ if(row>=visibleRows_)return false;
+ const auto p=currentPattern();
+ std::copy_n(grid_.begin()+(p*kRows+row)*kSteps,kSteps,rowClipboard_.begin());
+ rowClipboardValid_=true;
+ return true;
+}
+bool Controller::pasteRow(std::size_t row) {
+ if(row>=visibleRows_||!rowClipboardValid_)return false;
+ const auto p=currentPattern();
+ PatternSteps target{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,target.size(),target.begin());
+ std::copy(rowClipboard_.begin(),rowClipboard_.end(),target.begin()+row*kSteps);
+ // Full transactional replacement records a single target-pattern Undo.
+ // Its musical length, other rows, and all sound/routing metadata are kept.
+ return replacePattern(p,target);
 }
 bool Controller::canDuplicateCurrentPattern() noexcept {
  const auto source=currentPattern();

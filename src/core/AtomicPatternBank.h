@@ -15,9 +15,10 @@ public:
     AtomicPatternBank() noexcept {
         // Current VST3 technical prototype begins with a test rhythm.
         for(auto& length:lengths_)length.store(32,std::memory_order_relaxed);
-        for(std::size_t p=0;p<kPatterns;++p)
-            for(std::size_t s=0;s<kSteps;s+=4)
-                set(p,0,s,(s%8==0)?127:90);
+        // Only A contains the factory kick; B-H (including steps 17-32)
+        // remain empty for immediate non-destructive DUPLICATE.
+        for(std::size_t s=0;s<kSteps;s+=4)
+            set(0,0,s,(s%8==0)?127:90);
     }
     bool set(std::size_t p,std::size_t row,std::size_t step,
              unsigned velocity) noexcept {

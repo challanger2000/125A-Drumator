@@ -33,8 +33,8 @@ Processor::Processor() {
  registerMeter(meterId_,meter_);
  setControllerClass(kControllerCID);
  for(auto& length:patternLengths_)length.store(32,std::memory_order_relaxed);
- for(std::size_t row=0;row<kRows;++row)rowOutput_[row].store(static_cast<std::uint8_t>(row));
- // The initial test pattern is supplied by AtomicPatternBank.
+ for(auto& output:rowOutput_)output.store(0,std::memory_order_relaxed);
+ // AtomicPatternBank supplies factory A; B-H start empty.
 }
 Processor::~Processor(){unregisterMeter(meterId_);}
 Steinberg::tresult PLUGIN_API Processor::connect(Steinberg::Vst::IConnectionPoint* other){
@@ -1543,12 +1543,15 @@ Steinberg::tresult PLUGIN_API Processor::setState(Steinberg::IBStream* state) {
     if(next>=kPatterns)return Steinberg::kResultFalse;
     candidate.selected=static_cast<std::uint8_t>(next);
     candidate.visible=static_cast<std::uint8_t>(kRows);
+    // Legacy DMR1-DMR3 saved no output assignment; retain its old mapping.
+    for(std::size_t row=0;row<kRows;++row)
+      candidate.output[row]=static_cast<std::uint8_t>(row);
     if(magic==kStateMagic) {
-       AtomicPatternBank defaults;
+       // DMR1's implicit original rhythm existed in all eight patterns.
+       // Preserve historical project recall despite new factory defaults.
        for(std::size_t p=0;p<kPatterns;++p)
-        for(std::size_t r=0;r<kRows;++r)
-         for(std::size_t s=0;s<kSteps;++s)
-          candidate.grid[AtomicPatternBank::index(p,r,s)]=defaults.get(p,r,s);
+         for(std::size_t s=0;s<kSteps;s+=4)
+           candidate.grid[AtomicPatternBank::index(p,0,s)]=(s%8==0)?127:90;
     }else if(magic==kStateMagicV2||magic==kStateMagicV3Local) {
        if(magic==kStateMagicV3Local &&
           (!stream.readInt8u(candidate.visible)||

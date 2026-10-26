@@ -93,6 +93,9 @@ public:
  SongChain::Entry songEntry(std::size_t slot) const noexcept {return songChain_.entry(slot);}
  bool copyCurrentPattern();
  bool pasteCurrentPattern();
+ bool copyRow(std::size_t row) noexcept;
+ bool pasteRow(std::size_t row);
+ bool canPasteRow() const noexcept {return rowClipboardValid_;}
  bool canDuplicateCurrentPattern() noexcept;
  bool duplicateCurrentPattern(bool* selectedCopy=nullptr);
  bool clearCurrentPattern();
@@ -163,6 +166,8 @@ private:
  std::size_t strokePattern_{kPatterns};
  const void* strokeOwner_{nullptr};
  bool clipboardValid_{false};
+ std::array<std::uint8_t,kSteps> rowClipboard_{};
+ bool rowClipboardValid_{false};
  bool replacePattern(std::size_t p,const PatternSteps& data,bool remember=true,
                      std::uint8_t requestedLength=0);
  void rememberUndoStep(std::size_t p,std::size_t r,std::size_t s,std::uint8_t next);

@@ -29,6 +29,7 @@ static std::vector<std::uint8_t> wav16() {
 int main() {
  try {
     KitState original{};
+    for(const auto bus:original.output)check(bus==0,"new kit not MAIN routed");
     original.visible=6;original.selected=5;
     original.muted=0x8001;original.solo=0x0006;original.swing=35;original.humanize=70;
     original.songEnabled=1;

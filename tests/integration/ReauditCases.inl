@@ -171,7 +171,7 @@ void testReauditPeerFill(){
  // Native View FILL menu on row two, ALL item; a bulk Controller operation.
  const auto rowY=IntegrationAccess::rowTop(*peer,1);
  click(*peer,425.,rowY+20.);
- const auto menuTop=UiCompactLayout::popupTop(rowY,peer->getViewSize().getHeight(),230.);
+ const auto menuTop=UiCompactLayout::popupTop(rowY,peer->getViewSize().getHeight(),280.);
  click(*peer,430.,menuTop+4.*25.+10.);
  check(f.c->velocity(0,1,0)==127&&auditReturnedKit(*f.p).grid[kSteps]==127,
        "RE04 peer FILL was never committed");

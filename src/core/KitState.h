@@ -72,7 +72,8 @@ struct KitState {
  std::array<std::uint8_t,kRows> choke{};
  std::array<std::uint8_t,kRows> output{};
  KitState(){gain.fill(100);pan.fill(100);pitch.fill(24);patternLengths.fill(32);
- for(std::size_t row=0;row<kRows;++row)output[row]=static_cast<std::uint8_t>(row);}
+ // Fresh kits start on MAIN. Decode explicitly preserves the older implicit routing.
+ output.fill(0);}
 
  std::array<std::uint8_t,kCells> grid{};
  std::array<std::string,kRows> names{}; // Original sample filenames
@@ -239,6 +240,8 @@ struct KitCodec {
       if(v7)for(auto& x:candidate.pitch)x=data[pos++];
       if(v8)for(auto& x:candidate.choke)x=data[pos++];
        if(v11)for(auto& x:candidate.output)x=data[pos++];
+       else for(std::size_t row=0;row<kRows;++row)
+         candidate.output[row]=static_cast<std::uint8_t>(row); // pre-DM11
       if(v9)candidate.swing=data[pos++];
       if(v10)candidate.humanize=data[pos++];
       if(v12){

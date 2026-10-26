@@ -18,6 +18,7 @@
 #include "core/DropFeedback.h"
 #include "core/UiHeaderHitZones.h"
 #include "core/RowMixControl.h"
+#include "core/ClipWarning.h"
 #include "core/Utf8Path.h"
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cgraphicstransform.h"
@@ -1031,19 +1032,15 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  };
  drawMeter(UiCompactLayout::meterLeft,mainMeterL_,holdMeterL_);
  drawMeter(UiCompactLayout::meterRight,mainMeterR_,holdMeterR_);
- c->setFont(VSTGUI::kNormalFont,10);
- c->setFontColor(clipBits?VSTGUI::CColor{255,95,73,255}:
-                      VSTGUI::CColor{120,162,181,255});
- char clipText[16]="CLIP";
+ // Only actual over-0dBFS samples show the sticky red warning.
+ // Existing clip detection/reset, LED placement and hit zones are unchanged.
  if(clipBits){
-   for(unsigned bus=0;bus<16;++bus)
-      if(clipBits&(1u<<bus)){
-         std::snprintf(clipText,sizeof(clipText),bus==0?"MAIN!":"OUT %u!",bus+1);
-         break;
-      }
+   const auto clipText=clipWarningText(clipBits);
+   c->setFont(VSTGUI::kNormalFont,10);
+   c->setFontColor(VSTGUI::CColor{255,55,55,255});
+   c->drawString(clipText.data(),{UiCompactLayout::meterClipLeft,66.,
+                          UiCompactLayout::meterClipRight,85.},VSTGUI::kRightText);
  }
- c->drawString(clipText,{UiCompactLayout::meterClipLeft,66.,
-                        UiCompactLayout::meterClipRight,85.},VSTGUI::kRightText);
  // MASTER caption moves toward its dial; SWING and HUMANIZE stay put.
  const bool oneBar=controller_.patternLength(controller_.currentPattern())==16;
  drawControl(c,{UiCompactLayout::barOne.left,UiCompactLayout::headerButtonTop,
@@ -1411,11 +1408,12 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
    const double top=UiCompactLayout::popupTop(
-       rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_),fullHeight,230.);
-   const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALLOP","SNARE + GHOST"};
-   drawPopupPlate(c,{401.,top-4.,618.,top+229.});
-   for(int i=0;i<9;++i) {
-     drawMenuItem(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
+       rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_),fullHeight,280.);
+   const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALLOP","SNARE + GHOST","COPY ROW","PASTE ROW"};
+   drawPopupPlate(c,{401.,top-4.,618.,top+279.});
+   for(int i=0;i<11;++i) {
+     drawMenuItem(c,{405,top+i*25.,614,top+i*25.+24.},items[i],
+                  false,i!=10||controller_.canPasteRow());
      // Separate the three clusters without moving menu hits or remapping
      // existing commands: quick repeats, snare combination, special rhythms.
      if(i==2||i==5) {
@@ -1958,15 +1956,18 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    const auto target=static_cast<std::size_t>(fillMenuRow_);
    fillMenuRow_=-1;
    if(target>=firstRow_&&target<firstRow_+displayedRows()){
-     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),230.);
-     if(x>=405&&x<614&&y>=top&&y<top+225.){
+     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),280.);
+     if(x>=405&&x<614&&y>=top&&y<top+275.){
        const auto selected=static_cast<std::size_t>((y-top)/25.);
        constexpr RowFill fills[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,
            RowFill::Snare24,RowFill::All,RowFill::Clear,RowFill::Offbeat8,
            RowFill::Gallop,RowFill::SnareGhost};
-       if(selected<9&&y<top+selected*25.+24.&&
-          !controller_.fillRow(target,fills[selected]))
-          status_="FILL NOT APPLIED";
+       if(selected<11&&y<top+selected*25.+24.){
+         const bool ok=selected<9?controller_.fillRow(target,fills[selected]):
+                       selected==9?controller_.copyRow(target):controller_.pasteRow(target);
+         if(!ok)status_=selected<9?"FILL NOT APPLIED":
+                         selected==9?"COPY ROW FAILED":"PASTE ROW FAILED";
+       }
      }
    }
    invalid();return done;

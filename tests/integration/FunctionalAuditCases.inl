@@ -223,7 +223,7 @@ void testAuditMenuGutters() {
    auto* view=IntegrationAccess::view(*f.c,0);
    const auto before=IntegrationAccess::snapshot(*f.c);
    const auto rowY=IntegrationAccess::rowTop(*view,0);
-   const double fillTop=std::min(rowY+36.,view->getViewSize().getHeight()-230.);
+   const double fillTop=UiCompactLayout::popupTop(rowY,view->getViewSize().getHeight(),280.);
    for(int item=0;item<9;++item) {
      click(*view,425.,rowY+18.);
      click(*view,450.,fillTop+item*25.+24.5);
@@ -253,8 +253,8 @@ void testAuditMinimumHeightMenus() {
  const auto height=view->getViewSize().getHeight();
  check(height==300.&&view->visibleRowsForHit()==1,
        "FA06 fixture must reach supported 300px host-refusal viewport");
- const auto top=UiCompactLayout::popupTop(UiCompactLayout::header,height,230.);
- check(top>=0.&&top+225.<=height,"FA06 complete FILL menu outside viewport");
+ const auto top=UiCompactLayout::popupTop(UiCompactLayout::header,height,280.);
+ check(top>=0.&&top+275.<=height,"FA06 complete FILL menu outside viewport");
  // Independent golden first-bar velocities for the nine visible FILL labels.
  const std::array<std::array<std::uint8_t,16>,9> golden{{
    {{127,0,127,0,127,0,127,0,127,0,127,0,127,0,127,0}},
@@ -281,5 +281,5 @@ void testAuditMinimumHeightMenus() {
    click(*view,450.+static_cast<double>(bus/8)*102.,outputTop+(bus%8)*25.+12.);
    check(auditReturnedKit(*f.p).output[0]==bus,"FA06 output menu item inaccessible at minimum height");
  }
- evidence("FA06 supported 300px refusal: all 9 golden FILL actions and 16 output choices reachable PASS");
+ evidence("FA06 300px refusal: full 11-item row menu, all 9 golden FILL actions and 16 output choices reachable PASS");
 }

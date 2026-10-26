@@ -130,7 +130,7 @@ int main(){
  // automatic growth. All modal items must still fit; no reversed clamp bounds.
  for(double client:{300.,370.,538.,658.,850.})
    for(double rowY:{108.,202.,296.,390.})
-     for(double required:{100.,145.,210.,230.}) {
+     for(double required:{100.,145.,210.,230.,280.}) {
        const auto top=UiCompactLayout::popupTop(rowY,client,required);
        EXPECT(top>=0.&&top+required<=client);
      }
