@@ -42,5 +42,13 @@ int main(){
      CHECK(actual.step<32);
    }
  CHECK(c.setCount(4));
+ CHECK(c.configure(1,SongChain::kRest,8));
+ CHECK(c.at(16).pattern==SongChain::kRest&&c.at(23).pattern==SongChain::kRest);
+ CHECK(c.at(24).pattern==2&&c.at(24).step==0);
+ CHECK(c.configure(1,1,8));
  CHECK(c.entry(3).pattern==0&&c.entry(3).steps==32);
+ CHECK(!c.configure(1,SongChain::kRest+1,8));
+ CHECK(c.configure(1,SongChain::kRest,16));
+ CHECK(c.at(16).pattern==SongChain::kRest);
+ CHECK(c.at(32).pattern==2);
 }

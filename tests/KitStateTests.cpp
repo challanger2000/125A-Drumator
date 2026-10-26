@@ -29,6 +29,8 @@ static std::vector<std::uint8_t> wav16() {
 int main() {
  try {
     KitState original{};
+    check(original.songStartBar==1,"factory SONG START not BAR 1");
+    original.songStartBar=2;
     for(const auto bus:original.output)check(bus==0,"new kit not MAIN routed");
     original.visible=6;original.selected=5;
     original.muted=0x8001;original.solo=0x0006;original.swing=35;original.humanize=70;
@@ -39,7 +41,7 @@ int main() {
     original.patternLengths[0]=16;
     original.patternLengths[5]=16;
     check(original.chain.setCount(3)&&original.chain.configure(0,0,16)&&
-          original.chain.configure(1,1,8)&&original.chain.configure(2,2,32),
+          original.chain.configure(1,SongChain::kRest,8)&&original.chain.configure(2,2,32),
           "DM12 chain setup");
     original.gain[0]=50;original.pan[0]=0;original.pitch[0]=36;
     original.choke[0]=1;original.choke[15]=4;
@@ -71,14 +73,36 @@ int main() {
           "Volume/pan/pitch/choke state lost");
     check(copy.visible==6&&copy.selected==5,"Song layout/program not restored");
     check(copy.songEnabled==1&&copy.chain.count()==3&&
-          copy.chain.entry(0).steps==16&&copy.chain.entry(1).pattern==1&&
+          copy.chain.entry(0).steps==16&&copy.chain.entry(1).pattern==SongChain::kRest&&
           copy.chain.entry(1).steps==8&&copy.chain.entry(2).steps==32,
           "DM12 chain roundtrip");
+    check(copy.songStartBar==2,"DM17 SONG START lost during roundtrip");
     check(copy.randomVelocity==original.randomVelocity&&copy.masterVolume==73,
           "DM13 random velocity/master roundtrip");
     check(copy.grid==original.grid,"Step matrix not byte-identical");
     check(copy.names==original.names,"Sample names not restored");
     check(copy.patternLengths==original.patternLengths,"DM15 pattern lengths lost");
+    // DM16 stored no SONG START and could not contain REST. Reproduce
+    // authentic predecessor layout by stripping DM17's trailing uint16,
+    // adjusting version/length/CRC, then verify backward read compatibility.
+    auto previous=original;
+    previous.songStartBar=1;
+    check(previous.chain.configure(1,1,8),"DM16 fixture pattern");
+    std::vector<std::uint8_t> beforeDM16;
+    check(KitCodec::encode(previous,beforeDM16),"DM17 migration fixture");
+    beforeDM16.erase(beforeDM16.end()-6,beforeDM16.end()-4);
+    for(unsigned i=0;i<4;++i){
+       beforeDM16[i]=static_cast<std::uint8_t>(kKitMagicV16>>(i*8));
+       beforeDM16[4+i]=static_cast<std::uint8_t>((beforeDM16.size()-8)>>(i*8));
+    }
+    const auto previousHash=KitCodec::hash(beforeDM16.data()+8,beforeDM16.size()-12);
+    for(unsigned i=0;i<4;++i)
+       beforeDM16[beforeDM16.size()-4+i]=static_cast<std::uint8_t>(previousHash>>(i*8));
+    KitState migrated;
+    check(KitCodec::decode(beforeDM16.data(),beforeDM16.size(),migrated)&&
+          migrated.songStartBar==1&&migrated.chain.entry(1).pattern==1&&
+          migrated.grid==previous.grid&&migrated.output==previous.output,
+          "DM16 backward migration to BAR 1 failed");
     auto invalidLength=original;
     invalidLength.patternLengths[1]=8;
     std::vector<std::uint8_t> rejectLength;
