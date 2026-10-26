@@ -10,6 +10,8 @@ struct UiCompactLayout final {
  static constexpr std::size_t perPage=4;
  // Move the complete header control group starting with PATTERN; logo and left controls stay fixed.
  static constexpr double headerRightShift=-12.;
+ // Space the PATTERN LENGTH controls from the centered A-H group without moving either title or the pattern group.
+ static constexpr double patternLengthLeftShift=14.;
  static constexpr double headerButtonTop=101.,headerButtonBottom=133.,
       groupTitleTop=49.,groupTitleBottom=65.,globalKnobY=119.,
       songEditorHeight=432.,patternStart=457.+headerRightShift,patternPitch=49.,
@@ -23,7 +25,9 @@ struct UiCompactLayout final {
  static_assert(rowKnobY+rowKnobMountRadius < 120.);
  static constexpr double scrollLeft=1263.,scrollRight=1279.,scrollTop=header+7.;
  struct Slot {double left,right;};
- static constexpr Slot barOne{273.,356.},barTwo{359.,442.},edit{208.,272.};
+ static constexpr Slot barOne{273.-patternLengthLeftShift,356.-patternLengthLeftShift},
+                       barTwo{359.-patternLengthLeftShift,442.-patternLengthLeftShift},
+                       edit{208.,272.};
  static constexpr Slot patternTools{850.+headerRightShift,969.+headerRightShift},
                        songToggle{972.+headerRightShift,1042.+headerRightShift},
                        songEdit{1045.+headerRightShift,1125.+headerRightShift};
@@ -41,6 +45,9 @@ struct UiCompactLayout final {
  static constexpr double meterResetLeft=meterLeft-2.;
  static constexpr double meterResetRight=meterRight+13.;
  static_assert(barTwo.right<patternStart);
+ // Preserve readable group separation and the HUMANIZE numeric readout.
+ static_assert(patternStart-barTwo.right>=16.);
+ static_assert(barOne.left>=globalKnobCenters[1]+72.+8.);
  static_assert(patternStart+7.*patternPitch+patternButtonWidth<patternTools.left);
  static_assert(patternTools.right<songToggle.left&&songToggle.right<songEdit.left);
  static_assert(songEdit.right<globalKnobCenters[2]-50.);
