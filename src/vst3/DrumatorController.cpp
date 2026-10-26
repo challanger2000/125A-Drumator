@@ -1105,14 +1105,14 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
  }
  it=locate();
  if(it==waveRequests_.end()||!it->reply)return false;
- auto* response=it->reply;
+ auto* heldReply=it->reply;
  // Cleanup even on invalid/corrupt reply, decoding failure or OOM.
  struct Consume {
    Controller& owner;DrumatorView* view;
    ~Consume(){owner.removeWaveRequest(view);}
  } consume{*this,requester};
  try{
-   auto* a=response->getAttributes();Steinberg::int64 response=-1;
+   auto* a=heldReply->getAttributes();Steinberg::int64 response=-1;
    if(!a||a->getInt("Status",response)!=Steinberg::kResultOk||response!=1)return false;
    Steinberg::int64 start=0,end=0,fadeIn=0,fadeOut=0,gainBits=0,version=-1;
    if(a->getInt("Start",start)!=Steinberg::kResultOk||
