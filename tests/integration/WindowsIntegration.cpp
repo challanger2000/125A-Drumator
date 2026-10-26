@@ -112,6 +112,12 @@ struct IntegrationAccess {
  static bool sampleEditorOpen(const DrumatorView& view){return view.sampleEditorOpen_;}
  static std::string sampleEditorStatus(const DrumatorView& v){return v.status_;}
  static bool openSampleEditorForCapture(DrumatorView& view,std::size_t row){return view.openSampleEditor(row);}
+ static bool importPathViaView(DrumatorView& view,std::size_t row,const std::string& path){return view.loadPath(row,path);}
+ static std::pair<std::uint32_t,std::uint32_t> editorViewport(const DrumatorView& view){return {view.sampleEditorFirst_,view.sampleEditorLast_};}
+ static const auto& editorLeft(const DrumatorView& view){return view.sampleEditorWave_;}
+ static const auto& editorRight(const DrumatorView& view){return view.sampleEditorWaveRight_;}
+ static bool editorStereo(const DrumatorView& view){return view.sampleEditorStereo_;}
+ static std::uint32_t editorFrameCount(const DrumatorView& view){return view.sampleEditorFrames_;}
  static std::array<double,3> rotaryImageStatus(const DrumatorView& view){
    const auto* bmp=view.knobBitmap_;
    return {bmp&&bmp->isLoaded()?1.:0.,bmp?bmp->getWidth():-1.,bmp?bmp->getHeight():-1.};
@@ -710,6 +716,79 @@ void testWaveEditorDesignCaptures(){
    captureVstgui(*v,factor==1.0?"wave-editor-100":"wave-editor-130",factor);
  }
  evidence("Wave editor native captures 100/130: actual encoded stereo float32 WAV, start/end, fade-in/out and gain visible");
+}
+void testWaveEditor11FFlacAndStatus(){
+ // Real libFLAC encoded stereo, 48kHz 16-bit, 1024 frames:
+ // L=16384/32768, R=-8192/32768, independently verified source PCM.
+ const std::uint8_t encodedFlac[]={0x66,0x4c,0x61,0x43,0x00,0x00,0x00,0x22,0x10,0x00,0x10,0x00,0x00,0x00,0x0e,0x00,0x00,0x0e,0x0b,0xb8,0x02,0xf0,0x00,0x00,0x04,0x00,0x6a,0x62,0x94,0xe6,0x0c,0xc7,0x2c,0x03,0x2a,0xe1,0x51,0x43,0x4b,0x3c,0x1c,0x4d,0x03,0x00,0x00,0x12,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x04,0x00,0x84,0x00,0x00,0x28,0x20,0x00,0x00,0x00,0x72,0x65,0x66,0x65,0x72,0x65,0x6e,0x63,0x65,0x20,0x6c,0x69,0x62,0x46,0x4c,0x41,0x43,0x20,0x31,0x2e,0x35,0x2e,0x30,0x20,0x32,0x30,0x32,0x35,0x30,0x32,0x31,0x31,0x00,0x00,0x00,0x00,0xff,0xf8,0xaa,0x18,0x00,0xba,0x01,0x00,0x05,0x01,0x00,0x0f,0x5c,0x9c};
+ const auto folder=std::filesystem::current_path()/"125A-W11F-import";
+ std::filesystem::create_directories(folder);
+ const auto path=folder/"stereo-reference.flac";
+ const auto bad=folder/"broken.flac";
+ const auto wav=folder/"stereo-reference.wav";
+ auto write=[&](const std::filesystem::path& dest,const std::uint8_t* data,std::size_t n){
+   std::ofstream file(dest,std::ios::binary);
+   file.write(reinterpret_cast<const char*>(data),static_cast<std::streamsize>(n));
+   check(file.good(),"W11F could not create real import fixture");
+ };
+ write(path,encodedFlac,sizeof(encodedFlac));
+ const std::uint8_t corrupted[]{'f','L','a','C',0,0,0,0};
+ write(bad,corrupted,sizeof(corrupted));
+ const auto wavBytes=constantStereo(.5f,-.25f);
+ write(wav,wavBytes.data(),wavBytes.size());
+ Fixture f;f.kit(namedKit('X',4));prepareAudio(*f.p);f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ // Use actual View loadPath -> Controller::loadWav -> Processor, not kit recall.
+ for(const auto& imported:{wav,path}){
+   check(IntegrationAccess::importPathViaView(*view,0,pathToUtf8(imported)),
+         "W11F normal View sample import rejected");
+   check(IntegrationAccess::sampleEditorStatus(*view).find("SAMPLE LOADED")!=std::string::npos,
+         "W11F normal import status missing");
+   check(IntegrationAccess::openSampleEditorForCapture(*view,0),
+         "W11F imported sample editor could not open");
+   check(IntegrationAccess::sampleEditorStatus(*view)=="SAMPLE READY FOR EDITING",
+         "W11F imported editor displayed stale status");
+   check(IntegrationAccess::editorFrameCount(*view)==1024&&
+         IntegrationAccess::editorStereo(*view),"W11F imported sample length/stereo");
+   for(std::size_t bin=0;bin<256;++bin){
+     const auto l=IntegrationAccess::editorLeft(*view)[bin];
+     const auto r=IntegrationAccess::editorRight(*view)[bin];
+     check(std::abs(l.minimum-.5f)<1e-4f&&std::abs(l.maximum-.5f)<1e-4f&&
+           std::abs(r.minimum+.25f)<1e-4f&&std::abs(r.maximum+.25f)<1e-4f,
+           "W11F decoded stereo waveform differs from independent PCM reference");
+   }
+   click(*view,875,473);
+   check(!IntegrationAccess::sampleEditorOpen(*view),"W11F close editor after real import");
+ }
+ check(!IntegrationAccess::importPathViaView(*view,1,pathToUtf8(bad)),
+       "W11F corrupt FLAC accepted");
+ check(IntegrationAccess::sampleEditorStatus(*view).find("SAMPLE LOADED")==std::string::npos,
+       "W11F failed FLAC import falsely announced success");
+ check(!IntegrationAccess::openSampleEditorForCapture(*view,1),
+       "W11F failed FLAC imported audio in empty row");
+ evidence("W11F real filesystem WAV + libFLAC stereo import, 1024 frames, 256x2 PCM envelope bins, normal View status and corrupt FLAC rejection PASS");
+}
+void testWaveEditor11FStereoFadePcm(){
+ Fixture f;auto kit=namedKit('X',2);
+ kit.wav[0]=constantStereo(.5f,-.25f);
+ f.kit(kit);prepareAudio(*f.p);
+ const SampleEdit edit{64,192,32,32,1.f};
+ check(f.c->previewSampleEdit(0,edit),"W11F stereo fade preview rejected");
+ std::array<float,256> left{},right{};float* channels[]{left.data(),right.data()};
+ AudioBusBuffers output{};output.numChannels=2;output.channelBuffers32=channels;
+ ProcessData data{};data.numSamples=256;data.numOutputs=1;data.outputs=&output;
+ data.symbolicSampleSize=kSample32;
+ check(f.p->process(data)==kResultOk,"W11F stereo fade PCM process failure");
+ for(unsigned n=0;n<256;++n){
+   double envelope=n>=128?0.:1.;
+   if(n<32)envelope*=static_cast<double>(n)/32.;
+   if(n>=96&&n<128)envelope*=static_cast<double>(127-n)/32.;
+   check(std::abs(left[n]-.5*envelope)<.006&&
+         std::abs(right[n]+.25*envelope)<.006,
+         "W11F stereo PCM differs from independently calculated START/END/fade reference");
+ }
+ check(f.c->stopSampleEditPreview(),"W11F stop stereo fade");
+ evidence("W11F PCM independently calculated 256 frames x 2 channels: START 64 END 192 FADE-IN/OUT 32, silence boundaries PASS");
 }
 void testWaveEditorRealMouseControls(){
  Fixture f;auto kit=namedKit('X',4);
@@ -2232,6 +2311,8 @@ int main(int argc,char** argv){
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
  run("VSTGUI wave editor design capture 100/130",testWaveEditorDesignCaptures);
  run("W11D native mouse-driven wave editor controls",testWaveEditorRealMouseControls);
+ run("W11F real WAV/FLAC imports and status",testWaveEditor11FFlacAndStatus);
+ run("W11F independent stereo fade PCM",testWaveEditor11FStereoFadePcm);
  run("VSTGUI long WAV display full/zoom at 100/130",testWaveEditorLongCaptures);
   run("GUI physical step state/raster toggle",testGuiPhysicalStepsRaster);
  run("UX direct pattern length",testPatternLengthControls);
