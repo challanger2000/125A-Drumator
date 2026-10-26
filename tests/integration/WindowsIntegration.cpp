@@ -118,6 +118,8 @@ struct IntegrationAccess {
  static const auto& editorLeft(const DrumatorView& view){return view.sampleEditorWave_;}
  static const auto& editorRight(const DrumatorView& view){return view.sampleEditorWaveRight_;}
  static bool editorStereo(const DrumatorView& view){return view.sampleEditorStereo_;}
+ static void pollMeter(DrumatorView& view){view.pollMeter();}
+ static std::array<float,4> meterPaintState(const DrumatorView& v){return {v.mainMeterL_,v.mainMeterR_,v.holdMeterL_,v.holdMeterR_};}
  static std::uint32_t editorFrameCount(const DrumatorView& view){return view.sampleEditorFrames_;}
  static std::array<double,3> rotaryImageStatus(const DrumatorView& view){
    const auto* bmp=view.knobBitmap_;
@@ -1078,6 +1080,137 @@ void testGui49MusicalFourSampleCapture(){
        "GUI49 musical screenshot must use real attached 130% zoom");
  captureVstgui(*view,"gui49-four-real-samples-musical-130",1.3);
  evidence("GUI49 musical native 130pct: four decoded stereo WAVs, true names, occupied 32-step velocities and attached zoom PASS");
+}
+void test11IMeterStereoAndStems(){
+ // Independent exact buffer oracle: MAIN channel asymmetry, 0dBFS versus
+ // true over-range, stem-only clipping and disabled stem guard.
+ OutputMeter measured;
+ std::array<float,8> left{{0.f,.125f,.5f,.99f,1.f,1.25f,.125f,0.f}};
+ std::array<float,8> right{{0.f,.25f,.125f,.0625f,.5f,.0625f,0.f,0.f}};
+ std::array<float,8> quiet{},quietR{},stemL{},stemR{};
+ stemL.fill(1.375f);stemR.fill(.1f);
+ float* mainChannels[]{left.data(),right.data()};
+ float* stemChannels[]{stemL.data(),stemR.data()};
+ AudioBusBuffers bus[2]{};
+ bus[0].numChannels=2;bus[0].channelBuffers32=mainChannels;
+ bus[1].numChannels=2;bus[1].channelBuffers32=stemChannels;
+ ProcessData data{};data.numSamples=8;data.numOutputs=2;data.outputs=bus;
+ measured.observe(data,0);
+ check(measured.clipMask.load()==1u&&measured.fullScaleMask.load()==1u,
+       "M11I MAIN exact/above-0dBFS distinctions or disabled STEM");
+ check(std::abs(OutputMeter::decode(measured.mainL.exchange(0))-1.25f)<.0002f&&
+       std::abs(OutputMeter::decode(measured.mainR.exchange(0))-.5f)<.0002f,
+       "M11I independent stereo MAIN sample peaks");
+ measured.clearClips();
+ float* silentChannels[]{quiet.data(),quietR.data()};
+ bus[0].channelBuffers32=silentChannels;
+ measured.observe(data,1u<<1);
+ check(measured.clipMask.load()==2u&&
+       measured.mainL.exchange(0)==0u&&measured.mainR.exchange(0)==0u,
+       "M11I stem-only overrange must warn with silent MAIN");
+ measured.clearClips();
+ check(measured.clipMask.load()==0&&measured.fullScaleMask.load()==0,
+       "M11I manual CLIP reset");
+ bus[0].channelBuffers32=mainChannels;
+ data.numSamples=0;measured.observe(data,0);
+ check(measured.clipMask.load()==0,"M11I zero-frame callback changed latch");
+
+ // Actual Processor -> post-master output PCM -> atomic meter -> Controller link.
+ Fixture f;auto kit=namedKit('X',2);
+ kit.wav[0]=constantStereo(.75f,-.375f);kit.masterVolume=200;
+ f.kit(kit);prepareAudio(*f.p);
+ auto meter=f.c->meterLink();
+ check(meter!=nullptr,"M11I Processor-to-Controller meter connection missing");
+ check(f.c->previewSample(0),"M11I real row preview failed");
+ std::array<float,256> actualL{},actualR{};
+ float* actualChannels[]{actualL.data(),actualR.data()};
+ AudioBusBuffers out{};out.numChannels=2;out.channelBuffers32=actualChannels;
+ ProcessData block{};block.numSamples=256;block.numOutputs=1;block.outputs=&out;
+ block.symbolicSampleSize=kSample32;
+ check(f.p->process(block)==kResultOk,"M11I actual audio process failed");
+ float expectedL=0.f,expectedR=0.f;
+ for(unsigned i=0;i<256;++i) {
+   expectedL=std::max(expectedL,std::abs(actualL[i]));
+   expectedR=std::max(expectedR,std::abs(actualR[i]));
+ }
+ check(expectedL>1.f&&expectedR>0.f,"M11I actual master gain/preview not audible");
+ const float reportedL=OutputMeter::decode(meter->mainL.exchange(0));
+ const float reportedR=OutputMeter::decode(meter->mainR.exchange(0));
+ check(std::abs(expectedL-reportedL)<.001f&&std::abs(expectedR-reportedR)<.001f,
+       "M11I meter does not match actual post-master PCM");
+ check(meter->clipMask.load()&1u,"M11I actual MAIN overrange was not latched");
+ meter->clearClips();
+ f.open();auto* v=IntegrationAccess::view(*f.c,0);
+ check(f.c->previewSample(0),"M11I second preview for native GUI meter");
+ check(f.p->process(block)==kResultOk,"M11I second real master render");
+ IntegrationAccess::pollMeter(*v);
+ check(IntegrationAccess::meterPaintState(*v)[0]>1.f,
+       "M11I GUI does not receive real MAIN peak");
+ for(double zoomFactor:{1.,1.3}){
+   const std::uint8_t z=zoomFactor==1.?0:2;
+   std::array<std::uint8_t,5> zoomState{{'D','Z','M','2',z}};
+   drumator::qa::ByteStream in(zoomState.data(),zoomState.size());
+   check(f.c->setState(&in)==kResultOk&&v->zoomMatches(zoomFactor),
+         "M11I native GUI zoom contract");
+   captureVstgui(*v,zoomFactor==1.?"gui49-11i-main-meter-100":"gui49-11i-main-meter-130",zoomFactor);
+ }
+ click(*v,1264,79);
+ check(meter->clipMask.load()==0,"M11I GUI left-click failed to clear clip");
+
+ // Render a real independently routed stem with MAIN silent.
+ Fixture stems;auto stemKit=namedKit('X',2);
+ stemKit.wav[1]=constantStereo(.75f,-.375f);stemKit.masterVolume=200;
+ stemKit.output[1]=1;
+ stems.kit(stemKit);prepareAudio(*stems.p);
+ check(stems.p->activateBus(MediaTypes::kAudio,BusDirections::kOutput,1,true)==kResultOk,
+       "M11I stem host activation failed");
+ check(stems.c->previewSample(1),"M11I stem preview rejected");
+ std::array<float,256> mainL{},mainR{},outL{},outR{};
+ float* mainOut[]{mainL.data(),mainR.data()};
+ float* stemOut[]{outL.data(),outR.data()};
+ AudioBusBuffers buses[2]{};buses[0].numChannels=2;buses[0].channelBuffers32=mainOut;
+ buses[1].numChannels=2;buses[1].channelBuffers32=stemOut;
+ ProcessData multi{};multi.numSamples=256;multi.numOutputs=2;
+ multi.outputs=buses;multi.symbolicSampleSize=kSample32;
+ check(stems.p->process(multi)==kResultOk,"M11I actual stem process failed");
+ float maxStem=0.f,maxMain=0.f;
+ for(unsigned i=0;i<256;++i){
+   maxStem=std::max(maxStem,std::abs(outL[i]));
+   maxMain=std::max(maxMain,std::abs(mainL[i]));
+ }
+ auto stemMeter=stems.c->meterLink();
+ check(stemMeter&&maxStem>1.f&&maxMain<1e-5f&&
+       (stemMeter->clipMask.load()&(1u<<1))&&
+       stemMeter->mainL.exchange(0)==0,
+       "M11I OUT 2-only true overrange with silent MAIN missing");
+ stems.open();auto* vs=IntegrationAccess::view(*stems.c,0);
+ IntegrationAccess::pollMeter(*vs);
+ const std::array<std::uint8_t,5> scale{{'D','Z','M','2',2}};
+ drumator::qa::ByteStream state(const_cast<std::uint8_t*>(scale.data()),scale.size());
+ check(stems.c->setState(&state)==kResultOk&&vs->zoomMatches(1.3),
+       "M11I stem CLIP capture 130pct");
+ captureVstgui(*vs,"gui49-11i-out2-clip-130",1.3);
+ evidence("M11I MAIN L/R real post-ramp samples, separate 0dBFS/overrange, 16-bus inactive mask, OUT2-only clip and click reset PASS");
+}
+void test11IMonoFlacImport(){
+ static constexpr std::uint8_t monoFlac[]={0x66,0x4c,0x61,0x43,0x00,0x00,0x00,0x22,0x10,0x00,0x10,0x00,0x00,0x00,0x0b,0x00,0x00,0x0b,0x0b,0xb8,0x00,0xf0,0x00,0x00,0x04,0x00,0xba,0x31,0x49,0x4f,0xa5,0x46,0x04,0x02,0x5c,0x12,0x84,0x74,0xa9,0x79,0x53,0xe4,0x84,0x00,0x00,0x28,0x20,0x00,0x00,0x00,0x72,0x65,0x66,0x65,0x72,0x65,0x6e,0x63,0x65,0x20,0x6c,0x69,0x62,0x46,0x4c,0x41,0x43,0x20,0x31,0x2e,0x35,0x2e,0x30,0x20,0x32,0x30,0x32,0x35,0x30,0x32,0x31,0x31,0x00,0x00,0x00,0x00,0xff,0xf8,0xaa,0x08,0x00,0xed,0x01,0x00,0x09,0xa4,0xb8};
+ // The exact 97-byte file passes independent libFLAC 1.5.0 'flac -t'.
+ const auto path=std::filesystem::current_path()/"125A-11I-mono.flac";
+ {std::ofstream file(path,std::ios::binary|std::ios::trunc);
+  file.write(reinterpret_cast<const char*>(monoFlac),sizeof(monoFlac));
+  check(file.good(),"M11I failed to create Mono FLAC fixture");}
+ Fixture f;f.kit(namedKit('X',2));prepareAudio(*f.p);f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ check(IntegrationAccess::importPathViaView(*view,0,pathToUtf8(path)),
+       "M11I normal mono-FLAC file import rejected");
+ check(IntegrationAccess::openSampleEditorForCapture(*view,0),
+       "M11I mono-FLAC editor open failed");
+ check(IntegrationAccess::editorFrameCount(*view)==1024&&
+       !IntegrationAccess::editorStereo(*view),"M11I mono-FLAC channels/frames incorrect");
+ for(const auto& v:IntegrationAccess::editorLeft(*view))
+   check(std::abs(v.minimum-.25f)<1e-6f&&std::abs(v.maximum-.25f)<1e-6f,
+         "M11I decoded mono-FLAC PCM level incorrect");
+ evidence("M11I libFLAC validated mono 48kHz/16bit/1024 frames, 256 PCM waveform bins, normal import and editor PASS");
 }
 void testVisualRender(){
  for(const auto zoom: {1.0,1.2,1.3,1.5}){
@@ -2459,6 +2592,8 @@ int main(int argc,char** argv){
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
  run("GUI49 musical four-sample native 130pct capture",testGui49MusicalFourSampleCapture);
+ run("M11I actual MAIN and stem meter, GUI capture and clip reset",test11IMeterStereoAndStems);
+ run("M11I normal 16bit mono FLAC import",test11IMonoFlacImport);
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
  run("VSTGUI wave editor design capture 100/130",testWaveEditorDesignCaptures);
  run("W11D native mouse-driven wave editor controls",testWaveEditorRealMouseControls);
