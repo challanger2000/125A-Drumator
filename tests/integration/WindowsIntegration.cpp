@@ -711,6 +711,69 @@ void testWaveEditorDesignCaptures(){
  }
  evidence("Wave editor native captures 100/130: actual encoded stereo float32 WAV, start/end, fade-in/out and gain visible");
 }
+void testWaveEditorRealMouseControls(){
+ Fixture f;auto kit=namedKit('X',4);
+ kit.wav[0]=constantStereo(.5f,-.25f);
+ kit.sampleEdits[0]=SampleEdit{90,940,110,140,1.25f};
+ f.kit(kit);f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ check(IntegrationAccess::openSampleEditorForCapture(*v,0),"W11D open native editor");
+ auto draft=[&]{return IntegrationAccess::sampleEditorDraft(*v);};
+ auto drag=[&](double x,double y,double dest){
+   VSTGUI::CPoint pos(x,y);
+   v->onMouseDown(pos,VSTGUI::CButtonState(VSTGUI::kLButton));
+   pos.x=dest;
+   v->onMouseMoved(pos,VSTGUI::CButtonState(VSTGUI::kLButton));
+   v->onMouseUp(pos,VSTGUI::CButtonState{});
+ };
+ // Full-screen sample viewport, select START and END at distinct x coordinates.
+ drag(284.+710.*90./1024.,310.,284.+710.*140./1024.);
+ check(draft().start>=138&&draft().start<=142,"W11D START drag frame mismatch");
+ drag(284.+710.*940./1024.,310.,284.+710.*900./1024.);
+ check(draft().end>=898&&draft().end<=902,"W11D END drag frame mismatch");
+ // Upper fade handles must modify the underlying frame durations.
+ const auto beforeIn=draft().fadeIn;
+ drag(284.+710.*(draft().start+beforeIn)/1024.,182.,
+      284.+710.*(draft().start+beforeIn+40)/1024.);
+ check(draft().fadeIn>beforeIn,"W11D fade-in handle failed");
+ const auto beforeOut=draft().fadeOut;
+ drag(284.+710.*(draft().end-beforeOut)/1024.,182.,
+      284.+710.*(draft().end-beforeOut-40)/1024.);
+ check(draft().fadeOut>beforeOut,"W11D fade-out handle failed");
+ // Zoom +, pan via actual mouse drag, zoom -, FIT.
+ click(*v,300,473);
+ check(IntegrationAccess::zoomSample(*v,false),"W11D zoom-out from button state");
+ click(*v,300,473);
+ drag(400,395,760);
+ click(*v,380,473);
+ click(*v,470,473);
+ // Gain slider change and Ctrl-reset, then RESET toolbar.
+ drag(680,421,815);
+ check(draft().gain>1.f,"W11D gain drag failed");
+ click(*v,740,421,VSTGUI::kLButton|VSTGUI::kControl);
+ check(std::abs(draft().gain-1.f)<.001f,"W11D gain control-reset failed");
+ click(*v,770,473);
+ check(draft().start==0&&draft().end==1024&&draft().fadeIn==0&&
+       draft().fadeOut==0&&std::abs(draft().gain-1.f)<.001f,
+       "W11D RESET did not restore full sample");
+ // Repeat preview/stop through actual controls; cancelled edits must not persist.
+ for(int i=0;i<3;++i){click(*v,560,473);click(*v,665,473);}
+ click(*v,350,310);
+ check(draft().start>0,"W11D modified state before cancel");
+ click(*v,875,473);
+ check(!IntegrationAccess::sampleEditorOpen(*v),"W11D CANCEL did not close");
+ check(IntegrationAccess::openSampleEditorForCapture(*v,0),"W11D reopen after cancel");
+ check(draft().start==90&&draft().end==940,"W11D CANCEL persisted unsaved edit");
+ // APPLY must persist changed Start when dialog is reopened.
+ click(*v,380,310);
+ const auto applyStart=draft().start;
+ check(applyStart!=90,"W11D change before APPLY");
+ click(*v,970,473);
+ check(!IntegrationAccess::sampleEditorOpen(*v),"W11D APPLY did not close");
+ check(IntegrationAccess::openSampleEditorForCapture(*v,0),"W11D reopen after apply");
+ check(draft().start==applyStart,"W11D APPLY failed to persist edit");
+ evidence("W11D real native VSTGUI mouse controls: marker/fade drag, zoom/scroll, gain/reset, preview/stop, apply/cancel PASS");
+}
 void testWaveEditorLongCaptures(){
  constexpr std::uint32_t rate=48000;
  constexpr std::size_t frames=rate*2;
@@ -2168,6 +2231,7 @@ int main(int argc,char** argv){
  run("VSTGUI native pixel render set",testVisualRender);
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
  run("VSTGUI wave editor design capture 100/130",testWaveEditorDesignCaptures);
+ run("W11D native mouse-driven wave editor controls",testWaveEditorRealMouseControls);
  run("VSTGUI long WAV display full/zoom at 100/130",testWaveEditorLongCaptures);
   run("GUI physical step state/raster toggle",testGuiPhysicalStepsRaster);
  run("UX direct pattern length",testPatternLengthControls);
