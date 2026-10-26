@@ -158,6 +158,9 @@ private:
  std::array<std::atomic<std::uint8_t>,kPatterns> patternLengths_{};
  // Monotonic, lock-free diagnostics; never logs or allocates in process().
  std::atomic<std::uint64_t> droppedTriggers_{0};
+ std::atomic<std::uint64_t> inspectedHostEvents_{0};
+ std::atomic<std::uint64_t> validHostNotes_{0};
+ std::atomic<std::uint64_t> uninspectedHostEvents_{0};
  std::atomic<std::uint8_t> masterVolume_{100};
  MasterGainRamp masterRamp_{}; // reset only at setup/guarded recall
  std::atomic<std::uint32_t> activeStemMask_{0};

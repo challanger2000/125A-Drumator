@@ -722,6 +722,7 @@ bool DrumatorView::sampleDropTargetAt(double x,double y) const noexcept {
         x<UiCompactLayout::sample.right;
 }
 DrumatorView::~DrumatorView() {
+ controller_.cancelSampleEditorRequestsForView(this);
  if(backgroundBitmap_){backgroundBitmap_->forget();backgroundBitmap_=nullptr;}
  if(productLogoBitmap_){productLogoBitmap_->forget();productLogoBitmap_=nullptr;}
  if(knobBitmap_){knobBitmap_->forget();knobBitmap_=nullptr;}
@@ -730,6 +731,8 @@ DrumatorView::~DrumatorView() {
  controller_.unregisterView(this);
 }
 bool DrumatorView::removed(VSTGUI::CView* parent) {
+ controller_.cancelSampleEditorRequestsForView(this);
+ pendingEditorRow_=kRows;pendingViewport_=false;pendingMarkerKind_=0;
  draggingScroll_=false;
  if(sampleEditorOpen_){controller_.stopSampleEditPreview();sampleEditorOpen_=false;
    sampleEditorRow_=kRows;sampleEditorDrag_=0;}
@@ -813,7 +816,7 @@ void DrumatorView::onTextEditPlatformControlLostFocus(VSTGUI::CTextEdit* edit) {
 void DrumatorView::discardTransientEditsForRecall() noexcept {
  if(sampleEditorOpen_)controller_.stopSampleEditPreview();
  sampleEditorOpen_=false;sampleEditorRow_=kRows;sampleEditorDrag_=0;
- pendingEditorRow_=kRows;
+ pendingEditorRow_=kRows;pendingViewport_=false;pendingMarkerKind_=0;
  // Nothrow logical invalidation before the new kit commit. Do not call
  // VSTGUI/Win32 here: closing an EDIT HWND may invoke allocating callbacks.
  laneDragActive_=false;
@@ -892,10 +895,16 @@ void DrumatorView::pollMeter() noexcept {
  // individual GUI windows; generation ensures host Stop/no callbacks decays.
  if(pendingEditorRow_<kRows &&
     std::chrono::steady_clock::now()-pendingEditorSince_>std::chrono::seconds(3)){
-   controller_.cancelSampleEditorRequest(pendingEditorRow_);
+   controller_.cancelSampleEditorRequest(pendingEditorRow_,this);
    pendingEditorRow_=kRows;
    status_="SAMPLE EDITOR: REPLY TIMEOUT";
    invalid();
+ }
+ if(pendingViewport_ &&
+    std::chrono::steady_clock::now()-pendingEditorSince_>std::chrono::seconds(3)){
+   controller_.cancelSampleEditorRequest(sampleEditorRow_,this);
+   pendingViewport_=false;pendingMarkerKind_=0;
+   status_="WAVEFORM: REPLY TIMEOUT";invalid();
  }
  controller_.requestMeterSnapshot();
  const auto state=controller_.meterState();
@@ -1716,30 +1725,42 @@ void DrumatorView::load(std::size_t row) {
 }
 
 void DrumatorView::onSampleEditorReady(std::size_t row,bool ok) {
- if(pendingEditorRow_!=row)return;
- pendingEditorRow_=kRows;
- if(ok)(void)openSampleEditor(row);
- else {status_="SAMPLE EDITOR: SOURCE UNAVAILABLE";invalid();}
+ if(pendingEditorRow_==row) {
+   pendingEditorRow_=kRows;
+   if(ok)(void)openSampleEditor(row);
+   else {controller_.cancelSampleEditorRequest(row,this);
+         status_="SAMPLE EDITOR: SOURCE UNAVAILABLE";invalid();}
+   return;
+ }
+ if(!pendingViewport_||!sampleEditorOpen_||sampleEditorRow_!=row)return;
+ if(!ok) {
+   controller_.cancelSampleEditorRequest(row,this);
+   pendingViewport_=false;pendingMarkerKind_=0;
+   status_="WAVEFORM: SOURCE UNAVAILABLE";invalid();return;
+ }
+ const auto first=pendingViewportFirst_,last=pendingViewportLast_;
+ if(refreshSampleViewport(first,last)&&!pendingViewport_&&pendingMarkerKind_) {
+   const auto kind=pendingMarkerKind_;pendingMarkerKind_=0;
+   applySampleMarkerAt(pendingMarkerX_,kind==2);
+ }
 }
 bool DrumatorView::openSampleEditor(std::size_t row) {
  SampleEdit edit;std::uint32_t frames=0;
  std::array<WaveformRange,256> wave{};
- // Verify a usable source BEFORE any host resize. Opening an empty row
- // must not enlarge the entire plug-in window.
+ // Register continuation before sending: the host may reply immediately.
+ pendingEditorRow_=row;pendingEditorSince_=std::chrono::steady_clock::now();
  if(!controller_.sampleEditorSnapshot(row,edit,frames,wave,0,0,
                                       &sampleEditorRevision_,&sampleEditorWaveRight_,
-                                      &sampleEditorStereo_)||frames==0){
-   if(controller_.sampleEditorRequestPending(row)){
-     pendingEditorRow_=row;pendingEditorSince_=std::chrono::steady_clock::now();
-     status_="SAMPLE EDITOR: LOADING";
-   }
-   else status_="NO SAMPLE TO EDIT";
+                                      &sampleEditorStereo_,this)||frames==0){
+   if(controller_.sampleEditorRequestPending(row,this))status_="SAMPLE EDITOR: LOADING";
+   else {pendingEditorRow_=kRows;status_="NO SAMPLE TO EDIT";}
    invalid();return false;
  }
  const auto scale=static_cast<const DrumatorEditor&>(editor_).effectiveScale();
  constexpr double editorHeight=620.;
  if(getViewSize().getHeight()<editorHeight){
    if(!editor_.requestResize({1280.*scale,editorHeight*scale})){
+     pendingEditorRow_=kRows;
      status_="SAMPLE EDITOR: HOST REJECTED WINDOW HEIGHT";
      invalid();return false;
    }
@@ -1751,7 +1772,6 @@ bool DrumatorView::openSampleEditor(std::size_t row) {
  sampleEditorRate_=controller_.editorWaveSampleRate();sampleEditorWave_=wave;
  sampleEditorRow_=row;sampleEditorFirst_=0;sampleEditorLast_=frames;
  sampleEditorDrag_=0;sampleEditorPressed_=-1;sampleEditorOpen_=true;
- // A valid snapshot supersedes the initial empty-state hint, even on project recall.
  status_="SAMPLE READY FOR EDITING";
  invalid();return true;
 }
@@ -1759,6 +1779,40 @@ void DrumatorView::setSampleEditorGain(double x) {
  if(!sampleEditorOpen_)return;
  const auto value=std::clamp((x-615.)/285.,0.,1.);
  sampleEditorEdit_.gain=static_cast<float>(std::round(value*400.)/100.);
+ invalid();
+}
+bool DrumatorView::refreshSampleViewport(std::uint32_t first,std::uint32_t last) {
+ if(!sampleEditorOpen_||last<=first||last>sampleEditorFrames_)return false;
+ pendingViewport_=true;
+ pendingViewportFirst_=first;pendingViewportLast_=last;
+ pendingEditorSince_=std::chrono::steady_clock::now();
+ auto wave=sampleEditorWave_,right=sampleEditorWaveRight_;
+ bool stereo=sampleEditorStereo_;SampleEdit ignored;std::uint32_t frames=0;
+ if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,frames,wave,first,last,
+                                     nullptr,&right,&stereo,this)){
+   if(controller_.sampleEditorRequestPending(sampleEditorRow_,this)) {
+     status_="WAVEFORM: LOADING";invalid();return true;
+   }
+   pendingViewport_=false;pendingMarkerKind_=0;
+   status_="WAVEFORM: UNAVAILABLE";invalid();return false;
+ }
+ pendingViewport_=false;
+ if(frames!=sampleEditorFrames_){
+   pendingMarkerKind_=0;status_="WAVEFORM: SOURCE CHANGED";invalid();return false;
+ }
+ sampleEditorFirst_=first;sampleEditorLast_=last;
+ sampleEditorWave_=wave;sampleEditorWaveRight_=right;sampleEditorStereo_=stereo;
+ invalid();return true;
+}
+void DrumatorView::applySampleMarkerAt(double x,bool endMarker) {
+ const auto frame=waveformFrameAt(std::clamp(x,284.,994.)-284.,710.,sampleEditorFirst_,sampleEditorLast_);
+ if(endMarker)sampleEditorEdit_.end=std::clamp(frame,
+                             sampleEditorEdit_.start+1,sampleEditorFrames_);
+ else sampleEditorEdit_.start=std::min(frame,sampleEditorEdit_.end-1);
+ const auto span=sampleEditorEdit_.end-sampleEditorEdit_.start;
+ sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,span);
+ sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
+                                   span-sampleEditorEdit_.fadeIn);
  invalid();
 }
 bool DrumatorView::zoomSampleEditor(bool in,bool full) {
@@ -1771,20 +1825,10 @@ bool DrumatorView::zoomSampleEditor(bool in,bool full) {
  const auto center=sampleEditorFirst_+span/2;
  const auto first=center>nextSpan/2?center-nextSpan/2:0;
  const auto nextFirst=std::min(first,sampleEditorFrames_-nextSpan);
- auto wave=sampleEditorWave_;
- auto right=sampleEditorWaveRight_;bool stereo=sampleEditorStereo_;
- SampleEdit ignored;std::uint32_t frames=0;
- if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,frames,wave,
-                                      nextFirst,nextFirst+nextSpan,nullptr,
-                                      &right,&stereo)||
-    frames!=sampleEditorFrames_){status_="ZOOM: WAVEFORM UNAVAILABLE";return false;}
- sampleEditorFirst_=nextFirst;sampleEditorLast_=nextFirst+nextSpan;
- sampleEditorWave_=wave;sampleEditorWaveRight_=right;sampleEditorStereo_=stereo;
- invalid();return true;
+ return refreshSampleViewport(nextFirst,nextFirst+nextSpan);
 }
 void DrumatorView::moveSampleMarker(double x,bool endMarker) {
  if(!sampleEditorOpen_||sampleEditorFrames_<2)return;
- // Edge-autoscroll while dragging START/END, without mousewheel or modifiers.
  if((x>994.||x<284.)&&sampleEditorLast_>sampleEditorFirst_){
    const auto span=sampleEditorLast_-sampleEditorFirst_;
    const auto step=std::max<std::uint32_t>(1,span/128);
@@ -1792,28 +1836,14 @@ void DrumatorView::moveSampleMarker(double x,bool endMarker) {
    const auto nextFirst=x>994.?std::min(sampleEditorFrames_-span,oldFirst+step):
        (oldFirst>step?oldFirst-step:0);
    if(nextFirst!=oldFirst){
-     auto wave=sampleEditorWave_;auto right=sampleEditorWaveRight_;
-     bool stereo=sampleEditorStereo_;SampleEdit saved;std::uint32_t frames=0;
-     if(controller_.sampleEditorSnapshot(sampleEditorRow_,saved,frames,wave,
-           nextFirst,nextFirst+span,nullptr,&right,&stereo)&&
-           frames==sampleEditorFrames_){
-       sampleEditorFirst_=nextFirst;sampleEditorLast_=nextFirst+span;
-       sampleEditorWave_=wave;sampleEditorWaveRight_=right;
-       sampleEditorStereo_=stereo;
+     if(!refreshSampleViewport(nextFirst,nextFirst+span))return;
+     if(pendingViewport_){
+       pendingMarkerX_=x;pendingMarkerKind_=endMarker?2:1;return;
      }
    }
  }
- const auto frame=waveformFrameAt(std::clamp(x,284.,994.)-284.,710.,sampleEditorFirst_,sampleEditorLast_);
- if(endMarker)sampleEditorEdit_.end=std::clamp(frame,
-                             sampleEditorEdit_.start+1,sampleEditorFrames_);
- else sampleEditorEdit_.start=std::min(frame,sampleEditorEdit_.end-1);
- const auto span=sampleEditorEdit_.end-sampleEditorEdit_.start;
- sampleEditorEdit_.fadeIn=std::min(sampleEditorEdit_.fadeIn,span);
- sampleEditorEdit_.fadeOut=std::min(sampleEditorEdit_.fadeOut,
-                                   span-sampleEditorEdit_.fadeIn);
- invalid();
+ applySampleMarkerAt(x,endMarker);
 }
-
 void DrumatorView::moveSampleFade(double x,bool fadeOut) {
  if(!sampleEditorOpen_)return;
  const auto frame=waveformFrameAt(std::clamp(x,284.,994.)-284.,710.,sampleEditorFirst_,sampleEditorLast_);
@@ -1836,15 +1866,8 @@ bool DrumatorView::scrollEditorWave(double x) {
      std::llround(static_cast<double>(sampleEditorFrames_)*fraction));
  const auto start=center>span/2?center-span/2:0u;
  const auto next=std::min(start,sampleEditorFrames_-span);
- if(next==sampleEditorFirst_)return true;
- auto wave=sampleEditorWave_;auto right=sampleEditorWaveRight_;
- bool stereo=sampleEditorStereo_;
- SampleEdit ignored;std::uint32_t count=0;
- if(!controller_.sampleEditorSnapshot(sampleEditorRow_,ignored,count,wave,next,next+span,nullptr,&right,&stereo)||
-    count!=sampleEditorFrames_){status_="SCROLL: WAVEFORM UNAVAILABLE";return false;}
- sampleEditorFirst_=next;sampleEditorLast_=next+span;sampleEditorWave_=wave;
- sampleEditorWaveRight_=right;sampleEditorStereo_=stereo;
- invalid();return true;
+ if(next==sampleEditorFirst_&&!pendingViewport_)return true;
+ return refreshSampleViewport(next,next+span);
 }
 VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    VSTGUI::CPoint& pos,const VSTGUI::CButtonState& buttons) {
@@ -1915,6 +1938,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        case 6:
          if(!controller_.stopSampleEditPreview()){status_="PREVIEW STOP FAILED";break;}
          sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
+         pendingViewport_=false;pendingMarkerKind_=0;
+         controller_.cancelSampleEditorRequestsForView(this);
          (void)adjustEditorHeight();break;
        case 7:
          // APPLY is a STOP-then-commit transaction. A failed STOP must not
@@ -1924,6 +1949,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          }
          if(controller_.commitSampleEdit(sampleEditorRow_,sampleEditorEdit_,sampleEditorRevision_)){
            sampleEditorOpen_=false;sampleEditorDrag_=0;sampleEditorRow_=kRows;
+         pendingViewport_=false;pendingMarkerKind_=0;
+         controller_.cancelSampleEditorRequestsForView(this);
            (void)adjustEditorHeight();
          }else status_="APPLY FAILED: SAMPLE CHANGED OR PROCESSOR REJECTED";
          break;

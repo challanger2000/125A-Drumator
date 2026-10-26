@@ -56,6 +56,7 @@ bool Controller::clearMeterClips(){
  return accepted;
 }
 Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* message){
+ try {
  if(message&&message->getMessageID()&&
     std::strcmp(message->getMessageID(),"Drumator.MeterSnapshot")==0){
    // The host may deliver IMessage across a process boundary. Treat getter
@@ -73,8 +74,14 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
       clip<0||full<0||clip>65535||full>65535||
       reset<0||static_cast<std::uint64_t>(reset)<lastClearEpoch_)
      return Steinberg::kResultFalse;
-   Steinberg::int64 dropped=0;
+   Steinberg::int64 dropped=0,inspected=0,valid=0,uninspected=0;
    if(attrs->getInt("TriggerDrops",dropped)==Steinberg::kResultOk&&dropped<0)
+      return Steinberg::kResultFalse;
+   if(attrs->getInt("HostInspected",inspected)==Steinberg::kResultOk&&inspected<0)
+      return Steinberg::kResultFalse;
+   if(attrs->getInt("HostValidNotes",valid)==Steinberg::kResultOk&&valid<0)
+      return Steinberg::kResultFalse;
+   if(attrs->getInt("HostUninspected",uninspected)==Steinberg::kResultOk&&uninspected<0)
       return Steinberg::kResultFalse;
    const auto index=static_cast<std::uint64_t>(seq);
    // Later UI polls for the same audio generation must not erase peaks.
@@ -82,7 +89,10 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
      meterState_={index,static_cast<std::uint32_t>(l),static_cast<std::uint32_t>(r),
                   static_cast<std::uint32_t>(clip),static_cast<std::uint32_t>(full),
                   static_cast<std::uint32_t>(reset),
-                  static_cast<std::uint64_t>(dropped)};
+                  static_cast<std::uint64_t>(dropped),
+                  static_cast<std::uint64_t>(inspected),
+                  static_cast<std::uint64_t>(valid),
+                  static_cast<std::uint64_t>(uninspected)};
      lastClearEpoch_=std::max(lastClearEpoch_,meterState_.reset);
    }
    return Steinberg::kResultOk;
@@ -91,55 +101,58 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
 
  if(message&&message->getMessageID()&&
     std::strcmp(message->getMessageID(),"Drumator.PatternReply")==0){
-   auto* a=message->getAttributes();
-   Steinberg::int64 id=-1,selected=-1;
-   if(!a||a->getInt("RequestId",id)!=Steinberg::kResultOk||
-      a->getInt("Selected",selected)!=Steinberg::kResultOk||
-      id<=0||selected<0||selected>=static_cast<Steinberg::int64>(kPatterns))
-     return Steinberg::kInvalidArgument;
-   if(!patternRequestPending_||static_cast<std::uint64_t>(id)!=patternRequestId_)return Steinberg::kResultOk;
-   patternRequestPending_=false;patternReplyReceived_=true;
-   patternReplyMatched_=static_cast<unsigned>(selected)==patternReplyRequested_;
-   if(patternReplyMatched_&&!patternRecallApplying_&&
-      std::abs(getParamNormalized(kPatternParam)-patternFallback_)<1.e-7){
-     try{
+   try {
+     auto* a=message->getAttributes();
+     Steinberg::int64 id=-1,selected=-1;
+     if(!a||a->getInt("RequestId",id)!=Steinberg::kResultOk||
+        a->getInt("Selected",selected)!=Steinberg::kResultOk||
+        id<=0||selected<0||selected>=static_cast<Steinberg::int64>(kPatterns))
+       return Steinberg::kInvalidArgument;
+     if(!patternRequestPending_||static_cast<std::uint64_t>(id)!=patternRequestId_)return Steinberg::kResultOk;
+     patternRequestPending_=false;patternReplyReceived_=true;
+     patternReplyMatched_=static_cast<unsigned>(selected)==patternReplyRequested_;
+     if(patternReplyMatched_&&!patternRecallApplying_&&
+        std::abs(getParamNormalized(kPatternParam)-patternFallback_)<1.e-7){
        (void)EditController::setParamNormalized(kPatternParam,patternReplyHostValue_);
        notifyViews(false);
-     }catch(...){return Steinberg::kOutOfMemory;}
-   }
-   return Steinberg::kResultOk;
+     }
+     return Steinberg::kResultOk;
+   }catch(...){return Steinberg::kOutOfMemory;}
  }
  if(message&&message->getMessageID()&&
     std::strcmp(message->getMessageID(),"Drumator.SampleEditorReply")==0){
-   auto* a=message->getAttributes();
-   Steinberg::int64 id=-1,row=-1,status=-1;
-   if(!a||a->getInt("RequestId",id)!=Steinberg::kResultOk||
-      a->getInt("Row",row)!=Steinberg::kResultOk||
-      a->getInt("Status",status)!=Steinberg::kResultOk||
-      id<=0||row<0||row>=static_cast<Steinberg::int64>(kRows)||
-      (status!=0&&status!=1))return Steinberg::kInvalidArgument;
-   if(!waveRequestPending_||static_cast<std::uint64_t>(id)!=waveRequestId_||
-      static_cast<std::size_t>(row)!=waveRequestRow_)return Steinberg::kResultOk;
-   if(status==1){
-     Steinberg::int64 revision=-1;const void* bytes=nullptr;
-     Steinberg::uint32 length=0;
-     if(a->getInt("Revision",revision)!=Steinberg::kResultOk||
-        revision<0||revision>UINT32_MAX)
-        return Steinberg::kInvalidArgument;
-     const bool hasWave=a->getBinary("Wave",bytes,length)==Steinberg::kResultOk;
-     if(hasWave?(!bytes||length<44||length>kMaxSingleWav):
-        !(editorWaveRow_==static_cast<std::size_t>(row)&&
-          editorWaveRevision_==static_cast<std::uint32_t>(revision)&&
-          !editorWaveCache_.left.empty()))
-        return Steinberg::kInvalidArgument;
-   }
-   message->addRef();
-   if(waveReply_)waveReply_->release();
-   waveReply_=message;waveRequestPending_=false;waveReplyFresh_=true;
-   try{
-     for(auto* view:views_)if(view)view->onSampleEditorReady(static_cast<std::size_t>(row),status==1);
+   try {
+     auto* a=message->getAttributes();
+     Steinberg::int64 id=-1,row=-1,status=-1;
+     if(!a||a->getInt("RequestId",id)!=Steinberg::kResultOk||
+        a->getInt("Row",row)!=Steinberg::kResultOk||
+        a->getInt("Status",status)!=Steinberg::kResultOk||
+        id<=0||row<0||row>=static_cast<Steinberg::int64>(kRows)||
+        (status!=0&&status!=1))return Steinberg::kInvalidArgument;
+     const auto it=std::find_if(waveRequests_.begin(),waveRequests_.end(),
+       [&](const WaveRequest& r){return r.id==static_cast<std::uint64_t>(id)&&
+                                     r.row==static_cast<std::size_t>(row)&&r.pending;});
+     if(it==waveRequests_.end())return Steinberg::kResultOk;
+     if(status==1) {
+       Steinberg::int64 revision=-1;const void* bytes=nullptr;
+       Steinberg::uint32 length=0;
+       if(a->getInt("Revision",revision)!=Steinberg::kResultOk||
+          revision<0||revision>UINT32_MAX)return Steinberg::kInvalidArgument;
+       const bool hasWave=a->getBinary("Wave",bytes,length)==Steinberg::kResultOk;
+       if(hasWave?(!bytes||length<44||length>kMaxSingleWav):
+          !(editorWaveRow_==static_cast<std::size_t>(row)&&
+            editorWaveRevision_==static_cast<std::uint32_t>(revision)&&
+            !editorWaveCache_.left.empty()))return Steinberg::kInvalidArgument;
+     }
+     message->addRef();
+     it->reply=message;it->pending=false;
+     // A synchronous host may reply on the sendMessage stack. Its caller
+     // consumes the reply directly without reentering native VSTGUI.
+     auto* target=it->view;
+     if(target&&waveSendDepth_==0)
+       target->onSampleEditorReady(static_cast<std::size_t>(row),status==1);
+     return Steinberg::kResultOk;
    }catch(...){return Steinberg::kOutOfMemory;}
-   return Steinberg::kResultOk;
  }
  if(message&&message->getMessageID()&&
     std::strcmp(message->getMessageID(),"Drumator.OutputMeterLink")==0){
@@ -152,10 +165,11 @@ Steinberg::tresult PLUGIN_API Controller::notify(Steinberg::Vst::IMessage* messa
     // separate address spaces and receive levels via MeterRequest/Snapshot.
     return Steinberg::kResultOk;
  }
- return EditController::notify(message);
+  return EditController::notify(message);
+ }catch(...){return Steinberg::kOutOfMemory;}
 }
 Controller::~Controller() {
- if(waveReply_){waveReply_->release();waveReply_=nullptr;}
+ invalidateWaveQuery();
  if(reservedPreviewStop_) {
    reservedPreviewStop_->release();
    reservedPreviewStop_=nullptr;
@@ -201,12 +215,15 @@ void Controller::registerView(DrumatorView* view) {
  if(view)views_.push_back(view);
 }
 void Controller::unregisterView(DrumatorView* view) {
+ cancelSampleEditorRequestsForView(view);
  views_.erase(std::remove(views_.begin(),views_.end(),view),views_.end());
  if(views_.empty()){
    editorWaveCache_=DecodedWav{};
    editorWaveIndexLeft_.clear();
    editorWaveIndexRight_.clear();
    editorWaveRow_=kRows;
+   invalidateWaveQuery();
+   editorWaveCache_=DecodedWav{};
  }
 }
 void Controller::notifyViews(bool relayout) {
@@ -267,12 +284,32 @@ bool Controller::processorConfirmsPattern(unsigned requested,double fallback) {
    if(msg)msg->release();return false;
  }
 }
+void Controller::removeWaveRequest(DrumatorView* requester) noexcept {
+ for(auto it=waveRequests_.begin();it!=waveRequests_.end();) {
+   if(it->view!=requester){++it;continue;}
+   if(it->reply)it->reply->release();
+   it=waveRequests_.erase(it);
+ }
+}
+void Controller::cancelSampleEditorRequestsForView(DrumatorView* requester) noexcept {
+ removeWaveRequest(requester);
+}
+void Controller::cancelSampleEditorRequest(std::size_t row,DrumatorView* requester) noexcept {
+ for(auto it=waveRequests_.begin();it!=waveRequests_.end();) {
+   if(it->view!=requester||it->row!=row){++it;continue;}
+   if(it->reply)it->reply->release();
+   it=waveRequests_.erase(it);
+ }
+}
+bool Controller::sampleEditorRequestPending(std::size_t row,DrumatorView* requester) const noexcept {
+ return std::any_of(waveRequests_.begin(),waveRequests_.end(),
+   [&](const WaveRequest& r){return r.view==requester&&r.row==row&&r.pending;});
+}
 void Controller::invalidateWaveQuery() noexcept {
- waveRequestPending_=false;waveReplyFresh_=false;waveRequestRow_=kRows;
- if(waveReply_){waveReply_->release();waveReply_=nullptr;}
+ for(auto& r:waveRequests_)if(r.reply)r.reply->release();
+ waveRequests_.clear();
  editorWaveRow_=kRows;
 }
-
 Steinberg::tresult Controller::sendEditMessage(Steinberg::Vst::IMessage* message) {
  const auto result=sendMessage(message);
  if(result==Steinberg::kResultOk)dirtyPending_=true;
@@ -1025,31 +1062,57 @@ bool Controller::sampleEditorSnapshot(std::size_t row,SampleEdit& edit,
                                       std::uint32_t first,std::uint32_t last,
                                       std::uint32_t* revision,
                                       std::array<WaveformRange,256>* rightEnvelope,
-                                      bool* stereo) {
+                                      bool* stereo,DrumatorView* requester) {
  if(row>=kRows)return false;
- if(!waveRequestPending_&&!(waveReplyFresh_&&waveReply_&&waveRequestRow_==row)){
-     if(waveRequestRow_!=row)invalidateWaveQuery();
-     if(waveReply_){waveReply_->release();waveReply_=nullptr;}
-     Steinberg::Vst::IMessage* msg=nullptr;
-     try{
-       msg=allocateMessage();if(!msg)return false;
-       msg->setMessageID("Drumator.SampleEditorQuery");
-       auto* req=msg->getAttributes();const auto id=++nextRequestId_;
-       if(!req||id==0||id>static_cast<std::uint64_t>(INT64_MAX)){msg->release();return false;}
-       waveRequestId_=id;waveRequestRow_=row;waveRequestPending_=true;
-       const bool sameSource=editorWaveRow_==row&&!editorWaveCache_.left.empty();
-       const bool sent=req->setInt("Row",static_cast<Steinberg::int64>(row))==Steinberg::kResultOk&&
-         req->setInt("RequestId",static_cast<Steinberg::int64>(id))==Steinberg::kResultOk&&
-         (!sameSource||req->setInt("KnownRevision",editorWaveRevision_)==Steinberg::kResultOk)&&
-         sendMessage(msg)==Steinberg::kResultOk;
-       msg->release();
-       if(!sent){waveRequestPending_=false;return false;}
-     }catch(...){if(msg)msg->release();waveRequestPending_=false;return false;}
+ auto locate=[&](){return std::find_if(waveRequests_.begin(),waveRequests_.end(),
+               [&](const WaveRequest& r){return r.view==requester;});};
+ auto it=locate();
+ if(it!=waveRequests_.end()&&it->row!=row){
+   removeWaveRequest(requester);it=waveRequests_.end();
  }
- if(!waveReply_)return false;
- waveReplyFresh_=false; // consume once; next snapshot refreshes revision
+ if(it==waveRequests_.end()){
+   Steinberg::Vst::IMessage* msg=nullptr;
+   try {
+     msg=allocateMessage();if(!msg)return false;
+     msg->setMessageID("Drumator.SampleEditorQuery");
+     auto* req=msg->getAttributes();const auto id=++nextRequestId_;
+     if(!req||id==0||id>static_cast<std::uint64_t>(INT64_MAX)){
+       msg->release();return false;
+     }
+     // With concurrent Views on different rows, metadata-only responses
+     // could outlive the shared one-row cache. Ask for complete WAV instead.
+     const bool sameSource=views_.size()<=1&&
+       editorWaveRow_==row&&!editorWaveCache_.left.empty();
+     if(req->setInt("Row",static_cast<Steinberg::int64>(row))!=Steinberg::kResultOk||
+        req->setInt("RequestId",static_cast<Steinberg::int64>(id))!=Steinberg::kResultOk||
+        (sameSource&&req->setInt("KnownRevision",editorWaveRevision_)!=Steinberg::kResultOk)){
+       msg->release();return false;
+     }
+     waveRequests_.push_back({requester,row,id,true,nullptr});
+     struct SendScope {
+       unsigned& depth;explicit SendScope(unsigned& d):depth(d){++depth;}
+       ~SendScope(){--depth;}
+     };
+     bool sent=false;
+     {SendScope guard(waveSendDepth_);sent=sendMessage(msg)==Steinberg::kResultOk;}
+     msg->release();msg=nullptr;
+     if(!sent){removeWaveRequest(requester);return false;}
+   }catch(...){
+     if(msg)msg->release();
+     removeWaveRequest(requester);
+     return false;
+   }
+ }
+ it=locate();
+ if(it==waveRequests_.end()||!it->reply)return false;
+ auto* response=it->reply;
+ // Cleanup even on invalid/corrupt reply, decoding failure or OOM.
+ struct Consume {
+   Controller& owner;DrumatorView* view;
+   ~Consume(){owner.removeWaveRequest(view);}
+ } consume{*this,requester};
  try{
-   auto* a=waveReply_->getAttributes();Steinberg::int64 response=-1;
+   auto* a=response->getAttributes();Steinberg::int64 response=-1;
    if(!a||a->getInt("Status",response)!=Steinberg::kResultOk||response!=1)return false;
    Steinberg::int64 start=0,end=0,fadeIn=0,fadeOut=0,gainBits=0,version=-1;
    if(a->getInt("Start",start)!=Steinberg::kResultOk||

@@ -140,6 +140,7 @@ Steinberg::tresult PLUGIN_API Processor::setProcessing(Steinberg::TBool state) {
 // contract, never by process(). The controller will eventually send the
 // bounded PCM16 WAV payload after a user picks a sample.
 Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
+ try {
  if(!msg||!msg->getMessageID())return AudioEffect::notify(msg);
  const auto* id=msg->getMessageID();
  // All meter messages run on the control actor. The process callback only
@@ -181,6 +182,15 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
         attrs->setInt("Reset",meter_->clipResetEpoch.load(std::memory_order_acquire))==Steinberg::kResultOk&&
         attrs->setInt("TriggerDrops",static_cast<Steinberg::int64>(
           std::min<std::uint64_t>(droppedTriggers_.load(std::memory_order_acquire),
+             static_cast<std::uint64_t>(INT64_MAX))))==Steinberg::kResultOk&&
+        attrs->setInt("HostInspected",static_cast<Steinberg::int64>(
+          std::min<std::uint64_t>(inspectedHostEvents_.load(std::memory_order_acquire),
+             static_cast<std::uint64_t>(INT64_MAX))))==Steinberg::kResultOk&&
+        attrs->setInt("HostValidNotes",static_cast<Steinberg::int64>(
+          std::min<std::uint64_t>(validHostNotes_.load(std::memory_order_acquire),
+             static_cast<std::uint64_t>(INT64_MAX))))==Steinberg::kResultOk&&
+        attrs->setInt("HostUninspected",static_cast<Steinberg::int64>(
+          std::min<std::uint64_t>(uninspectedHostEvents_.load(std::memory_order_acquire),
              static_cast<std::uint64_t>(INT64_MAX))))==Steinberg::kResultOk)
        status=sendMessage(reply);
    }catch(...){status=Steinberg::kOutOfMemory;}
@@ -740,6 +750,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
     kit_.names[static_cast<std::size_t>(row)].swap(fileName);
  }
  return Steinberg::kResultOk;
+ }catch(...){return Steinberg::kOutOfMemory;}
 }
 Steinberg::tresult PLUGIN_API Processor::setupProcessing(Steinberg::Vst::ProcessSetup& setup) {
  // The VST3 host may request unusual but valid sample rates. Reject only
@@ -813,6 +824,21 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    const auto channels=data.outputs[bus].numChannels;
    if(channels!=0&&channels!=2)return Steinberg::kInvalidArgument;
  }
+ // A03: fixed cost for hostile host-MIDI lists in all process branches.
+ // Count skipped entries as UNINSPECTED, never as valid or dropped triggers.
+ constexpr Steinberg::int32 kHostMidiInspectionBudget=4096;
+ const auto hostEventCount=data.inputEvents?
+       std::max<Steinberg::int32>(0,data.inputEvents->getEventCount()):0;
+ const auto inspectedEvents=std::min(hostEventCount,kHostMidiInspectionBudget);
+ bool inspectionAccounted=false;
+ auto accountMidiInspection=[&]() noexcept {
+   if(inspectionAccounted)return;
+   inspectionAccounted=true;
+   if(inspectedEvents)inspectedHostEvents_.fetch_add(
+       static_cast<std::uint64_t>(inspectedEvents),std::memory_order_relaxed);
+   if(hostEventCount>inspectedEvents)uninspectedHostEvents_.fetch_add(
+       static_cast<std::uint64_t>(hostEventCount-inspectedEvents),std::memory_order_relaxed);
+ };
  AudioGateEntry currentCall(restoreGate_);
  if(!currentCall.allowed()) {
    // Preserve genuine selection events while audio is gated. Use the same
@@ -832,7 +858,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
          }
        }
      if(data.inputEvents&&!songMailbox_.midiPatternSuppressed())
-       for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+       for(Steinberg::int32 i=0;i<inspectedEvents;++i) {
+         if(i==0)accountMidiInspection();
+
          Steinberg::Vst::Event event{};
          if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
             event.type!=Steinberg::Vst::Event::kNoteOnEvent||
@@ -939,7 +967,9 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
      // Otherwise a transport-only gap retains an outdated song snapshot.
      (void)songMailbox_.snapshot(audioSongChain_,audioSongEnabled_,&audioSongStartBar_);
      if(data.inputEvents&&!audioSongEnabled_)
-       for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+       for(Steinberg::int32 i=0;i<inspectedEvents;++i) {
+         if(i==0)accountMidiInspection();
+
          Steinberg::Vst::Event event{};
          if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
             event.type!=Steinberg::Vst::Event::kNoteOnEvent||
@@ -1121,7 +1151,8 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
    }
  }
  if(!audioSongEnabled_&&data.inputEvents) {
-   for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+   for(Steinberg::int32 i=0;i<inspectedEvents;++i) {
+
      Steinberg::Vst::Event e{};
      if(data.inputEvents->getEvent(i,e)!=Steinberg::kResultOk||
         e.type!=Steinberg::Vst::Event::kNoteOnEvent||
@@ -1391,10 +1422,18 @@ Steinberg::tresult PLUGIN_API Processor::process(Steinberg::Vst::ProcessData& da
  }
  // MIDI one-shot audition also works with stopped DAW transport.
  if(data.inputEvents) {
-   for(Steinberg::int32 i=0;i<data.inputEvents->getEventCount();++i) {
+   for(Steinberg::int32 i=0;i<inspectedEvents;++i) {
+         if(i==0)accountMidiInspection();
+
      Steinberg::Vst::Event event{};
      if(data.inputEvents->getEvent(i,event)!=Steinberg::kResultOk||
         event.type!=Steinberg::Vst::Event::kNoteOnEvent)continue;
+     if(event.noteOn.pitch>=36&&
+        event.noteOn.pitch<36+static_cast<Steinberg::int32>(kRows)&&
+        event.sampleOffset>=0&&event.sampleOffset<data.numSamples&&
+        std::isfinite(event.noteOn.velocity)&&event.noteOn.velocity>0.f&&
+        event.noteOn.velocity<=1.f)
+       validHostNotes_.fetch_add(1,std::memory_order_relaxed);
      triggers_.appendNoteOn(event.noteOn.pitch,event.noteOn.velocity,
                             event.sampleOffset,
                             static_cast<std::uint32_t>(data.numSamples));

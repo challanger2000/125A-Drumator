@@ -193,6 +193,16 @@ struct IntegrationAccess {
  static bool pendingDirty(const Controller& c){return c.dirtyPending_;}
  static bool zoomSample(DrumatorView& v,bool in,bool full=false){return v.zoomSampleEditor(in,full);}
  static bool scrollSample(DrumatorView& v,double x){return v.scrollEditorWave(x);}
+ static void moveEditorMarker(DrumatorView& v,double x,bool end){v.moveSampleMarker(x,end);}
+ static std::uint64_t requestId(const Controller& c,const DrumatorView* v){
+   for(const auto& q:c.waveRequests_)if(q.view==v)return q.id;
+   return 0;
+ }
+ static std::size_t outstandingWaves(const Controller& c){return c.waveRequests_.size();}
+ static std::uint64_t hostInspected(const Processor& p){return p.inspectedHostEvents_.load(std::memory_order_acquire);}
+ static std::uint64_t hostValid(const Processor& p){return p.validHostNotes_.load(std::memory_order_acquire);}
+ static std::uint64_t hostUninspected(const Processor& p){return p.uninspectedHostEvents_.load(std::memory_order_acquire);}
+ static void pendingPreview(Processor& p,unsigned row){p.previewPending_.fetch_or(1u<<row,std::memory_order_release);}
  static bool waveCacheEmpty(const Controller& c){return c.editorWaveRow_==kRows;}
  static std::size_t cachedWaveRow(const Controller& c){return c.editorWaveRow_;}
 };
@@ -3156,7 +3166,7 @@ void testA01SerializedAsyncIPC() {
    auto* view=IntegrationAccess::view(*f.c,0);
    click(*view,240.,UiCompactLayout::header+20.);
    check(!IntegrationAccess::sampleEditorOpen(*view)&&
-         f.c->sampleEditorRequestPending(0)&&toProcessor.copied>0&&toController.copied>0,
+         f.c->sampleEditorRequestPending(0,view)&&toProcessor.copied>0&&toController.copied>0,
          "A01 editor assumed synchronous mutated request");
    toController.flush();
    check(toProcessor.copied==1,"A01 delayed reply triggered recursive extra query");
@@ -3183,10 +3193,10 @@ void testA01SerializedAsyncIPC() {
          "A01 stale Wave proxy");
    auto* view=IntegrationAccess::view(*f.c,0);
    click(*view,240.,UiCompactLayout::header+20.);
-   check(f.c->sampleEditorRequestPending(0),"A01 Wave response not delayed");
+   check(f.c->sampleEditorRequestPending(0,view),"A01 Wave response not delayed");
    check(f.recall(Fixture::encode(kit))==kResultOk,"A01 recall during pending Wave");
    toController.flush();
-   check(!f.c->sampleEditorRequestPending(0)&&
+   check(!f.c->sampleEditorRequestPending(0,view)&&
          !IntegrationAccess::sampleEditorOpen(*view),
          "A01 old Wave reply reopened discarded project editor");
    check(f.c->disconnect(&toProcessor)==kResultOk&&
@@ -3237,6 +3247,95 @@ void testA01SerializedAsyncIPC() {
    check(f.c->connect(f.p)==kResultOk&&f.p->connect(f.c)==kResultOk,
          "A01 stale restore connection");
  }
+
+ // Cross-view, cross-row, asynchronous viewport and lifetime regression.
+ {
+   Fixture f;KitState kit;kit.grid.fill(0);
+   kit.names[0]="viewA.wav";kit.wav[0]=constantStereo(.25f,-.5f);
+   kit.names[1]="viewB.wav";kit.wav[1]=constantStereo(.4f,-.3f);
+   f.kit(kit);f.open();f.open();
+   check(f.c->disconnect(f.p)==kResultOk&&f.p->disconnect(f.c)==kResultOk,
+         "A01 two-view disconnect");
+   A01SerializedConnection toProcessor(f.p),toController(f.c);
+   toController.holdReplies=true;
+   check(f.c->connect(&toProcessor)==kResultOk&&f.p->connect(&toController)==kResultOk,
+         "A01 two-view connect");
+   auto* a=IntegrationAccess::view(*f.c,0);
+   auto* b=IntegrationAccess::view(*f.c,1);
+   check(!IntegrationAccess::openSampleEditorForCapture(*a,0)&&
+         !IntegrationAccess::openSampleEditorForCapture(*b,1),
+         "A01 different views must wait for distinct replies");
+   check(f.c->sampleEditorRequestPending(0,a)&&f.c->sampleEditorRequestPending(1,b)&&
+         IntegrationAccess::outstandingWaves(*f.c)==2&&
+         IntegrationAccess::requestId(*f.c,a)!=IntegrationAccess::requestId(*f.c,b),
+         "A01 cross-view requests conflated");
+   toController.flush();
+   check(IntegrationAccess::sampleEditorOpen(*a)&&IntegrationAccess::sampleEditorOpen(*b)&&
+         IntegrationAccess::editorStereo(*a)&&IntegrationAccess::editorStereo(*b)&&
+         std::abs(IntegrationAccess::editorLeft(*a)[0].minimum-.25f)<.001f&&
+         std::abs(IntegrationAccess::editorLeft(*b)[0].minimum-.4f)<.001f,
+         "A01 delayed cross-row independent WAV responses failed");
+   check(IntegrationAccess::outstandingWaves(*f.c)==0,
+         "A01 completed replies retain binary messages");
+   const auto full=IntegrationAccess::editorViewport(*a);
+   check(IntegrationAccess::zoomSample(*a,true),"A01 async zoom not accepted");
+   check(IntegrationAccess::editorViewport(*a)==full&&f.c->sampleEditorRequestPending(0,a),
+         "A01 delayed zoom applied before its reply");
+   toController.flush();
+   const auto zoomed=IntegrationAccess::editorViewport(*a);
+   check(zoomed.second-zoomed.first==(full.second-full.first)/2,
+         "A01 delayed zoom did not update viewport");
+   check(IntegrationAccess::scrollSample(*a,930.),"A01 delayed scroll not accepted");
+   check(IntegrationAccess::editorViewport(*a)==zoomed,"A01 scroll applied before reply");
+   toController.flush();
+   const auto scrolled=IntegrationAccess::editorViewport(*a);
+   check(scrolled.first>zoomed.first,"A01 delayed scroll did not move viewport");
+   // Edge autoscroll at the left boundary must defer marker application until
+   // the matching waveform viewport is ready, not apply stale coordinates.
+   const auto oldEdit=IntegrationAccess::sampleEditorDraft(*a);
+   IntegrationAccess::moveEditorMarker(*a,280.,false);
+   check(f.c->sampleEditorRequestPending(0,a)&&
+         IntegrationAccess::sampleEditorDraft(*a).start==oldEdit.start,
+         "A01 marker edge scroll was committed against stale viewport");
+   toController.flush();
+   check(IntegrationAccess::editorViewport(*a).first<scrolled.first&&
+         IntegrationAccess::sampleEditorDraft(*a).start>oldEdit.start,
+         "A01 deferred marker edge scroll not completed");
+   // Invalid reply has matching correlation but missing required metadata.
+   check(IntegrationAccess::zoomSample(*a,false),"A01 malformed reply setup");
+   const auto pendingId=IntegrationAccess::requestId(*f.c,a);
+   check(pendingId>0,"A01 missing pending viewport request ID");
+   auto* invalid=new HostMessage();invalid->setMessageID("Drumator.SampleEditorReply");
+   auto* attrs=invalid->getAttributes();
+   check(attrs->setInt("RequestId",static_cast<Steinberg::int64>(pendingId))==kResultOk&&
+         attrs->setInt("Row",0)==kResultOk&&
+         attrs->setInt("Status",1)==kResultOk,"A01 malformed reply setup attributes");
+   check(f.c->notify(invalid)==kInvalidArgument&&f.c->sampleEditorRequestPending(0,a),
+         "A01 malformed reply incorrectly completed pending action");
+   invalid->release();
+   toController.flush();
+   check(!f.c->sampleEditorRequestPending(0,a),"A01 valid reply after malformed not accepted");
+   // Destroy one native View while its own full PCM reply is outstanding.
+   check(IntegrationAccess::zoomSample(*b,true),"A01 close-pending setup");
+   check(f.c->sampleEditorRequestPending(1,b),"A01 pending close not registered");
+   f.closeLast();
+   check(IntegrationAccess::outstandingWaves(*f.c)==0,
+         "A01 closing view retained pending reply or WAV");
+   toController.flush(); // stale copied response may not dereference destroyed View
+   check(IntegrationAccess::sampleEditorOpen(*a),"A01 surviving View was affected by close");
+   // Successful project recall cancels pending viewport and prevents stale UI.
+   check(IntegrationAccess::zoomSample(*a,true),"A01 recall-pending setup");
+   check(f.recall(Fixture::encode(kit))==kResultOk,"A01 concurrent recall");
+   toController.flush();
+   check(!IntegrationAccess::sampleEditorOpen(*a)&&
+         IntegrationAccess::outstandingWaves(*f.c)==0,
+         "A01 delayed reply resurrected closed editor after recall");
+   check(f.c->disconnect(&toProcessor)==kResultOk&&
+         f.p->disconnect(&toController)==kResultOk,"A01 complete proxy teardown");
+   check(f.c->connect(f.p)==kResultOk&&f.p->connect(f.c)==kResultOk,
+         "A01 restore direct connection");
+ }
+ evidence("A01 delayed zoom/scroll/marker, independent two Views, malformed reply, close and recall PASS");
  evidence("A01 copied IConnectionPoint request/reply, delayed editor and pattern reconciliation PASS");
 }
 void testA03ProcessorMidiOverflow() {
@@ -3265,6 +3364,52 @@ void testA03ProcessorMidiOverflow() {
  check(f.p->process(block.data)==kResultOk&&
        IntegrationAccess::overflowEvents(*f.p)==152,
        "A03 invalid pitch counted as overflow");
+
+ // Host MIDI work budget: only 4096 inspected even with a much larger list.
+ EventList huge(16000);
+ event.noteOn.pitch=36;event.noteOn.velocity=1.f;
+ for(int i=0;i<16000;++i)check(huge.addEvent(event)==kResultOk,"A03 huge MIDI fixture");
+ block.data.inputEvents=&huge;
+ const auto beforeInspected=IntegrationAccess::hostInspected(*f.p);
+ const auto beforeValid=IntegrationAccess::hostValid(*f.p);
+ const auto beforeSkipped=IntegrationAccess::hostUninspected(*f.p);
+ const auto beforeDrops=IntegrationAccess::overflowEvents(*f.p);
+ const auto start=std::chrono::steady_clock::now();
+ allocationFail=0;
+ const auto result=f.p->process(block.data);
+ allocationFail=-1;
+ const auto elapsed=std::chrono::duration_cast<std::chrono::microseconds>(
+     std::chrono::steady_clock::now()-start).count();
+ check(result==kResultOk&&
+       IntegrationAccess::hostInspected(*f.p)-beforeInspected==4096&&
+       IntegrationAccess::hostValid(*f.p)-beforeValid==4096&&
+       IntegrationAccess::hostUninspected(*f.p)-beforeSkipped==11904&&
+       IntegrationAccess::overflowEvents(*f.p)-beforeDrops==2048,
+       "A03 16000 host events did not respect 4096 inspection / 2048 capacity");
+ f.c->requestMeterSnapshot();
+ check(f.c->meterState().hostInspected==IntegrationAccess::hostInspected(*f.p)&&
+       f.c->meterState().hostValidNotes==IntegrationAccess::hostValid(*f.p)&&
+       f.c->meterState().hostUninspected==IntegrationAccess::hostUninspected(*f.p),
+       "A03 separate host budget diagnostics lost in meter IPC");
+ huge.clear();event.noteOn.pitch=60;
+ for(int i=0;i<16000;++i)check(huge.addEvent(event)==kResultOk,"A03 invalid huge MIDI fixture");
+ const auto invalidBase=IntegrationAccess::hostValid(*f.p);
+ const auto invalidDrops=IntegrationAccess::overflowEvents(*f.p);
+ const auto invalidSkipped=IntegrationAccess::hostUninspected(*f.p);
+ check(f.p->process(block.data)==kResultOk&&
+       IntegrationAccess::hostValid(*f.p)==invalidBase&&
+       IntegrationAccess::overflowEvents(*f.p)==invalidDrops&&
+       IntegrationAccess::hostUninspected(*f.p)-invalidSkipped==11904,
+       "A03 invalid notes misclassified as valid or rejected triggers");
+ huge.clear();event.noteOn.pitch=36;
+ for(int i=0;i<4096;++i)check(huge.addEvent(event)==kResultOk,"A03 preview mixed fixture");
+ IntegrationAccess::pendingPreview(*f.p,0);
+ const auto previewDrops=IntegrationAccess::overflowEvents(*f.p);
+ check(f.p->process(block.data)==kResultOk&&
+       IntegrationAccess::overflowEvents(*f.p)-previewDrops==2049,
+       "A03 GUI preview must count one genuine capacity rejection");
+ evidence("A03 bounded 4096-event inspection of 16000-host-event block; duration "+
+          std::to_string(elapsed)+" us offline; valid/dropped/skipped distinct PASS");
  evidence("A03 real processor 2048/2200 MIDI density, deterministic overflow and invalid-event exclusion PASS");
 }
 }

@@ -80,6 +80,10 @@ private:
  std::size_t sampleEditorRow_{kRows};
  std::size_t pendingEditorRow_{kRows};
  std::chrono::steady_clock::time_point pendingEditorSince_{};
+ bool pendingViewport_{false};
+ std::uint32_t pendingViewportFirst_{0},pendingViewportLast_{0};
+ int pendingMarkerKind_{0};
+ double pendingMarkerX_{0.};
  SampleEdit sampleEditorEdit_{};
  std::uint32_t sampleEditorRevision_{0};
  std::uint32_t sampleEditorFrames_{0};
@@ -92,6 +96,8 @@ private:
  int sampleEditorDrag_{0}; // 1=start, 2=end, 3=scroll, 4=fade-in, 5=fade-out, 6=gain
  void setSampleEditorGain(double x);
  bool zoomSampleEditor(bool in,bool full=false);
+ bool refreshSampleViewport(std::uint32_t first,std::uint32_t last);
+ void applySampleMarkerAt(double x,bool endMarker);
  void moveSampleFade(double x,bool fadeOut);
  bool scrollEditorWave(double x);
  std::size_t popupRow_{kRows};
