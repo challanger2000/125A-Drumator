@@ -1102,6 +1102,14 @@ void test11IMeterStereoAndStems(){
        std::abs(OutputMeter::decode(measured.mainR.exchange(0))-.5f)<.0002f,
        "M11I independent stereo MAIN sample peaks");
  measured.clearClips();
+ // Boundary-only MAIN exactly reaches 0 dBFS without exceeding full scale.
+ std::array<float,8> thresholdL{{0.f,.2f,1.f,.4f,0.f,0.f,0.f,0.f}};
+ float* thresholdChannels[]{thresholdL.data(),right.data()};
+ bus[0].channelBuffers32=thresholdChannels;
+ measured.observe(data,0);
+ check(measured.clipMask.load()==0u&&measured.fullScaleMask.load()==1u,
+       "M11I exact 0dBFS must not be classified as above-full-scale CLIP");
+ measured.clearClips();(void)measured.mainL.exchange(0);(void)measured.mainR.exchange(0);
  float* silentChannels[]{quiet.data(),quietR.data()};
  bus[0].channelBuffers32=silentChannels;
  measured.observe(data,1u<<1);
@@ -1191,6 +1199,58 @@ void test11IMeterStereoAndStems(){
        "M11I stem CLIP capture 130pct");
  captureVstgui(*vs,"gui49-11i-out2-clip-130",1.3);
  evidence("M11I MAIN L/R real post-ramp samples, separate 0dBFS/overrange, 16-bus inactive mask, OUT2-only clip and click reset PASS");
+}
+void test11IRotaryMinCenterMax(){
+ struct ControlState {
+   const char* name;
+   std::uint8_t swing,humanize,master,volume,pan,pitch;
+ };
+ constexpr ControlState cases[]{
+   {"minimum",0,0,0,0,0,0},
+   {"center",25,50,100,100,100,24},
+   {"maximum",50,100,200,200,200,48}
+ };
+ for(const auto& state:cases){
+   Fixture f;auto kit=namedKit('X',4);
+   kit.swing=state.swing;kit.humanize=state.humanize;
+   kit.masterVolume=state.master;kit.gain[0]=state.volume;
+   kit.pan[0]=state.pan;kit.pitch[0]=state.pitch;
+   f.kit(kit);f.open();
+   auto* v=IntegrationAccess::view(*f.c,0);
+   check(f.c->swingPercent()==state.swing&&
+         f.c->humanizePercent()==state.humanize&&
+         f.c->masterVolume()==state.master&&
+         f.c->rowGain(0)==state.volume&&
+         f.c->rowPan(0)==static_cast<int>(state.pan)-100&&
+         f.c->rowPitch(0)==static_cast<int>(state.pitch)-24,
+         "M11I rotary numeric min/center/max does not match kit/controller state");
+   for(double factor:{1.,1.3}){
+     const std::uint8_t z=factor==1.?0:2;
+     std::array<std::uint8_t,5> zoomState{{'D','Z','M','2',z}};
+     drumator::qa::ByteStream in(zoomState.data(),zoomState.size());
+     check(f.c->setState(&in)==kResultOk&&v->zoomMatches(factor),
+           "M11I rotary actual native zoom invalid");
+     captureVstgui(*v,std::string("gui49-11i-rotary-")+state.name+
+                     (factor==1.?"-100":"-130"),factor);
+   }
+ }
+ Fixture f;auto kit=namedKit('X',4);
+ kit.swing=40;kit.humanize=80;kit.masterVolume=175;
+ kit.gain[0]=180;kit.pan[0]=170;kit.pitch[0]=41;
+ f.kit(kit);f.open();auto* v=IntegrationAccess::view(*f.c,0);
+ for(const auto x:{UiCompactLayout::globalKnobCenters[0],
+                    UiCompactLayout::globalKnobCenters[1],
+                    UiCompactLayout::globalKnobCenters[2]})
+   click(*v,x,UiCompactLayout::globalKnobY,VSTGUI::kLButton|VSTGUI::kDoubleClick);
+ const auto rowY=UiCompactLayout::header+UiCompactLayout::rowKnobY;
+ for(std::size_t i=0;i<3;++i)
+   click(*v,UiCompactLayout::rowKnobCenters[i],rowY,
+         VSTGUI::kLButton|VSTGUI::kDoubleClick);
+ check(f.c->swingPercent()==0&&f.c->humanizePercent()==0&&
+       f.c->masterVolume()==100&&f.c->rowGain(0)==100&&
+       f.c->rowPan(0)==0&&f.c->rowPitch(0)==0,
+       "M11I double-click reset regressed across six rotary types");
+ evidence("M11I six rotary types min/center/max, exact numeric state, real native 100/130 screenshots, six double-click defaults PASS");
 }
 void test11IMonoFlacImport(){
  static constexpr std::uint8_t monoFlac[]={0x66,0x4c,0x61,0x43,0x00,0x00,0x00,0x22,0x10,0x00,0x10,0x00,0x00,0x00,0x0b,0x00,0x00,0x0b,0x0b,0xb8,0x00,0xf0,0x00,0x00,0x04,0x00,0xba,0x31,0x49,0x4f,0xa5,0x46,0x04,0x02,0x5c,0x12,0x84,0x74,0xa9,0x79,0x53,0xe4,0x84,0x00,0x00,0x28,0x20,0x00,0x00,0x00,0x72,0x65,0x66,0x65,0x72,0x65,0x6e,0x63,0x65,0x20,0x6c,0x69,0x62,0x46,0x4c,0x41,0x43,0x20,0x31,0x2e,0x35,0x2e,0x30,0x20,0x32,0x30,0x32,0x35,0x30,0x32,0x31,0x31,0x00,0x00,0x00,0x00,0xff,0xf8,0xaa,0x08,0x00,0xed,0x01,0x00,0x09,0xa4,0xb8};
@@ -2594,6 +2654,7 @@ int main(int argc,char** argv){
  run("GUI49 musical four-sample native 130pct capture",testGui49MusicalFourSampleCapture);
  run("M11I actual MAIN and stem meter, GUI capture and clip reset",test11IMeterStereoAndStems);
  run("M11I normal 16bit mono FLAC import",test11IMonoFlacImport);
+ run("M11I six rotary Min Center Max and double-click defaults",test11IRotaryMinCenterMax);
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
  run("VSTGUI wave editor design capture 100/130",testWaveEditorDesignCaptures);
  run("W11D native mouse-driven wave editor controls",testWaveEditorRealMouseControls);
