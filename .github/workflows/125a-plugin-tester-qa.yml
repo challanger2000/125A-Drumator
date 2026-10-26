@@ -1,4 +1,4 @@
-name: Drumator 125A Plugin Tester – verified Windows artifact
+name: Drumator 125A Plugin Tester - verified Windows artifact
 
 on:
   push:
@@ -25,78 +25,71 @@ jobs:
           $run = Invoke-RestMethod -Uri 'https://api.github.com/repos/challanger2000/125A-Drumator/actions/runs/40369818428' -Headers $headers
           if ($run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
               $run.head_sha -cne 'b53603f84fd44002f3b7c12a8238af15d56769bb') {
-            throw "Unverified Drumator source/artifact run: $($run.head_sha) $($run.conclusion)"
+            throw "Unverified source artifact: $($run.head_sha), status $($run.conclusion)"
           }
           Write-Output "Verified Windows source: $($run.head_sha)"
-      - name: Download the successfully tested VST3 bundle
+
+      - name: Download the already validated Drumator bundle
         uses: actions/download-artifact@v4
         with:
           name: 125A-Drumator-M11-Full-Kit-Stress-QA
           run-id: 40369818428
           github-token: ${{ github.token }}
           path: artifact
-      - name: Run pinned 125A Plugin Tester v0.2.10
+
+      - name: Run pinned independent 125A Plugin Tester v0.2.10
         shell: pwsh
+        timeout-minutes: 26
         run: |
           $ErrorActionPreference = 'Stop'
           $bundle = Join-Path $PWD 'artifact/125A Drumator.vst3'
           $binary = Join-Path $bundle 'Contents/x86_64-win/125A Drumator.vst3'
           $moduleInfo = Join-Path $bundle 'Contents/Resources/moduleinfo.json'
-          if (!(Test-Path $binary) -or !(Test-Path $moduleInfo)) {
-            throw 'Windows Drumator VST3 artifact is incomplete'
+          if (!(Test-Path -LiteralPath $binary) -or !(Test-Path -LiteralPath $moduleInfo)) {
+            throw 'Pinned Windows Drumator VST3 artifact is incomplete'
           }
-          $info = Get-Content $moduleInfo -Raw | ConvertFrom-Json
-          if ($info.Classes[0].Name -cne '125A Drumator') { throw 'Wrong plugin identity' }
+          $info = Get-Content -LiteralPath $moduleInfo -Raw | ConvertFrom-Json
+          if ($info.Classes[0].Name -cne '125A Drumator') { throw 'Unexpected plugin identity' }
           $tester = Join-Path $PWD '125A_Plugin_Tester.exe'
           Invoke-WebRequest -Uri 'https://github.com/challanger2000/125A-Plugin-Tester-Final/releases/download/v0.2.10/125A_Plugin_Tester.exe' -OutFile $tester
-          $actualHash = (Get-FileHash $tester -Algorithm SHA256).Hash.ToLowerInvariant()
-          $expectedHash = 'b0f386422d107ac6fa8b15c3e1e86113f52b013e277fc94b16d28b929438bfea'
-          if ($actualHash -cne $expectedHash) { throw "125A Tester hash mismatch: $actualHash" }
+          $actualHash = (Get-FileHash -LiteralPath $tester -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -cne 'b0f386422d107ac6fa8b15c3e1e86113f52b013e277fc94b16d28b929438bfea') {
+            throw "125A Tester SHA256 mismatch: $actualHash"
+          }
           $reports = Join-Path $PWD '125A-QA-Reports'
-          New-Item -ItemType Directory -Path $reports -Force | Out-Null
+          New-Item -ItemType Directory -Force -Path $reports | Out-Null
           [Environment]::SetEnvironmentVariable('125A_PLUGIN_TESTER_REPORT_DIR', $reports, 'Process')
-          Write-Output 'Starting real 125A Plugin Tester v0.2.10 --portable-test on the packaged Drumator VST3'
+          Write-Output 'Running 125A Plugin Tester v0.2.10 --portable-test against the exact packaged VST3'
           $exitCode = 127
           try {
             $process = Start-Process -FilePath $tester -ArgumentList @('--portable-test', ('"' + $bundle + '"')) -PassThru -Wait -NoNewWindow
             $exitCode = $process.ExitCode
           } finally {
-            Get-ChildItem $reports -File -ErrorAction SilentlyContinue | ForEach-Object {
-              Write-Output "125A report: $($_.Name), bytes=$($_.Length)"
-              if ($_.Name -match 'QA_Report\.txt) { Get-Content $_.FullName | Write-Output }
+            Get-ChildItem -LiteralPath $reports -File -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Output "Tester report: $($_.Name), bytes=$($_.Length)"
+              if ($_.Name -like '*_125A_QA_Report.txt') { Get-Content -LiteralPath $_.FullName | Write-Output }
             }
           }
-          $qa = @(Get-ChildItem $reports -Filter '*_125A_QA_Report.txt' -File)
-          if ($qa.Count -ne 1) { throw "Expected one actual 125A QA report, found $($qa.Count)" }
-          $report = Get-Content $qa[0].FullName -Raw
-          if ($report -notmatch '(?m)^RESULT:\s*\d+ PASS / \d+ WARNING / \d+ FAIL') {
-            throw 'Tester report is missing a complete result summary'
+          $qa = @(Get-ChildItem -LiteralPath $reports -Filter '*_125A_QA_Report.txt' -File)
+          $jsonFiles = @(Get-ChildItem -LiteralPath $reports -Filter '*_125A_QA_Report.json' -File)
+          if ($qa.Count -ne 1 -or $jsonFiles.Count -ne 1) {
+            throw "Expected one TXT and JSON result; found $($qa.Count) TXT and $($jsonFiles.Count) JSON"
           }
-          if ($exitCode -ne 0 -or $report -match '(?m)^RELEASE: NOT RECOMMENDED') {
-            throw "125A Plugin Tester reported failure (exit=$exitCode); inspect uploaded report"
+          $report = Get-Content -LiteralPath $qa[0].FullName -Raw
+          if ($report -notmatch '(?m)^RESULT:\s*(\d+) PASS / (\d+) WARNING / (\d+) FAIL\s*$') {
+            throw '125A Tester report has no complete result summary'
           }
-          Write-Output "125A Plugin Tester completed: exit=$exitCode; see report for PASS/WARNING/FAIL details"
-      - name: Archive independent tester evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: 125A-Drumator-Independent-Plugin-Tester-v0.2.10
-          path: 125A-QA-Reports/
-          if-no-files-found: warn
-) { Get-Content $_.FullName | Write-Output }
-            }
+          $passCount = [int]$Matches[1]
+          $warnCount = [int]$Matches[2]
+          $failCount = [int]$Matches[3]
+          $json = Get-Content -LiteralPath $jsonFiles[0].FullName -Raw | ConvertFrom-Json
+          Write-Output "125A Tester exit $exitCode, TXT: $passCount PASS / $warnCount WARNING / $failCount FAIL; JSON status $($json.status)"
+          if ($exitCode -ne 0 -or $failCount -gt 0 -or $warnCount -gt 0 -or $json.status -ne 'PASS') {
+            throw '125A Plugin Tester is not a clean PASS; inspect the archived detailed report'
           }
-          $qa = @(Get-ChildItem $reports -Filter '*_125A_QA_Report.txt' -File)
-          if ($qa.Count -ne 1) { throw "Expected one actual 125A QA report, found $($qa.Count)" }
-          $report = Get-Content $qa[0].FullName -Raw
-          if ($report -notmatch '(?m)^RESULT:\\s*\\d+ PASS / \\d+ WARNING / \\d+ FAIL') {
-            throw 'Tester report is missing a complete result summary'
-          }
-          if ($exitCode -ne 0 -or $report -match '(?m)^RELEASE: NOT RECOMMENDED') {
-            throw "125A Plugin Tester reported failure (exit=$exitCode); inspect uploaded report"
-          }
-          Write-Output "125A Plugin Tester completed: exit=$exitCode; see report for PASS/WARNING/FAIL details"
-      - name: Archive independent tester evidence
+          Write-Output '[PASS] 125A Plugin Tester v0.2.10 on Drumator b53603f'
+
+      - name: Archive independent tester evidence (also on failure)
         if: always()
         uses: actions/upload-artifact@v4
         with:
