@@ -1099,6 +1099,31 @@ void test13MeterTransportAndMultiEditor(){
        OutputMeter::decode(accumulator.mainR.exchange(0))>.24f&&
        accumulator.blockSequence.load()==2,
        "S13 short real peak lost between UI polls after silent block");
+ // Distinguish an exact 0dBFS stem from two simultaneous overrange stems.
+ OutputMeter multi;
+ std::array<float,8> stemA{},stemB{},stemRight{};
+ stemA[0]=1.f;stemB[0]=1.4f;
+ float* channelsA[]{stemA.data(),stemRight.data()};
+ float* channelsB[]{stemB.data(),stemRight.data()};
+ AudioBusBuffers multiBuses[3]{};
+ multiBuses[0]=meterBus;multiBuses[0].channelBuffers32=quietBuffers;
+ multiBuses[1].numChannels=2;multiBuses[1].channelBuffers32=channelsA;
+ multiBuses[2].numChannels=2;multiBuses[2].channelBuffers32=channelsB;
+ ProcessData stemData{};stemData.numSamples=8;stemData.numOutputs=3;
+ stemData.outputs=multiBuses;
+ multi.observe(stemData,(1u<<1)|(1u<<2));
+ check(multi.clipMask.load()==(1u<<2)&&
+       multi.fullScaleMask.load()==((1u<<1)|(1u<<2)),
+       "S13 exact 0dBFS stem incorrectly classified as CLIP");
+ stemA[0]=1.25f;
+ multi.clearClips();
+ multi.observe(stemData,(1u<<1)|(1u<<2));
+ check(multi.clipMask.load()==((1u<<1)|(1u<<2)),
+       "S13 simultaneous active OUT2/OUT3 clip mask lost");
+ multi.clearClips();
+ multi.observe(stemData,1u<<1);
+ check(multi.clipMask.load()==(1u<<1),
+       "S13 deactivated OUT3 must not set CLIP");
  Fixture f;auto kit=namedKit('Q',2);
  kit.wav[0]=constantStereo(.8f,-.3f);kit.masterVolume=200;
  f.kit(kit);prepareAudio(*f.p);
