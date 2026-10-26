@@ -1938,8 +1938,9 @@ int main(int argc,char** argv) {
  std::cout<<"T27 outputless Song disable restores MIDI selection PASS\\n";
  std::cout<<"F05 outputless MIDI A-H and host tie arbitration PASS\\n";
  std::cout<<"T18 outputless Song mode MIDI suppression PASS\\n";
- // F08 integration: deactivate MAIN while a real auxiliary row stays active.
- // Bus 1 is row 1 in the 125A fixed-row routing contract.
+ // F08 integration: deactivate MAIN while a deliberately assigned AUX row
+ // stays active. Bus assignment is now manual, not inferred from row number.
+ require(setOutput(1,1)==kResultOk,"F08 manual OUT 2 setup rejected");
  require(component->activateBus(kAudio,kOutput,0,false)==kResultOk,
          "F08 disable MAIN");
  require(component->activateBus(kAudio,kOutput,1,true)==kResultOk,
@@ -2003,6 +2004,10 @@ int main(int argc,char** argv) {
            m->setInt("Pan",0)==kResultOk&&
            processorPoint->notify(&mix)==kResultOk,
            "F08 normalize AUX row gain and pan");
+   // Unlike the historical default, MAIN-routed rows never jump to an AUX
+   // simply because that output was activated in a host.
+   require(setOutput(busIndex,busIndex)==kResultOk,
+           "T02 manual assignment to distinct AUX bus rejected");
    require(component->activateBus(kAudio,kOutput,busIndex,true)==kResultOk,
            "F08 activate AUX output");
  }
@@ -2076,6 +2081,9 @@ int main(int argc,char** argv) {
  kitX.wav[0]=makeStereoWav(.25f,-.35f);kitX.names[0]="X0.wav";
  kitX.wav[1]=makeStereoWav(-.10f,.05f);kitX.names[1]="X1.wav";
  kitX.grid[0]=127;kitX.grid[drumator::kSteps]=64;
+ // T04 tests a two-output kit: this is an explicit persisted assignment,
+ // not the new-kit factory routing.
+ kitX.output[1]=1;
  kitX.gain[1]=50;kitX.masterVolume=100;
  kitY=kitX;kitY.selected=1;kitY.grid.fill(0);
  kitY.grid[drumator::kRows*drumator::kSteps]=64;
