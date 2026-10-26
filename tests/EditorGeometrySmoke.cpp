@@ -130,11 +130,28 @@ int main(int argc,char** argv) {
     }
     // Genuine HWND screen capture *after* final-bundle VSTGUI attach and paint.
     // This is the pixel output of the packaged plugin, never a mockup.
-    if(!RedrawWindow(parent,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN))
-      fail("Packaged native editor repaint failed");
-    Sleep(80);
+    // Grab the VSTGUI child HWND, never the blank STATIC host placeholder.
+    HWND pluginWindow=nullptr;
+    EnumChildWindows(parent,[](HWND candidate,LPARAM value)->BOOL {
+      RECT area{};
+      if(GetClientRect(candidate,&area)&&
+         area.right-area.left>=1280&&area.bottom-area.top>=300) {
+        *reinterpret_cast<HWND*>(value)=candidate;
+      }
+      return TRUE;
+    },reinterpret_cast<LPARAM>(&pluginWindow));
+    if(!pluginWindow)fail("No actual VSTGUI child HWND to screenshot");
+    ShowWindow(pluginWindow,SW_SHOW);
+    for(int pass=0;pass<16;++pass) {
+      MSG message{};
+      while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+        TranslateMessage(&message);DispatchMessageW(&message);
+      }
+      RedrawWindow(pluginWindow,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN);
+      Sleep(10);
+    }
     constexpr int width=1280,height=300;
-    HDC windowDc=GetDC(parent);
+    HDC windowDc=GetDC(pluginWindow);
     if(!windowDc)fail("Packaged screenshot could not get window DC");
     HDC memoryDc=CreateCompatibleDC(windowDc);
     HBITMAP bitmap=memoryDc?CreateCompatibleBitmap(windowDc,width,height):nullptr;
@@ -151,6 +168,17 @@ int main(int argc,char** argv) {
     SelectObject(memoryDc,previous);
     if(GetDIBits(memoryDc,bitmap,0,height,pixels.data(),&info,DIB_RGB_COLORS)!=height)
       fail("Packaged native HWND screenshot readback failed");
+    // Reject a white host-only screenshot and the text-only fallback.
+    std::size_t darkCount=0, silverCount=0;
+    for(int y=0;y<height;++y)for(int x=0;x<width;++x) {
+      const auto* p=&pixels[(static_cast<std::size_t>(y)*width+x)*4];
+      const int blue=p[0],green=p[1],red=p[2];
+      if(red+green+blue<270)++darkCount;
+      if(y>=5&&y<75&&x>=475&&x<810&&red>=135&&green>=135&&blue>=135&&
+         std::abs(red-green)<35&&std::abs(red-blue)<35)++silverCount;
+    }
+    if(darkCount<width*height/4||silverCount<500)
+      fail("Screenshot lacks rendered VSTGUI and metallic silver product logo");
     std::filesystem::create_directories("build/gui-shots");
     const auto screenshot=std::filesystem::path("build/gui-shots/packaged-silver-drumator-100.bmp");
     std::ofstream bmp(screenshot,std::ios::binary);
@@ -163,7 +191,7 @@ int main(int argc,char** argv) {
               static_cast<std::streamsize>(pixels.size()));
     if(!bmp)fail("Packaged native screenshot write failed");
     bmp.close();DeleteObject(bitmap);
-    DeleteDC(memoryDc);ReleaseDC(parent,windowDc);
+    DeleteDC(memoryDc);ReleaseDC(pluginWindow,windowDc);
     std::cout<<"Packaged VST3 native silver-logo screenshot: "<<screenshot.string()<<"\\n";
     if(editor->removed()!=Steinberg::kResultOk)fail("Z02 packaged native remove failed");
     editor->setFrame(nullptr);DestroyWindow(parent);
