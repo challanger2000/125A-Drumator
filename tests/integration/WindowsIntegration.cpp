@@ -1156,6 +1156,24 @@ void test13MeterTransportAndMultiEditor(){
        std::abs(first[1]-second[1])<.001f,
        "S13 both editors must display same real MAIN L/R without shared pointer");
  check((f.c->meterState().clip&1u)!=0,"S13 cross-process-compatible CLIP missing");
+ // Force an allocation failure on the real GUI meter callback. A thrown
+ // bad_alloc would otherwise escape the noexcept VSTGUI timer and terminate.
+ bool meterCallbackEscaped=false;
+ allocationFail=0;
+ try {IntegrationAccess::pollMeter(*a);}
+ catch(...) {meterCallbackEscaped=true;}
+ const bool meterFaultInjected=allocationFail==-1;
+ allocationFail=-1;
+ check(meterFaultInjected&&!meterCallbackEscaped,
+       "S13 meter snapshot allocation failure escaped noexcept GUI callback");
+ bool clearEscaped=false;
+ allocationFail=0;
+ try {(void)f.c->clearMeterClips();}
+ catch(...) {clearEscaped=true;}
+ const bool clearFaultInjected=allocationFail==-1;
+ allocationFail=-1;
+ check(clearFaultInjected&&!clearEscaped,
+       "S13 CLIP reset allocation failure escaped host callback");
  click(*b,UiCompactLayout::meterResetLeft+2.,80.);
  check(f.c->meterState().clip==0,"S13 GUI IPC clip reset failed");
  for(int i=0;i<48;++i){IntegrationAccess::pollMeter(*a);IntegrationAccess::pollMeter(*b);}

@@ -40,13 +40,17 @@ Processor::~Processor(){unregisterMeter(meterId_);}
 Steinberg::tresult PLUGIN_API Processor::connect(Steinberg::Vst::IConnectionPoint* other){
  const auto result=AudioEffect::connect(other);
  if(result!=Steinberg::kResultOk)return result;
- if(auto* message=allocateMessage()){
-   message->setMessageID("Drumator.OutputMeterLink");
-   auto* attr=message->getAttributes();
-   if(attr&&attr->setInt("MeterId",static_cast<Steinberg::int64>(meterId_))==Steinberg::kResultOk)
-     (void)sendMessage(message);
-   message->release();
- }
+ Steinberg::Vst::IMessage* message=nullptr;
+ try{
+   message=allocateMessage();
+   if(message){
+     message->setMessageID("Drumator.OutputMeterLink");
+     auto* attr=message->getAttributes();
+     if(attr&&attr->setInt("MeterId",static_cast<Steinberg::int64>(meterId_))==Steinberg::kResultOk)
+       (void)sendMessage(message);
+   }
+ }catch(...){ /* Meter IPC still works without local registry link. */ }
+ if(message)message->release();
  return result;
 }
 Steinberg::tresult PLUGIN_API Processor::initialize(Steinberg::FUnknown* context) {
@@ -142,9 +146,15 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
  // publishes two atomic peak samples, a generation, and sticky clip bits.
  // IConnectionPoint transports these values across HOST process boundaries.
  if(std::strcmp(id,"Drumator.MeterRequest")==0){
-   auto* reply=allocateMessage();
+   Steinberg::Vst::IMessage* reply=nullptr;
+   try {
+     reply=allocateMessage();
+     if(reply)reply->setMessageID("Drumator.MeterSnapshot");
+   }catch(...){
+     if(reply)reply->release();
+     return Steinberg::kOutOfMemory;
+   }
    if(!reply)return Steinberg::kOutOfMemory;
-   reply->setMessageID("Drumator.MeterSnapshot");
    auto* attrs=reply->getAttributes();
    if(!attrs){reply->release();return Steinberg::kResultFalse;}
    // Control actor may retry a bounded number of times to obtain a coherent
@@ -164,7 +174,7 @@ Steinberg::tresult PLUGIN_API Processor::notify(Steinberg::Vst::IMessage* msg) {
         attrs->setInt("Full",meter_->fullScaleMask.load(std::memory_order_acquire))==Steinberg::kResultOk&&
         attrs->setInt("Reset",meter_->clipResetEpoch.load(std::memory_order_acquire))==Steinberg::kResultOk)
        status=sendMessage(reply);
-   }catch(const std::bad_alloc&){status=Steinberg::kOutOfMemory;}
+   }catch(...){status=Steinberg::kOutOfMemory;}
    reply->release();return status;
  }
  if(std::strcmp(id,"Drumator.MeterClear")==0){

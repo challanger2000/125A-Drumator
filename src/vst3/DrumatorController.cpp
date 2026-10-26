@@ -26,18 +26,29 @@
 
 namespace drumator {
 void Controller::requestMeterSnapshot(){
- auto* request=allocateMessage();
- if(!request)return;
- request->setMessageID("Drumator.MeterRequest");
- (void)sendMessage(request); // UI actor only; no project-dirty notification
- request->release();
+ // Called by DrumatorView::pollMeter() noexcept. No allocation/host
+ // exception may escape the VSTGUI timer or Windows host callback.
+ Steinberg::Vst::IMessage* request=nullptr;
+ try {
+   request=allocateMessage();
+   if(request){
+     request->setMessageID("Drumator.MeterRequest");
+     (void)sendMessage(request); // control actor; no host dirty flag
+   }
+ }catch(...) { /* retain the prior meter snapshot; UI fades naturally */ }
+ if(request)request->release();
 }
 bool Controller::clearMeterClips(){
- auto* clear=allocateMessage();
- if(!clear)return false;
- clear->setMessageID("Drumator.MeterClear");
- const bool accepted=sendMessage(clear)==Steinberg::kResultOk;
- clear->release();
+ Steinberg::Vst::IMessage* clear=nullptr;
+ bool accepted=false;
+ try {
+   clear=allocateMessage();
+   if(clear){
+     clear->setMessageID("Drumator.MeterClear");
+     accepted=sendMessage(clear)==Steinberg::kResultOk;
+   }
+ }catch(...) {accepted=false;}
+ if(clear)clear->release();
  if(accepted){
    meterState_.clip=0;meterState_.full=0;
    ++lastClearEpoch_;
