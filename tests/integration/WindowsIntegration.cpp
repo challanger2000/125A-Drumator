@@ -1020,6 +1020,51 @@ void testVelocityDesignCaptures(){
  }
  evidence("Velocity design reference: six native velocity levels 20/40/64/90/110/127 at real 100% and 130% editor zoom");
 }
+void testGui49MusicalFourSampleCapture(){
+ Fixture f;KitState kit;kit.visible=4;kit.selected=0;kit.grid.fill(0);
+ constexpr const char* labels[]={"KICK","SNARE","CLOSED HI-HAT","OPEN HI-HAT"};
+ constexpr const char* names[]={"Kick.wav","Snare.wav","Closed_HiHat.wav","Open_HiHat.wav"};
+ for(std::size_t row=0;row<4;++row){
+   kit.names[row]=names[row];kit.displayNames[row]=labels[row];
+   auto wav=constantStereo(0.f,0.f);
+   constexpr float pi=3.14159265358979323846f;
+   for(std::size_t n=0;n<1024;++n){
+     const float time=static_cast<float>(n)/48000.f;
+     const float decay=std::exp(-time*(row==0?110.f:row==1?170.f:row==2?260.f:85.f));
+     const float freq=row==0?65.f:row==1?180.f:row==2?2200.f:1250.f;
+     const float signal=decay*std::sin(2.f*pi*freq*time);
+     const float l=signal*.68f,r=signal*.61f;
+     std::memcpy(wav.data()+44+n*8,&l,4);
+     std::memcpy(wav.data()+48+n*8,&r,4);
+   }
+   kit.wav[row]=std::move(wav);
+ }
+ // Two 4/4 bars of 16th notes. Velocity is the actual occupied-step value.
+ auto set=[&](std::size_t row,std::size_t step,unsigned velocity){
+    kit.grid[row*kSteps+step]=static_cast<std::uint8_t>(velocity);
+ };
+ for(auto step:{0u,8u,16u,24u})set(0,step,115);
+ for(auto step:{4u,12u,20u,28u})set(1,step,112);
+ for(unsigned step=0;step<32;step+=2)set(2,step,(step%8==6)?72:98);
+ for(auto step:{14u,30u})set(3,step,86);
+ kit.patternLengths[0]=32;
+ f.kit(kit);f.open();
+ auto* view=IntegrationAccess::view(*f.c,0);
+ for(std::size_t row=0;row<4;++row){
+   check(f.c->hasSample(row)&&f.c->label(row)==names[row],
+         "GUI49 musical capture must contain four actual loaded stereo samples");
+ }
+ for(std::size_t row=0;row<4;++row)
+   for(std::size_t step=0;step<32;++step)
+     check(f.c->velocity(0,row,step)==kit.grid[row*kSteps+step],
+           "GUI49 musical capture actual 32-step state mismatch");
+ const std::array<std::uint8_t,5> z{{'D','Z','M','2',2}};
+ drumator::qa::ByteStream state(const_cast<std::uint8_t*>(z.data()),z.size());
+ check(f.c->setState(&state)==kResultOk&&view->zoomMatches(1.3),
+       "GUI49 musical screenshot must use real attached 130% zoom");
+ captureVstgui(*view,"gui49-four-real-samples-musical-130",1.3);
+ evidence("GUI49 musical native 130pct: four decoded stereo WAVs, true names, occupied 32-step velocities and attached zoom PASS");
+}
 void testVisualRender(){
  for(const auto zoom: {1.0,1.2,1.3,1.5}){
    Fixture f;auto kit=namedKit('X',4);
@@ -2399,6 +2444,7 @@ int main(int argc,char** argv){
  run("Z02 native attached views",testZoom);
  run("VSTGUI precision controls",testPrecisionPanel);
  run("VSTGUI native pixel render set",testVisualRender);
+ run("GUI49 musical four-sample native 130pct capture",testGui49MusicalFourSampleCapture);
  run("VSTGUI velocity design capture 100/130",testVelocityDesignCaptures);
  run("VSTGUI wave editor design capture 100/130",testWaveEditorDesignCaptures);
  run("W11D native mouse-driven wave editor controls",testWaveEditorRealMouseControls);
