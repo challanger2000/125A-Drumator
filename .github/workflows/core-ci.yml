@@ -142,6 +142,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw 'Packaged VST3 WAV/MIDI/audio host simulation FAILED'
           }
+          # The GitHub runner lacks a usable on-screen Direct2D desktop.
+          # Prove the actual final bundle's PNG files are decoded and painted
+          # by the native VSTGUI renderer (separately from the real DLL host
+          # attach above). Fail closed if the metallic logo is not in pixels.
+          $nativeIntegration = @(Get-ChildItem -Path build -Filter 'drumator_integration_tests.exe' -File -Recurse)
+          if ($nativeIntegration.Count -ne 1) {
+            throw 'Expected exactly one native integration executable'
+          }
+          & $nativeIntegration[0].FullName $resourceDirectory '--packaged-logo-render'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Final VST3 packaged Resources native silver-logo render FAILED'
+          }
           $bundleFiles | Select-Object FullName,Length | Format-Table
       - name: Archive native VSTGUI pixel renderings
         uses: actions/upload-artifact@v4

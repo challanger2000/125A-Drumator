@@ -126,6 +126,14 @@ struct IntegrationAccess {
    const auto* bmp=view.knobBitmap_;
    return {bmp&&bmp->isLoaded()?1.:0.,bmp?bmp->getWidth():-1.,bmp?bmp->getHeight():-1.};
  }
+ static bool bundledBrandingLoaded(const DrumatorView& v){
+   return v.productLogoBitmap_&&v.productLogoBitmap_->isLoaded()&&
+          v.productLogoBitmap_->getWidth()==2172.&&
+          v.productLogoBitmap_->getHeight()==724.&&
+          v.backgroundBitmap_&&v.backgroundBitmap_->isLoaded()&&
+          v.backgroundBitmap_->getWidth()==1671.&&
+          v.backgroundBitmap_->getHeight()==941.;
+ }
  static SampleEdit sampleEditorDraft(const DrumatorView& view){return view.sampleEditorEdit_;}
  static void setSampleEditorDraft(DrumatorView& view,const SampleEdit& edit){view.sampleEditorEdit_=edit;}
  static void setStatusText(DrumatorView& view,const std::string& status){view.status_=status;}
@@ -595,6 +603,19 @@ void captureVstgui(DrumatorView& v,const std::string& title,double scale){
  check(access!=nullptr,"VSTGUI native bitmap pixel read failed");
  const auto width=access->getBitmapWidth(),height=access->getBitmapHeight();
  check(width>0&&height>0&&width<=4096&&height<=4096,"invalid VSTGUI screenshot pixel dimensions");
+ if(title=="packaged-vst3-resources-silver-100"){
+    unsigned bright=0,dark=0;
+    for(std::uint32_t y=0;y<std::min(height,80u);++y)
+      for(std::uint32_t x=450;x<std::min(width,825u);++x){
+        check(access->setPosition(x,y),"packaged silver pixel out of bounds");
+        VSTGUI::CColor p{};access->getColor(p);
+        if(p.red>140&&p.green>140&&p.blue>140&&
+           std::abs(int(p.red)-int(p.green))<45)++bright;
+        if(int(p.red)+int(p.green)+int(p.blue)<270)++dark;
+      }
+    check(bright>500&&dark>4000,
+          "real packaged resource VSTGUI image lacks dark header/silver logo");
+ }
  if(title=="v2-song-board"){
    // Regression: the Song overlay must erase the entire row UI, INCLUDING
    // the 28-pixel strip to the right of the former 1252px background.
@@ -3021,6 +3042,22 @@ int main(int argc,char** argv){
  if(!platform)return 3;platform->setResourceBasePath(VSTGUI::UTF8String(argv[1]));
  entered=CreateEventW(nullptr,TRUE,FALSE,nullptr);resume=CreateEventW(nullptr,TRUE,FALSE,nullptr);
  if(argc==3){
+   if(std::strcmp(argv[2],"--packaged-logo-render")==0){
+     int result=0;
+     try {
+       Fixture f;f.open();
+       auto* view=IntegrationAccess::view(*f.c,0);
+       check(view&&IntegrationAccess::bundledBrandingLoaded(*view),
+             "packaged PNGs were not decoded into native VSTGUI bitmaps");
+       captureVstgui(*view,"packaged-vst3-resources-silver-100",1.0);
+       evidence("Packaged VST3 Resources: exact metallic logo and faceplate decoded; native Windows VSTGUI offscreen pixels show silver logo PASS");
+     }catch(const std::exception& ex){
+       std::cerr<<"Packaged resource native render FAIL: "<<ex.what()<<'\n';
+       result=3;
+     }
+     CloseHandle(entered);CloseHandle(resume);
+     VSTGUI::exit();CoUninitialize();return result;
+   }
    const bool warm=std::strcmp(argv[2],"--reaudit-song-warm")==0;
    if(!warm&&std::strcmp(argv[2],"--reaudit-song-cold")!=0)return 2;
    int childResult=0;
