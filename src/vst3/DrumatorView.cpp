@@ -1369,7 +1369,9 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        const char* length=entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS";
        // Fixed insets live strictly within the original 150x45 hitbox.
        c->drawString(number,{sx+9.,sy+3.,sx+35.,sy+41.},VSTGUI::kCenterText);
-       c->setFontColor(selected?VSTGUI::CColor{170,226,253,255}:accent);
+       // Reuse the existing selected-blue ink for all SONG pattern letters:
+       // the darker generic accent loses contrast against the keycap highlight.
+       c->setFontColor(VSTGUI::CColor{170,226,253,255});
        c->drawString(pattern,{sx+38.,sy+3.,sx+63.,sy+41.},VSTGUI::kCenterText);
        c->setFontColor(selected?VSTGUI::CColor{245,252,255,255}:letters);
        c->drawString(length,{sx+69.,sy+3.,sx+143.,sy+41.},VSTGUI::kCenterText);
