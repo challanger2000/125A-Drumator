@@ -1327,12 +1327,27 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    const auto first=UiSongLayout::first(songPage_);
    const bool selectionVisible=songSlot_>=first&&
        songSlot_<first+UiSongLayout::perPage&&songSlot_<count;
-   char header[128]{};
-   std::snprintf(header,sizeof(header),
-       "SONG CHAIN   %02u-%02u / 64   |   SELECT SLOT, THEN PATTERN AND LENGTH",
+   char header[48]{};
+   std::snprintf(header,sizeof(header),"SONG CHAIN   %02u-%02u / 64",
        static_cast<unsigned>(first+1),static_cast<unsigned>(first+UiSongLayout::perPage));
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(letters);
-   c->drawString(header,{16,167,975,195},VSTGUI::kLeftText);
+   c->drawString(header,{16,167,305,195},VSTGUI::kLeftText);
+   c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
+   c->drawString("SONG START",{310,169,432,194},VSTGUI::kRightText);
+   const auto startBar=controller_.songStartBar();
+   char barLabel[22]{};
+   std::snprintf(barLabel,sizeof(barLabel),"BAR %u",static_cast<unsigned>(startBar));
+   drawControl(c,{UiSongLayout::startMinusLeft,UiSongLayout::startTop,
+                  UiSongLayout::startMinusRight,UiSongLayout::startBottom},
+               "-",false,startBar>1);
+   drawControl(c,{UiSongLayout::startBarLeft,UiSongLayout::startTop,
+                  UiSongLayout::startBarRight,UiSongLayout::startBottom},barLabel,true,false);
+   drawControl(c,{UiSongLayout::startPlusLeft,UiSongLayout::startTop,
+                  UiSongLayout::startPlusRight,UiSongLayout::startBottom},
+               "+",false,startBar<9999);
+   drawControl(c,{UiSongLayout::startResetLeft,UiSongLayout::startTop,
+                  UiSongLayout::startResetRight,UiSongLayout::startBottom},
+               "RESET",false,startBar!=1);
    drawControl(c,{UiSongLayout::previousLeft,UiSongLayout::navTop,
                   UiSongLayout::previousRight,UiSongLayout::navBottom},
                "< PREVIOUS",false,songPage_>0);
@@ -1385,23 +1400,23 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      std::snprintf(selectionLabel,sizeof(selectionLabel),"POSITION %02u SELECTED",static_cast<unsigned>(songSlot_+1));
    else std::snprintf(selectionLabel,sizeof(selectionLabel),"ADD OR SELECT AN ENTRY FIRST");
    c->drawString(selectionLabel,{16,308,490,334},VSTGUI::kLeftText);
-   char startLabel[48]{};
-   std::snprintf(startLabel,sizeof(startLabel),"SONG START: BAR %u",
-                 static_cast<unsigned>(controller_.songStartBar()));
-   c->drawString(startLabel,{670,308,933,334},VSTGUI::kRightText);
-   drawControl(c,{941,308,975,334},"-",false,controller_.songStartBar()>1);
-   drawControl(c,{981,308,1015,334},"+",false,controller_.songStartBar()<9999);
-   drawControl(c,{1021,308,1108,334},"BAR 1",controller_.songStartBar()==1);
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
-   c->drawString("PATTERN:",VSTGUI::CRect(16,339,120,363),VSTGUI::kLeftText);
+   c->drawString("PATTERN:",VSTGUI::CRect(16,339,110,365),VSTGUI::kLeftText);
    for(std::size_t idx=0;idx<8;++idx) {
-     const auto chosen=selectionVisible&&controller_.songEntry(songSlot_).pattern==idx;
-     const double bx=115+idx*56.0;
+     const bool chosen=selectionVisible&&controller_.songEntry(songSlot_).pattern==idx;
+     const double bx=UiSongLayout::patternLeft+idx*UiSongLayout::patternPitch;
      char letter[2]{static_cast<char>('A'+idx),0};
-     drawControl(c,{bx,339,bx+50,365},letter,chosen,selectionVisible);
+     drawControl(c,{bx,UiSongLayout::choiceTop,
+                    bx+UiSongLayout::patternWidth,UiSongLayout::choiceBottom},
+                 letter,chosen,selectionVisible);
    }
+   drawControl(c,{UiSongLayout::restLeft,UiSongLayout::choiceTop,
+                  UiSongLayout::restRight,UiSongLayout::choiceBottom},"REST",
+               selectionVisible&&controller_.songEntry(songSlot_).pattern==SongChain::kRest,
+               selectionVisible);
    c->setFontColor(accent);
-   c->drawString("LENGTH:",VSTGUI::CRect(594,339,681,365),VSTGUI::kLeftText);
+   c->drawString("LENGTH:",VSTGUI::CRect(UiSongLayout::lengthTitleLeft,339,
+                  UiSongLayout::lengthTitleRight,365),VSTGUI::kLeftText);
    const char* lenNames[]={"1/2 BAR","1 BAR","2 BARS"};
    const std::uint8_t lenSteps[]={8,16,32};
    for(int idx=0;idx<3;++idx) {
@@ -1411,8 +1426,6 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    }
    drawControl(c,{1012,339,1110,365},"ADD ENTRY",false,count<64);
    drawControl(c,{1118,339,1239,365},"REMOVE LAST",false,count>1);
-   drawControl(c,{115,375,232,401},"REST",selectionVisible&&
-               controller_.songEntry(songSlot_).pattern==SongChain::kRest,selectionVisible);
  }
 
  // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
@@ -2065,24 +2078,21 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          songPage_=UiSongLayout::pageOf(slot);
        }
      }
-   }else if(y>=308&&y<334&&x>=941&&x<1108) {
-     const unsigned previous=controller_.songStartBar();
-     if(x<975&&previous>1)ok=controller_.setSongStartBar(previous-1);
-     else if(x>=981&&x<1015&&previous<9999)ok=controller_.setSongStartBar(previous+1);
-     else if(x>=1021)ok=controller_.setSongStartBar(1);
-   }else if(y>=375&&y<401&&x>=115&&x<232) {
-     const auto selectedSlot=std::min(songSlot_,count-1);
-     ok=controller_.setSongEntry(selectedSlot,SongChain::kRest,
-                                 controller_.songEntry(selectedSlot).steps);
-   }else if(y>=339&&y<365) {
+   }else if(UiSongLayout::startMinusHit(x,y)) {
+     if(controller_.songStartBar()>1)
+       ok=controller_.setSongStartBar(controller_.songStartBar()-1);
+   }else if(UiSongLayout::startPlusHit(x,y)) {
+     if(controller_.songStartBar()<9999)
+       ok=controller_.setSongStartBar(controller_.songStartBar()+1);
+   }else if(UiSongLayout::startResetHit(x,y)) {
+     if(controller_.songStartBar()!=1)ok=controller_.setSongStartBar(1);
+   }else if(y>=UiSongLayout::choiceTop&&y<UiSongLayout::choiceBottom) {
      const auto selectedSlot=std::min(songSlot_,count-1);
      const auto current=controller_.songEntry(selectedSlot);
      const bool selectionVisible=songSlot_>=UiSongLayout::first(songPage_)&&
          songSlot_<UiSongLayout::first(songPage_)+UiSongLayout::perPage&&songSlot_<count;
-     if(selectionVisible&&x>=115&&x<563) {
-       const auto index=static_cast<std::size_t>((x-115)/56.);
-       if(index<8&&x<115+index*56.+50.)
-         ok=controller_.setSongEntry(selectedSlot,static_cast<std::uint8_t>(index),current.steps);
+     if(const int choice=UiSongLayout::patternChoiceAt(x,y);selectionVisible&&choice>=0) {
+       ok=controller_.setSongEntry(selectedSlot,static_cast<std::uint8_t>(choice),current.steps);
      }else if(selectionVisible&&x>=678&&x<996) {
        const auto index=static_cast<std::size_t>((x-678)/106.);
        if(index<3&&x<678+index*106.+100.) {
