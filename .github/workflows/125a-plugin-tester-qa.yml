@@ -22,9 +22,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'X-GitHub-Api-Version' = '2022-11-28' }
-          $run = Invoke-RestMethod -Uri 'https://api.github.com/repos/challanger2000/125A-Drumator/actions/runs/40383029993' -Headers $headers
+          $run = Invoke-RestMethod -Uri 'https://api.github.com/repos/challanger2000/125A-Drumator/actions/runs/40390746631' -Headers $headers
           if ($run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
-              $run.head_sha -cne 'f50b1ee431584813068a7e7a7da155c265745fc3') {
+              $run.head_sha -cne '368d7a3b88da0956563f7a850755b314b2f785fa') {
             throw "Unverified source artifact: $($run.head_sha), status $($run.conclusion)"
           }
           Write-Output "Verified Windows source: $($run.head_sha)"
@@ -33,7 +33,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: 125A-Drumator-M11-Full-Kit-Stress-QA
-          run-id: 40383029993
+          run-id: 40390746631
           github-token: ${{ github.token }}
           path: artifact
 
@@ -82,8 +82,8 @@ jobs:
           if ($info.Classes[0].Name -cne '125A Drumator') { throw 'Unexpected plugin identity' }
           $tester = Join-Path $PWD 'tester-bin/125A_Plugin_Tester_v0.3.2.exe'
           $dllHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($dllHash -cne '8c24b310b291663d7a414c1a501ae221a848d43f7f2bcd3d7869fdda81fc3d0d') {
-            throw "Wrong Drumator f50b1ee DLL: $dllHash"
+          if ($dllHash -cne '78d246bca3a0fe90383bad672d85f756f7876f9e24e86db2d530ca7d1685390b') {
+            throw "Wrong Drumator 368d7a3 DLL: $dllHash"
           }
           $reports = Join-Path $PWD '125A-QA-Reports'
           New-Item -ItemType Directory -Force -Path $reports | Out-Null
@@ -119,7 +119,7 @@ jobs:
           if ($exitCode -ne 0 -or $failCount -gt 0 -or $warnCount -gt 0 -or $json.status -ne 'PASS') {
             throw '125A Plugin Tester is not a clean PASS; inspect the archived detailed report'
           }
-          Write-Output '[PASS] 125A Plugin Tester v0.3.2 on Drumator f50b1ee'
+          Write-Output '[PASS] 125A Plugin Tester v0.3.2 on Drumator 368d7a3'
 
       - name: Archive independent tester evidence (also on failure)
         if: always()
