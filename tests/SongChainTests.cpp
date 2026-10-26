@@ -16,7 +16,7 @@ int main(){
  CHECK(c.configure(0,0,16));
  CHECK(c.configure(1,1,8));
  CHECK(c.configure(2,2,32));
- CHECK(!c.configure(3,0,16)&&!c.configure(0,8,16)&&!c.configure(0,0,7));
+ CHECK(!c.configure(3,0,16)&&!c.configure(0,SongChain::kRest+1,16)&&!c.configure(0,0,7));
  CHECK(c.totalSteps()==56);
  CHECK(c.at(15).pattern==0);
  CHECK(c.at(16).pattern==1&&c.at(16).step==0);

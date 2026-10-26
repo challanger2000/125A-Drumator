@@ -2169,6 +2169,35 @@ void testAbsoluteSongStartRest(){
  check(f.recall(bytes)==kResultOk&&f.c->songStartBar()==2&&
        f.c->songEntry(1).pattern==SongChain::kRest,
        "SONGSTART Controller DM17 recall mismatch");
+ // Explicit active host Cycle test: the loop covers A and REST but never B.
+ // The chain remains anchored at absolute BAR 2, and the true audio timeline
+ // wraps without truncating/duplicating A while REST remains silent.
+ check(f.p->setProcessing(false)==kResultOk&&
+       f.p->setProcessing(true)==kResultOk,"SONGSTART Cycle lifecycle");
+ constexpr auto cycle=ProcessContext::kCycleActive|ProcessContext::kCycleValid;
+ audio.clock.state=flags|cycle;
+ audio.clock.cycleStartMusic=4.0;audio.clock.cycleEndMusic=8.0;
+ audio.clock.tempo=6000.;
+ for(unsigned block=0;block<18;++block){
+    const auto position=(block*256u)%1920u;
+    render(4.0+static_cast<double>(position)/480.0);
+    for(unsigned i=0;i<256;++i){
+       const auto cycleSample=(block*256u+i)%1920u;
+       const float expectedL=cycleSample<1024u?.125f:0.f;
+       const float expectedR=cycleSample<1024u?-.25f:0.f;
+       check(audio.left[i]==expectedL&&audio.right[i]==expectedR,
+             "SONGSTART/REST host Cycle shifted beat, retriggered pause or clipped tail");
+    }
+ }
+ // Changing host tempo at an absolute bar boundary must not alter the
+ // requested entry or place the first sample after that boundary.
+ check(f.p->setProcessing(false)==kResultOk&&
+       f.p->setProcessing(true)==kResultOk,"SONGSTART tempo lifecycle");
+ audio.clock.state=flags;
+ audio.clock.tempo=240.;
+ render(4.);
+ check(audio.left[80]==.125f&&audio.right[80]==-.25f,
+       "SONGSTART tempo 240 shifted absolute BAR 2");
  // Real SONG GUI hitboxes, including REST and BAR controls.
  f.open();
  auto* view=IntegrationAccess::view(*f.c,0);

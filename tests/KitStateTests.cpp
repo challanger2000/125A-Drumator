@@ -188,7 +188,7 @@ int main() {
     // Corrupt display-label length with a corrected checksum, rejecting
     // the state without mutating its previous successful contents.
     auto badDisplay=encoded;
-    const auto labelsBegin=badDisplay.size()-4-kRows*kSampleEditBytes-kPatterns-labelsSize;
+    const auto labelsBegin=badDisplay.size()-4-2-kRows*kSampleEditBytes-kPatterns-labelsSize;
     badDisplay[labelsBegin]=static_cast<std::uint8_t>(kMaxRowLabel+1);
     const auto badDisplayHash=KitCodec::hash(badDisplay.data()+8,badDisplay.size()-12);
     for(int i=0;i<4;++i)badDisplay[badDisplay.size()-4+static_cast<std::size_t>(i)]=
