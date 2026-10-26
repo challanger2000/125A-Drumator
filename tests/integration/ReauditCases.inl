@@ -378,6 +378,7 @@ void testReauditLoadedSwap(){
  std::atomic<unsigned> blocks{0},errors{0},badPcm{0},allocations{0},duringImport{0};
  std::atomic<bool> loading{false},ready{false};
  std::vector<double> times;times.reserve(500);
+ std::vector<bool> importedDuringCallback;importedDuringCallback.reserve(500);
  std::exception_ptr audioException;
  std::jthread actor([&](std::stop_token stop){
   try {
@@ -402,8 +403,10 @@ void testReauditLoadedSwap(){
      const auto allocationsBefore=allocationCount;
      const auto begin=Clock::now();const auto result=f.p->process(audio.data);const auto end=Clock::now();
      times.push_back(std::chrono::duration<double,std::milli>(end-begin).count());
+     const bool overlappingImport=loading.load();
+     importedDuringCallback.push_back(overlappingImport);
      if(allocationCount!=allocationsBefore)++allocations;
-     if(loading.load())++duringImport;
+     if(overlappingImport)++duringImport;
      if(result!=kResultOk)++errors;
      const float expectedLeft=block==350?0.f:block<200?12.f:-8.f;
      const float expectedRight=block==350?0.f:block<200?-24.f:-4.f;
@@ -444,6 +447,27 @@ void testReauditLoadedSwap(){
  const double blockDeadlineMs=64.0/48000.0*1000.0;
  const auto actualDeadlineMisses=std::count_if(times.begin(),times.end(),
      [&](double elapsed){return elapsed>blockDeadlineMs;});
+ // Keep concrete RE09 timing metrics in the CTest failure text, even when
+ // GitHub's job log omits workflow notices from passing diagnostic cases.
+ auto ordered=times;std::sort(ordered.begin(),ordered.end());
+ const auto quantile=[&](double fraction){
+   return ordered[static_cast<std::size_t>(std::ceil(fraction*ordered.size()))-1];
+ };
+ unsigned missedDuringImport=0,missedOutsideImport=0;
+ for(std::size_t n=0;n<times.size();++n){
+   if(times[n]<=blockDeadlineMs)continue;
+   if(importedDuringCallback[n])++missedDuringImport;
+   else ++missedOutsideImport;
+ }
+ const auto diagnostics=std::string("RE09 measured callbacks=")+std::to_string(times.size())+
+   " p95-ms="+std::to_string(quantile(.95))+
+   " p99-ms="+std::to_string(quantile(.99))+
+   " max-ms="+std::to_string(ordered.back())+
+   " deadline-misses="+std::to_string(actualDeadlineMisses)+
+   " misses-overlapping-import="+std::to_string(missedDuringImport)+
+   " misses-outside-import="+std::to_string(missedOutsideImport)+
+   " callbacks-overlapping-import="+std::to_string(duringImport.load());
+ evidence(diagnostics);
  qa::workflowNotice("RE09 paced 64-voice/12-import deadline-misses="+
      std::to_string(actualDeadlineMisses)+"/"+std::to_string(times.size())+
      " at 1.333ms; shared runner is NOT ASIO release evidence");
