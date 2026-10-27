@@ -67,8 +67,14 @@ struct UiSongLayout final {
       return SongChain::kCapacity;
    return first(page)+row*columns+column;
  }
+ static constexpr bool addHit(double x,double y) noexcept {
+   return x>=1012.&&x<1110.&&y>=choiceTop&&y<choiceBottom;
+ }
+ static constexpr bool removeLastHit(double x,double y) noexcept {
+   return x>=1118.&&x<1239.&&y>=choiceTop&&y<choiceBottom;
+ }
  static constexpr bool canNext(std::size_t page,std::size_t count) noexcept {
-   return page+1<pages&&count>=first(page+1);
+   return page+1<pages&&count>first(page+1);
  }
 };
 } // namespace drumator

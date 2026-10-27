@@ -779,6 +779,16 @@ bool Controller::pasteRow(std::size_t row) {
  // Its musical length, other rows, and all sound/routing metadata are kept.
  return replacePattern(p,target);
 }
+bool Controller::clearRow(std::size_t row) {
+ if(row>=visibleRows_)return false;
+ const auto p=currentPattern();
+ PatternSteps target{};
+ std::copy_n(grid_.begin()+p*kRows*kSteps,target.size(),target.begin());
+ std::fill_n(target.begin()+row*kSteps,kSteps,std::uint8_t{0});
+ // Full 32-step row including hidden second bar; existing transactional Undo.
+ // No change to kit sample, output, mix, choke or other rows/patterns.
+ return replacePattern(p,target);
+}
 bool Controller::canDuplicateCurrentPattern() noexcept {
  const auto source=currentPattern();
  PatternSteps content{};

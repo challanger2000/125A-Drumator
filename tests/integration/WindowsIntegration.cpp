@@ -1497,6 +1497,15 @@ void testVisualRender(){
          "native screenshot zoom state does not match raster scale");
    captureVstgui(*v,zoom==1.?"v2-four-rows-100":zoom==1.2?"v2-four-rows-120":
         zoom==1.3?"v2-four-rows-130":"v2-four-rows-150",zoom);
+   if(zoom==1.||zoom==1.3){
+     const auto top=IntegrationAccess::rowTop(*v,0);
+     click(*v,61.,top+89.);
+     check(IntegrationAccess::popup(*v)==6&&IntegrationAccess::popupRow(*v)==0&&
+           v->zoomMatches(zoom),"native ROW menu wrong zoom or hitbox");
+     captureVstgui(*v,zoom==1.?"v1-row-menu-100":"v1-row-menu-130",zoom);
+     click(*v,220.,top+95.);
+     check(IntegrationAccess::popup(*v)==0,"ROW menu did not dismiss");
+   }
  }
  {
    Fixture f;f.kit(namedKit('X',16));f.open();
@@ -2286,7 +2295,7 @@ void testV1FourFinalCorrections(){
  check(stored().grid==factory.grid&&!f.c->canUndoCurrentPattern(),
        "V1FIX duplicate UNDO left B occupied");
 
- // Cross-pattern/row clipboard, native FILL context menu, 1-bar hidden notes.
+ // Cross-pattern/row clipboard, native ROW context menu, 1-bar hidden notes.
  KitState kit;
  kit.visible=4;kit.grid.fill(0);
  kit.patternLengths[0]=16;kit.patternLengths[1]=16;
@@ -2303,18 +2312,20 @@ void testV1FourFinalCorrections(){
  check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk,"V1FIX select A");
  check(!f.c->canPasteRow()&&!f.c->pasteRow(2),
        "V1FIX empty row clipboard accepted");
- // Open existing row FILL menu; item 9 is COPY ROW.
+ // The ROW cap is on the lower faceplate, left of VOL. Item 0 is COPY.
  const double srcTop=IntegrationAccess::rowTop(*view,1);
- click(*view,425.,srcTop+19.);
- const double srcPopup=UiCompactLayout::popupTop(srcTop,view->getViewSize().getHeight(),280.);
- click(*view,435.,srcPopup+9*25.+12.);
+ click(*view,60.,srcTop+88.);
+ check(IntegrationAccess::popup(*view)==6&&IntegrationAccess::popupRow(*view)==1,
+       "V1FIX ROW cap not clickable");
+ const double srcPopup=UiCompactLayout::popupTop(srcTop,view->getViewSize().getHeight(),100.);
+ click(*view,100.,srcPopup+12.);
  check(f.c->canPasteRow(),"V1FIX native COPY ROW did not capture");
  check(f.c->setParamNormalized(kPatternParam,1./7.)==kResultOk,"V1FIX select B");
- // Item 10 is PASTE ROW; another target row of B is selected.
+ // Item 1 is PASTE ROW into Pattern B, preserving source pattern A.
  const double dstTop=IntegrationAccess::rowTop(*view,2);
- click(*view,425.,dstTop+19.);
- const double dstPopup=UiCompactLayout::popupTop(dstTop,view->getViewSize().getHeight(),280.);
- click(*view,435.,dstPopup+10*25.+12.);
+ click(*view,60.,dstTop+88.);
+ const double dstPopup=UiCompactLayout::popupTop(dstTop,view->getViewSize().getHeight(),100.);
+ click(*view,100.,dstPopup+30.+12.);
  const auto pasted=stored();
  for(std::size_t p=0;p<kPatterns;++p)
    for(std::size_t row=0;row<kRows;++row)
@@ -2351,6 +2362,67 @@ void testV1FourFinalCorrections(){
        !f.c->duplicateCurrentPattern()&&stored().grid==all.grid,
        "V1FIX DUPLICATE overwrote occupied bank");
  evidence("V1FIX full factory/MAIN; duplicate+UNDO; native 32-step cross-row COPY/PASTE+UNDO; recall and protected occupied slots PASS");
+}
+void testV1RowMenuClearScope(){
+ Fixture f;KitState kit;kit.visible=4;kit.grid.fill(0);
+ kit.patternLengths[0]=16;kit.patternLengths[1]=16;
+ kit.grid[AtomicPatternBank::index(0,1,0)]=111;
+ kit.grid[AtomicPatternBank::index(0,1,15)]=71;
+ kit.grid[AtomicPatternBank::index(0,1,31)]=48; // hidden second bar
+ kit.grid[AtomicPatternBank::index(0,2,5)]=103;
+ kit.grid[AtomicPatternBank::index(1,1,0)]=87;
+ kit.names[1]="keep_sample.wav";kit.wav[1]=constantStereo(.3f,-.2f);
+ kit.output[1]=4;kit.gain[1]=73;kit.pan[1]=118;kit.pitch[1]=42;
+ f.kit(kit);f.open();
+ auto* v=IntegrationAccess::view(*f.c,0);
+ auto stored=[&](){
+   ResizableMemoryIBStream stream;KitState data;
+   check(f.p->getState(&stream)==kResultOk&&
+     KitCodec::decode(static_cast<const std::uint8_t*>(stream.getData()),
+       static_cast<std::size_t>(stream.getCursor()),data),"ROW context actual processor state");
+   return data;
+ };
+ const auto before=stored();
+ check(f.c->setParamNormalized(kPatternParam,0.)==kResultOk,"ROW select pattern A");
+ const double y=IntegrationAccess::rowTop(*v,1);
+ const auto selected=IntegrationAccess::selectedRow(*v);
+ click(*v,60.,y+89.);
+ check(IntegrationAccess::popup(*v)==6&&IntegrationAccess::popupRow(*v)==1&&
+       IntegrationAccess::selectedRow(*v)==selected,
+       "ROW button intercepted by row selector or missing");
+ const auto menu=UiCompactLayout::popupTop(y,v->getViewSize().getHeight(),100.);
+ click(*v,105.,menu+60.+12.); // item 2 CLEAR ROW
+ const auto cleared=stored();
+ for(std::size_t p=0;p<kPatterns;++p)
+   for(std::size_t row=0;row<kRows;++row)
+     for(std::size_t step=0;step<kSteps;++step){
+       const auto index=AtomicPatternBank::index(p,row,step);
+       const auto expected=p==0&&row==1?0:before.grid[index];
+       check(cleared.grid[index]==expected&&f.c->velocity(p,row,step)==expected,
+             "ROW CLEAR touched another pattern/row or missed a hidden step");
+     }
+ check(cleared.wav==before.wav&&cleared.names==before.names&&
+       cleared.output==before.output&&cleared.gain==before.gain&&
+       cleared.pan==before.pan&&cleared.pitch==before.pitch&&
+       cleared.choke==before.choke&&
+       cleared.patternLengths==before.patternLengths,
+       "ROW CLEAR changed sample, output or sound settings");
+ check(f.c->canUndoCurrentPattern()&&f.c->undoCurrentPattern()&&
+       stored().grid==before.grid,"ROW CLEAR not fully undoable");
+ // FILL has only eight rhythmic commands: former CLEAR/COPY/PASTE hit
+ // positions are inert and cannot allocate/update the row clipboard.
+ check(!f.c->canPasteRow(),"ROW FILL fixture unexpected clipboard");
+ click(*v,425.,y+18.);
+ const auto fillTop=UiCompactLayout::popupTop(y,v->getViewSize().getHeight(),210.);
+ click(*v,430.,fillTop+9*25.+12.);
+ check(!f.c->canPasteRow()&&stored().grid==before.grid,
+       "FILL old COPY ROW index still dispatched");
+ click(*v,425.,y+18.);
+ click(*v,430.,fillTop+12.);
+ check(stored().grid!=before.grid&&f.c->canUndoCurrentPattern()&&
+       f.c->undoCurrentPattern()&&stored().grid==before.grid,
+       "FILL rhythm 1 no longer transactional/undoable");
+ evidence("GUI50 ROW COPY/PASTE separate menu, CLEAR all 32 steps and Undo, sample/mix preservation, FILL rhythm-only PASS");
 }
 void testPatternLengthControls(){
  Fixture f;
@@ -2483,61 +2555,80 @@ void testSongEntryExtremeDelta(){
  evidence("S09 song editor signed modular delta INT_MIN/MAX, normal edits and recall PASS");
 }
 void testPagedSongEditor(){
- Fixture f;
- auto kit=namedKit('X',4);
+ Fixture f;auto kit=namedKit('X',4);
  check(kit.chain.setCount(16),"UX song fixture capacity");
  f.kit(kit);f.open();
  auto* v=IntegrationAccess::view(*f.c,0);
- click(*v,1077.,114.); // SONG EDIT opens
+ click(*v,1077.,114.);
  check(IntegrationAccess::songPage(*v)==0,"UX song page initial selection");
- // The page before slot 17 must be reachable even when only 16 are configured.
+ // A 16-item chain has no 17th item and no page 2 until explicit ADD.
  click(*v,1170.,181.);
- check(IntegrationAccess::songPage(*v)==1,"UX song next page unavailable at boundary");
- // This page has no existing position: its Pattern/Length controls must
- // neither highlight nor edit a position that is hidden on page one.
- const auto originalHidden=f.c->songEntry(0);
- click(*v,UiSongLayout::patternLeft+2.*UiSongLayout::patternPitch+20.,352.);
- click(*v,707.,352.);
- check(f.c->songEntry(0).pattern==originalHidden.pattern&&
-       f.c->songEntry(0).steps==originalHidden.steps,
-       "UX empty Song page edited offscreen entry");
-
- click(*v,17.,222.); // first empty slot 17 is an add action
- check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
-       "UX song add slot 17 via its own cell failed");
+ check(IntegrationAccess::songPage(*v)==0&&f.c->songCount()==16,
+       "UX SONG NEXT opened an empty page at 16 items");
+ click(*v,UiSongLayout::cellX(0)+20.,UiSongLayout::cellY(0)+15.);
+ check(IntegrationAccess::songSlot(*v)==0,"UX existing SONG tile selection");
+ click(*v,1060.,352.);
+ check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16&&
+       IntegrationAccess::songPage(*v)==1,"UX ADD ENTRY must open page 2");
  captureVstgui(*v,"ux-song-page-2",1.0);
- click(*v,UiSongLayout::patternLeft+2.*UiSongLayout::patternPitch+20.,352.); // select Pattern C for entry 17
- check(f.c->songEntry(16).pattern==2,"UX song pattern selector missed selected entry");
- click(*v,707.,352.); // half bar
- check(f.c->songEntry(16).steps==8,"UX song length selector missed selected entry");
+ click(*v,UiSongLayout::patternLeft+2.*UiSongLayout::patternPitch+20.,352.);
+ check(f.c->songEntry(16).pattern==2,"UX page-2 pattern selection");
+ click(*v,707.,352.);
+ check(f.c->songEntry(16).steps==8,"UX page-2 half-bar selection");
  const auto snapshot=IntegrationAccess::snapshot(*f.c);
- click(*v,167.,222.); // 4px gutter between song items, must be inert
- check(IntegrationAccess::songSlot(*v)==16&&
-       IntegrationAccess::snapshot(*f.c)==snapshot,"UX song gutter changed entry");
- click(*v,350.,222.); // slot 19 is not yet available: inactive
- check(f.c->songCount()==17,"UX future Song item should not implicitly add");
+ // The former +ENTRY tile and future tiles MUST NOT append or change selection.
+ click(*v,UiSongLayout::cellX(1)+20.,UiSongLayout::cellY(0)+15.);
+ check(f.c->songCount()==17&&IntegrationAccess::snapshot(*f.c)==snapshot,
+       "UX empty SONG tile appended despite ADD ENTRY-only policy");
+ click(*v,167.,222.);
+ check(IntegrationAccess::snapshot(*f.c)==snapshot,"UX SONG tile gutter not inert");
  click(*v,1032.,181.);
- check(IntegrationAccess::songPage(*v)==0,"UX song previous page failed");
- check(IntegrationAccess::songSlot(*v)==0,
-       "UX previous page must select first visible existing entry");
-
- click(*v,1170.,222.); // slot 8 on page 1
- check(IntegrationAccess::songSlot(*v)==7,"UX song cell selection hit unexpected slot");
- click(*v,1060.,352.); // add 18th slot (automatically selects its page)
- check(f.c->songCount()==18&&IntegrationAccess::songPage(*v)==1&&
-       IntegrationAccess::songSlot(*v)==17,"UX Song + EINTRAG did not auto-page");
- click(*v,1172.,352.); // delete last (must select 17)
- check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16,
-       "UX Song last-entry removal selection incorrect");
+ check(IntegrationAccess::songPage(*v)==0&&IntegrationAccess::songSlot(*v)==0,
+       "UX SONG previous page must select first valid entry");
+ click(*v,1170.,222.);
+ check(IntegrationAccess::songSlot(*v)==7,"UX selected existing 8th entry");
+ click(*v,1060.,352.);
+ check(f.c->songCount()==18&&IntegrationAccess::songSlot(*v)==17&&
+       IntegrationAccess::songPage(*v)==1,"UX ADD ENTRY from page 1 not paged");
+ // REMOVE LAST must target the chain tail, not the selected or clicked tile.
+ click(*v,UiSongLayout::cellX(0)+20.,UiSongLayout::cellY(0)+15.);
+ check(IntegrationAccess::songSlot(*v)==16,"UX position 17 selection");
+ click(*v,1172.,352.);
+ check(f.c->songCount()==17&&IntegrationAccess::songSlot(*v)==16&&
+       IntegrationAccess::songPage(*v)==1,"UX REMOVE LAST from different selection");
  check(f.c->songEntry(16).pattern==2&&f.c->songEntry(16).steps==8,
-       "UX Song pagination corrupted edited entry");
+       "UX REMOVE LAST corrupted previous SONG entry");
+ click(*v,1172.,352.);
+ check(f.c->songCount()==16&&IntegrationAccess::songSlot(*v)==15&&
+       IntegrationAccess::songPage(*v)==0,"UX REMOVE LAST failed page-boundary clamp");
+ click(*v,1170.,181.);
+ check(IntegrationAccess::songPage(*v)==0,"UX next empty page reachable after remove");
+ // REST and A-H are untouched across add/remove and persisted correctly.
+ check(f.c->setSongEntry(0,SongChain::kRest,8),"UX rest setup");
+ click(*v,1172.,352.);
+ check(f.c->songCount()==15&&f.c->songEntry(0).pattern==SongChain::kRest,
+       "UX REMOVE LAST accidentally touched REST");
+ auto one=namedKit('R',4);
+ check(one.chain.setCount(1),"UX single-entry chain");
+ f.kit(one);
+ click(*v,1172.,352.);
+ check(f.c->songCount()==1,"UX REMOVE LAST broke minimum count 1");
+ auto full=namedKit('S',4);
+ check(full.chain.setCount(64),"UX full-chain fixture");
+ f.kit(full);
+ check(f.c->songCount()==64,"UX maximum count fixture not loaded");
+ click(*v,1060.,352.);
+ check(f.c->songCount()==64,"UX ADD ENTRY exceeded 64");
+ click(*v,1172.,352.);
+ check(f.c->songCount()==63&&IntegrationAccess::songSlot(*v)<63&&
+       IntegrationAccess::songPage(*v)==UiSongLayout::pageOf(IntegrationAccess::songSlot(*v)),
+       "UX REMOVE LAST from full chain did not update page/selection");
  auto recalled=namedKit('Y',4);
- check(f.recall(Fixture::encode(recalled))==kResultOk,
-       "UX Song recall reduced chain rejected");
- check(IntegrationAccess::songPage(*v)==0&&
+ check(f.recall(Fixture::encode(recalled))==kResultOk&&
+       IntegrationAccess::songPage(*v)==0&&
        IntegrationAccess::songSlot(*v)<f.c->songCount(),
-       "UX Song page/selection left outside recalled chain");
- evidence("UX paged Song editor selection, no offscreen edits, recall and 64-slot navigation PASS");
+       "UX SONG recall left invalid selected entry or page");
+ evidence("UX SONG ADD-only tiles, REMOVE LAST 1/16/17/18/64, selection/page, REST and recall PASS");
 }
 void testSongFinalGuiAlignment(){
  Fixture f;auto kit=namedKit('X',4);
@@ -3455,6 +3546,7 @@ int main(int argc,char** argv){
      const auto line=name+" FAIL: "+ex.what();evidence(line);qaCaseSummary+=line+'\n';}
  };
  run("V1FIX factory, row COPY/PASTE, DUPLICATE/UNDO, routing",testV1FourFinalCorrections);
+ run("GUI50 dedicated ROW menu/clear/undo and FILL-only",testV1RowMenuClearScope);
  run("SONGSTART absolute timeline REST, tail, state and GUI",testAbsoluteSongStartRest);
  run("RE01 original deterministic VFA02",testReauditPatternLength);
  run("RE02 original fresh DZM3 matrix",testFinalAuditDzm3);

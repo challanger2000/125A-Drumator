@@ -870,7 +870,7 @@ void DrumatorView::refreshFromHost(bool relayout) {
    songSlot_=controller_.songCount()-1;
    songPage_=UiSongLayout::pageOf(songSlot_);
  }
- if(UiSongLayout::first(songPage_)>controller_.songCount())
+ if(UiSongLayout::first(songPage_)>=controller_.songCount())
    songPage_=UiSongLayout::pageOf(songSlot_);
  if(relayout&&getParentView())adjustEditorHeight();
  else {
@@ -1214,6 +1214,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    c->setFontColor(letters);
    c->drawString(name,{573.,y+75.,601.,y+102.},VSTGUI::kCenterText);
    c->drawString("v",{602.,y+75.,612.,y+102.},VSTGUI::kCenterText);
+   drawControl(c,{UiCompactLayout::rowMenu.left,y+73.,UiCompactLayout::rowMenu.right,y+105.},
+               "ROW",popup_==6&&popupRow_==row,true,11);
    const double centers[]={133.,254.,375.,496.};
    const int values[]={static_cast<int>(controller_.rowGain(row)),controller_.rowPan(row),
                        controller_.rowPitch(row),static_cast<int>(controller_.rowRandomVelocity(row))};
@@ -1336,8 +1338,8 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
    drawControl(c,{1152,bottom+5,1229,bottom+34},">");
  }
  if(songEditorOpen_) {
-   // Dedicated, paged Song surface. Only valid entries and the next add-slot
-   // are interactive; no 64-button wall or invisible selection hotspots.
+   // Dedicated, paged SONG surface: only existing entries are selectable.
+   // Empty tiles cannot create a new entry; ADD ENTRY is the only creation path.
    c->setFillColor(background);
    c->drawRect({0,UiCompactLayout::header,1280,getViewSize().getHeight()},VSTGUI::kDrawFilled);
    const auto count=controller_.songCount();
@@ -1373,7 +1375,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
                "NEXT >",false,UiSongLayout::canNext(songPage_,count));
    for(std::size_t offset=0;offset<UiSongLayout::perPage;++offset) {
      const auto index=first+offset;
-     if(index>count)continue;
+     if(index>=count)continue;
      const double sx=UiSongLayout::cellX(offset%UiSongLayout::columns);
      const double sy=UiSongLayout::cellY(offset/UiSongLayout::columns);
      char cell[40]{};
@@ -1382,8 +1384,7 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        std::snprintf(cell,sizeof(cell),"%02u   %c   %s",
            static_cast<unsigned>(index+1),static_cast<char>(entry.pattern==SongChain::kRest?'R':'A'+entry.pattern),
            entry.steps==8?"1/2 BAR":entry.steps==16?"1 BAR":"2 BARS");
-     }else std::snprintf(cell,sizeof(cell),"%02u   + ENTRY",
-             static_cast<unsigned>(index+1));
+     }
      const VSTGUI::CRect chainRect{sx,sy,sx+UiSongLayout::cellWidth,
                                    sy+UiSongLayout::cellHeight};
      // Use the same machined button, selected-blue rim and lighting as every
@@ -1407,15 +1408,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
        c->drawString(pattern,{sx+34.,sy+3.,sx+69.,sy+41.},VSTGUI::kCenterText);
        c->setFontColor(selected?VSTGUI::CColor{245,252,255,255}:letters);
        c->drawString(length,{sx+69.,sy+3.,sx+143.,sy+41.},VSTGUI::kCenterText);
-     }else{
-       c->drawString(cell,{sx+6.,sy+3.,sx+144.,sy+41.},VSTGUI::kCenterText);
      }
    }
    c->setFont(VSTGUI::kNormalFont,11);c->setFontColor(accent);
    char selectionLabel[80]{};
    if(selectionVisible)
      std::snprintf(selectionLabel,sizeof(selectionLabel),"POSITION %02u SELECTED",static_cast<unsigned>(songSlot_+1));
-   else std::snprintf(selectionLabel,sizeof(selectionLabel),"ADD OR SELECT AN ENTRY FIRST");
+   else std::snprintf(selectionLabel,sizeof(selectionLabel),"SELECT AN EXISTING ENTRY");
    c->drawString(selectionLabel,{16,308,490,334},VSTGUI::kLeftText);
    c->setFont(VSTGUI::kNormalFont,12);c->setFontColor(accent);
    c->drawString("PATTERN:",VSTGUI::CRect(16,339,110,365),VSTGUI::kLeftText);
@@ -1448,15 +1447,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
  // Contextual menus are drawn AFTER the row grid; they cannot be obscured.
  if(fillMenuRow_>=0&&static_cast<std::size_t>(fillMenuRow_)<controller_.visibleRows()) {
    const double top=UiCompactLayout::popupTop(
-       rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_),fullHeight,280.);
-   const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4","FILL ALL","CLEAR","OFFBEAT HAT","GALLOP","SNARE + GHOST","COPY ROW","PASTE ROW"};
-   drawPopupPlate(c,{401.,top-4.,618.,top+279.});
-   for(int i=0;i<11;++i) {
-     drawMenuItem(c,{405,top+i*25.,614,top+i*25.+24.},items[i],
-                  false,i!=10||controller_.canPasteRow());
-     // Separate the three clusters without moving menu hits or remapping
-     // existing commands: quick repeats, snare combination, special rhythms.
-     if(i==2||i==5) {
+       rowTopOnPage(static_cast<std::size_t>(fillMenuRow_)-firstRow_),fullHeight,210.);
+   const char* items[]={"FILL 2","FILL 4","FILL 8","SNARE 2+4",
+                        "FILL ALL","OFFBEAT HAT","GALLOP","SNARE + GHOST"};
+   drawPopupPlate(c,{401.,top-4.,618.,top+204.});
+   for(int i=0;i<8;++i) {
+     drawMenuItem(c,{405,top+i*25.,614,top+i*25.+24.},items[i]);
+     if(i==2||i==4){
        c->setFillColor(VSTGUI::CColor{105,148,171,255});
        c->drawRect({414.,top+(i+1)*25.-1.,606.,top+(i+1)*25.},VSTGUI::kDrawFilled);
      }
@@ -1504,6 +1501,13 @@ void DrumatorView::draw(VSTGUI::CDrawContext* c) {
      drawMenuItem(c,{515,top+i*27.,615,top+i*27.+26.},z,
                  controller_.rowChoke(popupRow_)==i);
    }
+ }else if(popup_==6&&popupRow_<controller_.visibleRows()) {
+   const double top=UiCompactLayout::popupTop(rowTopOnPage(popupRow_-firstRow_),fullHeight,100.);
+   drawPopupPlate(c,{24.,top-4.,199.,top+94.});
+   const char* items[]={"COPY ROW","PASTE ROW","CLEAR ROW"};
+   for(int i=0;i<3;++i)
+     drawMenuItem(c,{28.,top+i*30.,195.,top+i*30.+29.},items[i],
+                  false,i!=1||controller_.canPasteRow());
  }
 
  if(sampleEditorOpen_) {
@@ -2017,6 +2021,16 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
          acted=true;
        }
      }
+   }else if(kind==6&&target<controller_.visibleRows()){
+     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),100.);
+     if(x>=28.&&x<195.&&y>=top&&y<top+90.){
+       const int option=static_cast<int>((y-top)/30.);
+       if(option>=0&&option<3&&y<top+option*30.+29.){
+         ok=option==0?controller_.copyRow(target):
+            option==1?controller_.pasteRow(target):controller_.clearRow(target);
+         acted=true;
+       }
+     }
    }
    if(acted&&!ok)status_="HOST OR PROCESSOR REJECTED SELECTION";
    invalid();return done;
@@ -2025,18 +2039,14 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    const auto target=static_cast<std::size_t>(fillMenuRow_);
    fillMenuRow_=-1;
    if(target>=firstRow_&&target<firstRow_+displayedRows()){
-     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),280.);
-     if(x>=405&&x<614&&y>=top&&y<top+275.){
+     const auto top=UiCompactLayout::popupTop(rowTopOnPage(target-firstRow_),getViewSize().getHeight(),210.);
+     if(x>=405&&x<614&&y>=top&&y<top+200.){
        const auto selected=static_cast<std::size_t>((y-top)/25.);
        constexpr RowFill fills[]={RowFill::Every2,RowFill::Every4,RowFill::Every8,
-           RowFill::Snare24,RowFill::All,RowFill::Clear,RowFill::Offbeat8,
+           RowFill::Snare24,RowFill::All,RowFill::Offbeat8,
            RowFill::Gallop,RowFill::SnareGhost};
-       if(selected<11&&y<top+selected*25.+24.){
-         const bool ok=selected<9?controller_.fillRow(target,fills[selected]):
-                       selected==9?controller_.copyRow(target):controller_.pasteRow(target);
-         if(!ok)status_=selected<9?"FILL NOT APPLIED":
-                         selected==9?"COPY ROW FAILED":"PASTE ROW FAILED";
-       }
+       if(selected<8&&y<top+selected*25.+24.&&
+          !controller_.fillRow(target,fills[selected]))status_="FILL NOT APPLIED";
      }
    }
    invalid();return done;
@@ -2113,17 +2123,25 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        const auto first=UiSongLayout::first(songPage_);
        if(first<count)songSlot_=first;
      }
-   }else if(const auto slot=UiSongLayout::slotAt(x,y,songPage_);
-             slot<SongChain::kCapacity) {
-     if(slot<count){
-       songSlot_=slot;
-     }else if(slot==count){
+   }else if(UiSongLayout::addHit(x,y)){
+     if(count<SongChain::kCapacity){
        ok=controller_.adjustSongCount(1);
        if(ok){
-         songSlot_=slot;
-         songPage_=UiSongLayout::pageOf(slot);
+         songSlot_=controller_.songCount()-1;
+         songPage_=UiSongLayout::pageOf(songSlot_);
        }
      }
+   }else if(UiSongLayout::removeLastHit(x,y)){
+     if(count>1){
+       ok=controller_.adjustSongCount(-1);
+       if(ok){
+         songSlot_=std::min(songSlot_,controller_.songCount()-1);
+         songPage_=UiSongLayout::pageOf(songSlot_);
+       }
+     }
+   }else if(const auto slot=UiSongLayout::slotAt(x,y,songPage_);
+             slot<count) {
+     songSlot_=slot;
    }else if(UiSongLayout::startMinusHit(x,y)) {
      if(controller_.songStartBar()>1)
        ok=controller_.setSongStartBar(controller_.songStartBar()-1);
@@ -2144,22 +2162,6 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
        if(index<3&&x<678+index*106.+100.) {
          const std::uint8_t lengths[]={8,16,32};
          ok=controller_.setSongEntry(selectedSlot,current.pattern,lengths[index]);
-       }
-     }else if(x>=1012&&x<1110) {
-       if(count<SongChain::kCapacity){
-         ok=controller_.adjustSongCount(1);
-         if(ok){
-           songSlot_=controller_.songCount()-1;
-           songPage_=UiSongLayout::pageOf(songSlot_);
-         }
-       }
-     }else if(x>=1118&&x<1239) {
-       if(count>1){
-         ok=controller_.adjustSongCount(-1);
-         if(ok){
-           if(songSlot_>=controller_.songCount())songSlot_=controller_.songCount()-1;
-           songPage_=UiSongLayout::pageOf(songSlot_);
-         }
        }
      }
    }
@@ -2255,7 +2257,8 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
       return done;
    }
    if(!UiCompactLayout::mainHit(y,top))return done;
-   if(x>=16&&x<74) {
+   if(UiCompactLayout::hit(x,UiCompactLayout::select)&&
+      y>=top+9&&y<top+40) {
      velocityRow_=row;status_="INSTRUMENT SELECTED";
      invalid();return done;
    }
@@ -2295,6 +2298,9 @@ VSTGUI::CMouseEventResult DrumatorView::onMouseDown(
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::fill)&&y>=top+9&&y<top+40){
      fillMenuRow_=static_cast<int>(row);invalid();return done;
+   }
+   if(UiCompactLayout::hit(x,UiCompactLayout::rowMenu)&&y>=top+73&&y<top+105){
+     popup_=6;popupRow_=row;invalid();return done;
    }
    if(UiCompactLayout::hit(x,UiCompactLayout::mute)&&y>=top+9&&y<top+40){
      if(!controller_.toggleRowGate(row,false))status_="MUTE NOT APPLIED";

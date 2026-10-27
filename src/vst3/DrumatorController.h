@@ -100,6 +100,7 @@ public:
  bool pasteCurrentPattern();
  bool copyRow(std::size_t row) noexcept;
  bool pasteRow(std::size_t row);
+ bool clearRow(std::size_t row);
  bool canPasteRow() const noexcept {return rowClipboardValid_;}
  bool canDuplicateCurrentPattern() noexcept;
  bool duplicateCurrentPattern(bool* selectedCopy=nullptr);
