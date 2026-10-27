@@ -223,15 +223,24 @@ void testAuditMenuGutters() {
    auto* view=IntegrationAccess::view(*f.c,0);
    const auto before=IntegrationAccess::snapshot(*f.c);
    const auto rowY=IntegrationAccess::rowTop(*view,0);
-   const double fillTop=UiCompactLayout::popupTop(rowY,view->getViewSize().getHeight(),280.);
-   for(int item=0;item<9;++item) {
+   const double fillTop=UiCompactLayout::popupTop(rowY,view->getViewSize().getHeight(),210.);
+   for(int item=0;item<8;++item) {
      click(*view,425.,rowY+18.);
      click(*view,450.,fillTop+item*25.+24.5);
      check(IntegrationAccess::snapshot(*f.c)==before,
-           "FA05 blank FILL/CLEAR gutter edited a pattern or Undo");
+           "FA05 blank FILL gutter edited a pattern or Undo");
    }
-   // A real interior CLEAR and Undo must still work.
-   click(*view,425.,rowY+18.);click(*view,450.,fillTop+5.*25.+12.);
+   // The dedicated ROW menu now owns CLEAR. Guard all its item gutters.
+   const auto rowTop=UiCompactLayout::popupTop(
+       rowY,view->getViewSize().getHeight(),100.);
+   for(int item=0;item<3;++item){
+     click(*view,60.,rowY+88.);
+     click(*view,100.,rowTop+item*30.+29.5);
+     check(IntegrationAccess::snapshot(*f.c)==before,
+           "FA05 blank ROW-menu gutter edited pattern or Undo");
+   }
+   click(*view,60.,rowY+88.);
+   click(*view,100.,rowTop+2.*30.+12.);
    for(std::size_t step=0;step<kSteps;++step)
      check(f.c->velocity(0,0,step)==0,"FA05 interior CLEAR did not execute");
    check(f.c->undoCurrentPattern(),"FA05 real CLEAR Undo failed");
@@ -244,7 +253,7 @@ void testAuditMenuGutters() {
            "FA05 blank Zoom gutter changed host geometry or saved preference");
    }
  }
- evidence("FA05 all 9 FILL and 4 Zoom menu gutters inert at 100/150; interior CLEAR and Undo PASS");
+ evidence("FA05 8 FILL / 3 ROW / 4 Zoom gutters inert at 100/150; ROW CLEAR and Undo PASS");
 }
 void testAuditMinimumHeightMenus() {
  Fixture f;auto kit=namedKit('X');f.kit(kit);
@@ -253,16 +262,15 @@ void testAuditMinimumHeightMenus() {
  const auto height=view->getViewSize().getHeight();
  check(height==300.&&view->visibleRowsForHit()==1,
        "FA06 fixture must reach supported 300px host-refusal viewport");
- const auto top=UiCompactLayout::popupTop(UiCompactLayout::header,height,280.);
- check(top>=0.&&top+275.<=height,"FA06 complete FILL menu outside viewport");
- // Independent golden first-bar velocities for the nine visible FILL labels.
- const std::array<std::array<std::uint8_t,16>,9> golden{{
+ const auto top=UiCompactLayout::popupTop(UiCompactLayout::header,height,210.);
+ check(top>=0.&&top+200.<=height,"FA06 complete FILL menu outside viewport");
+ // Independent golden first-bar velocities for the eight rhythmic FILL labels.
+ const std::array<std::array<std::uint8_t,16>,8> golden{{
    {{127,0,127,0,127,0,127,0,127,0,127,0,127,0,127,0}},
    {{127,0,0,0,127,0,0,0,127,0,0,0,127,0,0,0}},
    {{127,0,0,0,0,0,0,0,127,0,0,0,0,0,0,0}},
    {{0,0,0,0,127,0,0,0,0,0,0,0,127,0,0,0}},
    {{127,127,127,127,127,127,127,127,127,127,127,127,127,127,127,127}},
-   {{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}},
    {{0,127,0,127,0,127,0,127,0,127,0,127,0,127,0,127}},
    {{127,0,95,84,127,0,95,84,127,0,95,84,127,0,95,84}},
    {{0,0,0,0,127,0,0,0,0,0,0,42,127,0,0,42}}
@@ -274,6 +282,22 @@ void testAuditMinimumHeightMenus() {
    for(std::size_t step=0;step<kSteps;++step)
      check(saved.grid[step]==golden[item][step%16],"FA06 clipped or misrouted FILL menu item");
  }
+ // All three ROW commands must remain accessible at the 300px minimum.
+ f.kit(kit);
+ const auto rowTop=UiCompactLayout::popupTop(UiCompactLayout::header,height,100.);
+ check(rowTop>=0.&&rowTop+90.<=height,"FA06 complete ROW menu clipped");
+ const auto rowClick=[&](int option){
+   click(*view,60.,UiCompactLayout::header+88.);
+   check(IntegrationAccess::popup(*view)==6,"FA06 ROW menu not opened");
+   click(*view,100.,rowTop+option*30.+12.);
+ };
+ rowClick(0);check(f.c->canPasteRow(),"FA06 ROW COPY failed at 300px");
+ rowClick(2);
+ for(std::size_t step=0;step<kSteps;++step)
+   check(f.c->velocity(0,0,step)==0,"FA06 ROW CLEAR failed at 300px");
+ rowClick(1);
+ check(auditReturnedKit(*f.p).grid==kit.grid,
+       "FA06 ROW PASTE did not restore copied 32-step row at 300px");
  const auto outputTop=UiCompactLayout::popupTop(UiCompactLayout::header,height,210.);
  check(outputTop>=0.&&outputTop+200.<=height,"FA06 complete output menu outside viewport");
  for(unsigned bus=0;bus<16;++bus) {
@@ -281,5 +305,5 @@ void testAuditMinimumHeightMenus() {
    click(*view,450.+static_cast<double>(bus/8)*102.,outputTop+(bus%8)*25.+12.);
    check(auditReturnedKit(*f.p).output[0]==bus,"FA06 output menu item inaccessible at minimum height");
  }
- evidence("FA06 300px refusal: full 11-item row menu, all 9 golden FILL actions and 16 output choices reachable PASS");
+ evidence("FA06 300px host refusal: all 8 rhythmic FILL, 3 ROW and 16 output choices reachable PASS");
 }

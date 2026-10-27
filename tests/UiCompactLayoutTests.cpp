@@ -111,7 +111,12 @@ int main(){
  EXPECT(UiSongLayout::nextHit(1130.,181.));
  EXPECT(!UiSongLayout::nextHit(1105.,181.));
  EXPECT(!UiSongLayout::canNext(0,15));
- EXPECT(UiSongLayout::canNext(0,16));
+ EXPECT(!UiSongLayout::canNext(0,16));
+ EXPECT(UiSongLayout::canNext(0,17));
+ EXPECT(UiSongLayout::addHit(1060.,352.));
+ EXPECT(UiSongLayout::removeLastHit(1172.,352.));
+ EXPECT(!UiSongLayout::addHit(1172.,352.));
+ EXPECT(!UiSongLayout::removeLastHit(1060.,352.));
  EXPECT(!UiSongLayout::canNext(3,64));
 
  // Drag sensitivity must be scaled to each parameter's numerical range.
