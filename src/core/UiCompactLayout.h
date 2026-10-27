@@ -32,12 +32,12 @@ struct UiCompactLayout final {
                        songToggle{972.+headerRightShift,1042.+headerRightShift},
                        songEdit{1045.+headerRightShift,1125.+headerRightShift};
  static constexpr Slot rowMenu{28.,94.};
- static_assert(rowMenu.right < rowKnobCenters[0]-rowKnobMountRadius);
  static constexpr Slot select{16.,74.},sample{78.,205.},sampleMenu{275.,301.},previous{303.,329.},
    next{332.,358.},preview{362.,398.},fill{403.,452.},mute{457.,491.},
    solo{496.,530.},choke{570.,615.},output{535.,615.},
    velocityToggle{1233.,1259.},rowAdd{16.,110.},rowRemove{116.,210.};
  static constexpr std::array<double,4> rowKnobCenters{{133.,254.,375.,496.}};
+ static_assert(rowMenu.right < rowKnobCenters[0]-rowKnobMountRadius);
  static constexpr std::array<double,3> globalKnobCenters{{79.,177.,1180.+headerRightShift}};
  // One geometry contract for the moved MAIN L/R LEDs, CLIP text and click reset.
  static constexpr double meterLeft=1255.+headerRightShift;
